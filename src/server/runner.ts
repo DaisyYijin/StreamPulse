@@ -123,7 +123,11 @@ export class RunManager {
     return () => this.bus.off(runId, handler);
   }
 
-  async start(libraryId: string, trigger: RunTrigger = 'manual'): Promise<Run> {
+  async start(
+    libraryId: string,
+    trigger: RunTrigger = 'manual',
+    options: { full?: boolean } = {},
+  ): Promise<Run> {
     const library = this.store.library(libraryId);
     if (!library) throw new HttpError(404, '媒体库不存在');
     if (this.isLibraryBusy(libraryId)) {
@@ -131,6 +135,7 @@ export class RunManager {
     }
     const source = this.store.source(library.sourceId);
     if (!source) throw new HttpError(400, '媒体库关联的来源已被删除');
+    const full = options.full ?? !library.incremental;
 
     const now = nowIso();
     const run: Run = {
@@ -138,6 +143,7 @@ export class RunManager {
       libraryId,
       libraryName: library.name,
       trigger,
+      mode: full ? 'full' : 'incremental',
       status: 'queued',
       createdAt: now,
       startedAt: null,
@@ -240,7 +246,11 @@ export class RunManager {
     run.status = 'running';
     run.startedAt = startedAt;
     run.message = '正在扫描来源';
-    this.log(run, 'info', `开始同步「${run.libraryName}」`);
+    this.log(
+      run,
+      'info',
+      `开始${run.mode === 'full' ? '全量' : '增量'}同步「${run.libraryName}」`,
+    );
     this.publish({ type: 'status', run: publicCopy(run) });
     await this.store.save().catch(() => undefined);
 
@@ -338,6 +348,7 @@ export class RunManager {
         const previous = manifest.entries[file.relative];
         try {
           if (
+            run.mode !== 'full' &&
             library.incremental &&
             isUnchanged(previous, file, url) &&
             (await fileExists(absolute))

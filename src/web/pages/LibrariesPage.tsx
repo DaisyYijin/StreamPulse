@@ -7,6 +7,7 @@ import {
   LibraryBig,
   Pencil,
   Play,
+  RefreshCcw,
   Plus,
   Search,
   Trash2,
@@ -90,10 +91,13 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
     });
   }, [libraries, query, filter]);
 
-  const runLibrary = async (library: Library) => {
+  const runLibrary = async (library: Library, full = false) => {
     setRunningId(library.id);
     try {
-      const run = await api.post<Run>(`/api/libraries/${library.id}/run`);
+      const run = await api.post<Run>(
+        `/api/libraries/${library.id}/run`,
+        full ? { mode: 'full' } : undefined,
+      );
       toast.success(`「${library.name}」已开始同步`);
       onOpenRun(run.id);
       window.setTimeout(() => void load(true), 1200);
@@ -273,7 +277,13 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
                     <span>STRM 文件</span>
                   </div>
                   <div>
-                    <strong>{library.schedule ? scheduleLabel(library.schedule) : '手动'}</strong>
+                    <strong>
+                      {library.watchInterval > 0
+                        ? `实时 ${library.watchInterval} 分钟`
+                        : library.schedule
+                          ? scheduleLabel(library.schedule)
+                          : '手动'}
+                    </strong>
                     <span>同步计划</span>
                   </div>
                   <div>
@@ -303,6 +313,15 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
                     onClick={() => void runLibrary(library)}
                   >
                     立即同步
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<RefreshCcw size={14} />}
+                    loading={busy}
+                    onClick={() => void runLibrary(library, true)}
+                  >
+                    全量
                   </Button>
                   <Button
                     variant="ghost"

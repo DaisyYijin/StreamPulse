@@ -52,6 +52,7 @@ export function LibraryModal({
   const [incremental, setIncremental] = useState(true);
   const [deleteOrphans, setDeleteOrphans] = useState(false);
   const [schedule, setSchedule] = useState('');
+  const [watchInterval, setWatchInterval] = useState(0);
   const [customSchedule, setCustomSchedule] = useState('0 3 * * *');
   const [scheduleCustom, setScheduleCustom] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -73,6 +74,7 @@ export function LibraryModal({
     setDeleteOrphans(library?.deleteOrphans ?? false);
     const known = SCHEDULE_PRESETS.some((preset) => preset.value === library?.schedule);
     setSchedule(known || !library?.schedule ? library?.schedule ?? '' : '');
+    setWatchInterval(library?.watchInterval ?? 0);
     setCustomSchedule(library?.schedule || '0 3 * * *');
     setScheduleCustom(Boolean(library?.schedule && !known));
     setError('');
@@ -131,6 +133,7 @@ export function LibraryModal({
         incremental,
         deleteOrphans,
         schedule: effectiveSchedule,
+        watchInterval,
       };
       const saved = library
         ? await api.patch<Library>(`/api/libraries/${library.id}`, payload)
@@ -381,6 +384,29 @@ export function LibraryModal({
                     spellCheck={false}
                   />
                 ) : null}
+              </div>
+            </div>
+
+            <div className="schedule-row">
+              <div className="schedule-label">
+                <Clock3 size={17} />
+                <div>
+                  <strong>实时同步</strong>
+                  <span>按分钟轮询来源，适合小目录；大目录建议使用 Cron</span>
+                </div>
+              </div>
+              <div className="schedule-control">
+                <Select
+                  value={String(watchInterval)}
+                  onChange={(event) => setWatchInterval(Number(event.target.value))}
+                >
+                  <option value="0">关闭</option>
+                  <option value="1">每 1 分钟</option>
+                  <option value="5">每 5 分钟</option>
+                  <option value="15">每 15 分钟</option>
+                  <option value="30">每 30 分钟</option>
+                  <option value="60">每 60 分钟</option>
+                </Select>
               </div>
             </div>
 

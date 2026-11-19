@@ -182,6 +182,8 @@ export function RunDrawer({
                 <span>{formatFullDate(run.startedAt || run.createdAt)}</span>
                 <span>·</span>
                 <span>{triggerLabel(run.trigger)}触发</span>
+                <span>·</span>
+                <span>{run.mode === 'full' ? '全量' : '增量'}同步</span>
               </div>
             ) : null}
           </div>

@@ -73,7 +73,15 @@ function normalizeDatabase(raw: unknown): Database {
     username: typeof input.username === 'string' && input.username.trim() ? input.username.trim() : 'admin',
     passwordHash: typeof input.passwordHash === 'string' ? input.passwordHash : null,
     sources,
-    libraries: Array.isArray(input.libraries) ? input.libraries.filter(Boolean) : [],
+    libraries: (Array.isArray(input.libraries) ? input.libraries.filter(Boolean) : []).map(
+      (library) => ({
+        ...library,
+        watchInterval:
+          typeof (library as LibraryRecord).watchInterval === 'number'
+            ? (library as LibraryRecord).watchInterval
+            : 0,
+      }),
+    ),
     runs: Array.isArray(input.runs) ? input.runs.filter(Boolean) : [],
     settings: {
       ...base.settings,
@@ -188,7 +196,9 @@ export class Store {
       (await listJson(this.librariesDir)).map((file) =>
         readJson<LibraryRecord>(path.join(this.librariesDir, file)),
       ),
-    )).filter((library): library is LibraryRecord => Boolean(library?.id));
+    ))
+      .filter((library): library is LibraryRecord => Boolean(library?.id))
+      .map((library) => ({ ...library, watchInterval: library.watchInterval ?? 0 }));
     const runs = (await Promise.all(
       (await listJson(this.runsDir)).map((file) =>
         readJson<Database['runs'][number]>(path.join(this.runsDir, file)),

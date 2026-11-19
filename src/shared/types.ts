@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.5.0';
+export const APP_VERSION = '1.6.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -76,6 +76,7 @@ export interface Library {
   incremental: boolean;
   deleteOrphans: boolean;
   schedule: string;
+  watchInterval: number;
   fileCount: number;
   totalRuns: number;
   lastRunAt: string | null;
@@ -95,7 +96,7 @@ export type RunStatus =
   | 'cancelled'
   | 'interrupted';
 
-export type RunTrigger = 'manual' | 'schedule' | 'all';
+export type RunTrigger = 'manual' | 'schedule' | 'watch' | 'all';
 
 export interface RunStats {
   scanned: number;
@@ -119,6 +120,7 @@ export interface Run {
   libraryId: string;
   libraryName: string;
   trigger: RunTrigger;
+  mode?: 'incremental' | 'full';
   status: RunStatus;
   createdAt: string;
   startedAt: string | null;
@@ -240,6 +242,7 @@ export interface LibraryInput {
   incremental: boolean;
   deleteOrphans: boolean;
   schedule: string;
+  watchInterval: number;
 }
 
 export interface TestConnectionResult {

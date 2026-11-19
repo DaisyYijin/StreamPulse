@@ -101,6 +101,7 @@ const libraryFields = {
   incremental: z.boolean().optional().default(true),
   deleteOrphans: z.boolean().optional().default(false),
   schedule: z.string().trim().max(120).optional().default(''),
+  watchInterval: z.number().int().min(0).max(60).optional().default(0),
 };
 
 export const libraryCreateSchema = z.object(libraryFields);
@@ -119,6 +120,11 @@ export const libraryUpdateSchema = z.object({
   incremental: z.boolean().optional(),
   deleteOrphans: z.boolean().optional(),
   schedule: z.string().trim().max(120).optional(),
+  watchInterval: z.number().int().min(0).max(60).optional(),
+});
+
+export const runOptionsSchema = z.object({
+  mode: z.enum(['incremental', 'full']).optional(),
 });
 
 export const settingsUpdateSchema = z.object({

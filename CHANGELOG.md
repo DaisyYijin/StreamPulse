@@ -2,6 +2,21 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.6.0] - 2026-11-19
+
+### Added
+
+- Explicit **incremental** and **full rebuild** runs per media library.
+- Per-library **real-time polling** at 1/5/15/30/60 minute intervals, in
+  addition to Cron scheduling.
+- Run records now include the sync mode (`incremental` / `full`).
+- Media library cards expose a one-click full rebuild.
+
+### Changed
+
+- Scheduled, real-time and manual runs share the existing per-library job queue,
+  so a library never runs twice concurrently.
+
 ## [1.5.0] - 2026-11-19
 
 ### Changed

@@ -26,6 +26,7 @@ import {
   libraryCreateSchema,
   libraryUpdateSchema,
   loginSchema,
+  runOptionsSchema,
   normalizeBaseUrl,
   normalizePublicUrl,
   normalizeStreamBaseUrl,
@@ -427,6 +428,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       incremental: body.incremental ?? true,
       deleteOrphans: body.deleteOrphans ?? false,
       schedule: body.schedule ?? '',
+      watchInterval: body.watchInterval ?? 0,
       fileCount: 0,
       totalRuns: 0,
       lastRunAt: null,
@@ -466,6 +468,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       incremental: body.incremental ?? library.incremental,
       deleteOrphans: body.deleteOrphans ?? library.deleteOrphans,
       schedule: body.schedule ?? library.schedule,
+      watchInterval: body.watchInterval ?? library.watchInterval,
       updatedAt: nowIso(),
     };
     const validated = validateLibraryInput(merged);
@@ -504,7 +507,12 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
   router.post('/libraries/:id/run', async (req, res) => {
     const library = store.library(idOf(req));
     if (!library) throw new HttpError(404, '媒体库不存在');
-    const run = await runner.start(library.id, 'manual');
+    const body = parseBody(runOptionsSchema, req.body ?? {});
+    const run = await runner.start(
+      library.id,
+      'manual',
+      body.mode ? { full: body.mode === 'full' } : {},
+    );
     res.status(202).json(run);
   });
 

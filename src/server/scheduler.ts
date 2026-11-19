@@ -37,6 +37,7 @@ export class Scheduler {
   private readonly store: Store;
   private readonly runner: RunManager;
   private readonly tasks = new Map<string, ScheduledTask>();
+  private readonly timers = new Map<string, NodeJS.Timeout>();
 
   constructor(store: Store, runner: RunManager) {
     this.store = store;
@@ -56,10 +57,27 @@ export class Scheduler {
       }
     }
     this.tasks.clear();
+    for (const timer of this.timers.values()) clearInterval(timer);
+    this.timers.clear();
     const timezone = this.store.snapshot.settings.timezone;
 
     for (const library of this.store.snapshot.libraries) {
-      if (!library.enabled || !library.schedule.trim()) continue;
+      if (!library.enabled) continue;
+
+      if (library.watchInterval > 0) {
+        const minutes = Math.min(60, Math.max(1, library.watchInterval));
+        const timer = setInterval(() => {
+          void this.runner.start(library.id, 'watch').catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            if (!message.includes('已有任务')) {
+              console.warn(`[watch] ${library.name}: ${message}`);
+            }
+          });
+        }, minutes * 60_000);
+        this.timers.set(library.id, timer);
+      }
+
+      if (!library.schedule.trim()) continue;
       if (!isValidCron(library.schedule)) continue;
       try {
         const task = cron.schedule(
@@ -90,6 +108,8 @@ export class Scheduler {
       }
     }
     this.tasks.clear();
+    for (const timer of this.timers.values()) clearInterval(timer);
+    this.timers.clear();
   }
 
   nextFor(library: LibraryRecord, timezone: string): string | null {

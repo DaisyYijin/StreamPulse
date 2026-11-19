@@ -117,6 +117,7 @@ export function statusMeta(status: RunStatus): StatusMeta {
 
 export function triggerLabel(trigger: string): string {
   if (trigger === 'schedule') return '定时';
+  if (trigger === 'watch') return '实时';
   if (trigger === 'all') return '批量';
   return '手动';
 }
