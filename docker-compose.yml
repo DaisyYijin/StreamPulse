@@ -12,14 +12,15 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
       PORT: 1024
       STREAM_PORT: 2048
+      # Optional: set a password to skip first-run setup. Leave empty to use
+      # the browser setup screen.
+      STREAMPULSE_PASSWORD: ${STREAMPULSE_PASSWORD:-}
       # Emby will request this address. Leave empty to auto-detect from the
       # browser's hostname when you create your first library.
-      # STREAM_PUBLIC_URL: http://192.168.1.10:2048
-      # Optional: skip the first-run setup by setting a password here.
-      # STREAMPULSE_PASSWORD: "change-me-please"
-      # Set to true when StreamPulse is behind a reverse proxy and you want
-      # Secure session cookies to be issued for HTTPS.
-      # TRUST_PROXY: "true"
+      STREAM_PUBLIC_URL: ${STREAM_PUBLIC_URL:-}
+      OUTPUT_DIR: ${OUTPUT_DIR:-/data/strm}
+      # Set to true when StreamPulse is behind an HTTPS reverse proxy.
+      TRUST_PROXY: ${TRUST_PROXY:-false}
     volumes:
       # Database, manifests and generated STRM files live together here.
       - ./data:/data

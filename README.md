@@ -107,9 +107,11 @@ docker run -d \
 
 ### 2. 或使用 Docker Compose
 
-仓库内已附带 [`docker-compose.yml`](docker-compose.yml)：
+仓库内已附带 [`docker-compose.yml`](docker-compose.yml)。推荐先创建 `.env`：
 
 ```bash
+cp .env.example .env
+# 编辑 .env：至少改 STREAM_PUBLIC_URL 或设置 STREAMPULSE_PASSWORD
 docker compose up -d
 docker compose logs -f
 ```
