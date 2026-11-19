@@ -10,6 +10,7 @@ function createDefaultDatabase(): Database {
   return {
     schemaVersion: 1,
     secret: randomBytes(32).toString('hex'),
+    username: 'admin',
     passwordHash: null,
     sources: [],
     libraries: [],
@@ -48,6 +49,7 @@ function normalizeDatabase(raw: unknown): Database {
     ...input,
     schemaVersion: 1,
     secret: typeof input.secret === 'string' && input.secret.length >= 32 ? input.secret : base.secret,
+    username: typeof input.username === 'string' && input.username.trim() ? input.username.trim() : 'admin',
     passwordHash: typeof input.passwordHash === 'string' ? input.passwordHash : null,
     sources,
     libraries: Array.isArray(input.libraries) ? input.libraries.filter(Boolean) : [],

@@ -1026,8 +1026,11 @@ code {
 }
 
 .admin-meta strong {
+  overflow: hidden;
   font-size: 11.5px;
   font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .admin-meta span {
@@ -4905,5 +4908,18 @@ code {
 
   .page-actions .btn {
     height: 42px;
+  }
+}
+
+
+.auth-username .input {
+  height: 46px;
+  padding-left: 39px;
+  font-size: 13px;
+}
+
+@media (max-width: 720px) {
+  .auth-username .input {
+    font-size: 16px;
   }
 }

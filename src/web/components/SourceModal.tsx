@@ -1,4 +1,4 @@
-import { Cloud, Eye, EyeOff, KeyRound, Link2, ServerCog, UserRound } from 'lucide-react';
+import { Cloud, Eye, EyeOff, Info, KeyRound, Link2, ServerCog, UserRound } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
 import type { Source, SourceInput } from '../../shared/types';
 import { api } from '../api';
@@ -220,6 +220,11 @@ export function SourceModal({
           </>
         )}
 
+        <div className="form-hint-line">
+          <Info size={14} />
+          115 或其他网盘请先在 OpenList / AList 中添加存储并生成令牌，再在这里连接 OpenList。
+          StreamPulse 保存 OpenList 凭据，不直接保存 115 密码。
+        </div>
         {error ? <div className="form-error">{error}</div> : null}
         <button type="submit" hidden />
       </form>

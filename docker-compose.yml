@@ -14,20 +14,26 @@ services:
       STREAM_PORT: 2048
       # Optional: set a password to skip first-run setup. Leave empty to use
       # the browser setup screen.
+      STREAMPULSE_USERNAME: ${STREAMPULSE_USERNAME:-admin}
       STREAMPULSE_PASSWORD: ${STREAMPULSE_PASSWORD:-}
       # Emby will request this address. Leave empty to auto-detect from the
       # browser's hostname when you create your first library.
       STREAM_PUBLIC_URL: ${STREAM_PUBLIC_URL:-}
-      OUTPUT_DIR: ${OUTPUT_DIR:-/data/strm}
+      OUTPUT_DIR: ${OUTPUT_DIR:-/strm}
+      LOG_DIR: ${LOG_DIR:-/logs}
+      LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       # Set to true when StreamPulse is behind an HTTPS reverse proxy.
       TRUST_PROXY: ${TRUST_PROXY:-false}
     volumes:
-      # Database, manifests and generated STRM files live together here.
+      # Configuration, database, manifests and credentials.
       - ./data:/data
-      # To write STRM files directly to an existing media share, uncomment
-      # and set OUTPUT_DIR below:
+      # Generated .strm files. Map this directory into Emby / Jellyfin.
+      - ./strm:/strm
+      # Persistent application logs, rotated daily.
+      - ./logs:/logs
+      # To write STRM files directly to an existing media share instead,
+      # replace ./strm:/strm with the host path and set OUTPUT_DIR.
       # - /volume1/media/strm:/media/strm
-      # Then add OUTPUT_DIR: /media/strm to the environment block above.
     healthcheck:
       test:
         [

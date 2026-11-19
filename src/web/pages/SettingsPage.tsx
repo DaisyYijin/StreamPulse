@@ -50,6 +50,7 @@ export function SettingsPage() {
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(2);
   const [runRetention, setRunRetention] = useState(80);
   const [saving, setSaving] = useState(false);
+  const [adminUsername, setAdminUsername] = useState('admin');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -66,6 +67,7 @@ export function SettingsPage() {
       ]);
       setSystem(data.system);
       setAuth(authData);
+      setAdminUsername(authData.username);
       setOutputDir(data.settings.outputDir);
       setTimezone(data.settings.timezone);
       setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
@@ -109,23 +111,33 @@ export function SettingsPage() {
     }
   };
 
-  const changePassword = async (event: FormEvent) => {
+  const changeAccount = async (event: FormEvent) => {
     event.preventDefault();
-    if (newPassword.length < 8) {
+    if (!adminUsername.trim()) {
+      toast.error('管理员账号不能为空');
+      return;
+    }
+    if (newPassword && newPassword.length < 8) {
       toast.error('新密码至少需要 8 个字符');
       return;
     }
-    if (newPassword !== confirmPassword) {
+    if (newPassword && newPassword !== confirmPassword) {
       toast.error('两次输入的新密码不一致');
       return;
     }
     setPasswordBusy(true);
     try {
-      await api.post('/api/auth/password', { currentPassword, newPassword });
+      const result = await api.post<{ username: string }>('/api/auth/account', {
+        currentPassword,
+        username: adminUsername.trim(),
+        ...(newPassword ? { newPassword } : {}),
+      });
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      toast.success('密码已更新');
+      setAdminUsername(result.username);
+      toast.success(newPassword ? '账号与密码已更新' : '管理员账号已更新');
+      window.dispatchEvent(new CustomEvent('sp:auth-changed'));
       await load();
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : '修改失败');
@@ -258,28 +270,38 @@ export function SettingsPage() {
                 <ShieldCheck size={18} />
               </span>
               <div>
-                <h2>安全</h2>
-                <p>管理员密码保护所有 API 与控制台访问。</p>
+                <h2>管理员账号与安全</h2>
+                <p>账号和密码保护所有 API 与控制台访问，可在这里修改。</p>
               </div>
               <Badge tone={auth?.envManaged ? 'accent' : 'success'}>
-                {auth?.envManaged ? '环境变量管理' : '本地密码'}
+                {auth?.envManaged ? '环境变量管理' : '本地账号'}
               </Badge>
             </div>
             {auth?.envManaged ? (
               <div className="form-callout">
                 <Lock size={19} />
                 <div>
-                  <strong>密码由环境变量管理</strong>
+                  <strong>账号由环境变量管理</strong>
                   <p>
-                    当前实例通过 <code>STREAMPULSE_PASSWORD</code> 设置密码，界面内无法修改。
-                    更新环境变量并重启容器即可生效。
+                    当前实例通过 <code>STREAMPULSE_USERNAME</code> 和
+                    <code>STREAMPULSE_PASSWORD</code> 设置管理员账号，界面内无法修改。
+                    更新环境变量并重建容器即可生效。
                   </p>
                 </div>
               </div>
             ) : (
-              <form className="form-grid" onSubmit={changePassword}>
-                <div className="form-grid form-grid-3">
-                  <Field label="当前密码">
+              <form className="form-grid" onSubmit={changeAccount}>
+                <div className="form-grid form-grid-2">
+                  <Field label="管理员账号" hint="3–32 位字母、数字、点、下划线或短横线">
+                    <Input
+                      value={adminUsername}
+                      onChange={(event) => setAdminUsername(event.target.value)}
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                    />
+                  </Field>
+                  <Field label="当前密码" hint="修改账号或密码都需要验证当前密码">
                     <Input
                       type="password"
                       value={currentPassword}
@@ -287,7 +309,7 @@ export function SettingsPage() {
                       autoComplete="current-password"
                     />
                   </Field>
-                  <Field label="新密码">
+                  <Field label="新密码" optional hint="留空表示只修改账号，不修改密码">
                     <Input
                       type="password"
                       value={newPassword}
@@ -296,7 +318,7 @@ export function SettingsPage() {
                       placeholder="至少 8 个字符"
                     />
                   </Field>
-                  <Field label="确认新密码">
+                  <Field label="确认新密码" optional>
                     <Input
                       type="password"
                       value={confirmPassword}
@@ -312,7 +334,7 @@ export function SettingsPage() {
                     icon={<KeyRound size={16} />}
                     loading={passwordBusy}
                   >
-                    更新密码
+                    保存账号与密码
                   </Button>
                 </div>
               </form>
@@ -379,6 +401,10 @@ export function SettingsPage() {
                 <code>{system?.outputDir ?? '—'}</code>
               </div>
               <div>
+                <span>日志目录</span>
+                <code>{system?.logDir ?? '—'}</code>
+              </div>
+              <div>
                 <span>清单文件</span>
                 <strong>{system?.manifestCount ?? 0} 个</strong>
               </div>
@@ -387,10 +413,34 @@ export function SettingsPage() {
                 <strong>{system?.streamPort ?? 2048}</strong>
               </div>
             </div>
-            <div className={`system-health ${system?.outputWritable ? 'ok' : 'bad'}`}>
-              {system?.outputWritable ? <CheckCircle2 size={15} /> : <Database size={15} />}
-              {system?.outputWritable ? '输出目录可写' : '输出目录不可写'}
+            <div className={`system-health ${system?.outputWritable && system?.logWritable ? 'ok' : 'bad'}`}>
+              {system?.outputWritable && system?.logWritable ? <CheckCircle2 size={15} /> : <Database size={15} />}
+              {system?.outputWritable && system?.logWritable
+                ? 'STRM 与日志目录可写'
+                : 'STRM 或日志目录不可写'}
             </div>
+          </section>
+
+          <section className="panel storage-panel">
+            <div className="settings-head compact">
+              <span className="settings-icon">
+                <KeyRound size={18} />
+              </span>
+              <div>
+                <h2>凭据存储</h2>
+              </div>
+            </div>
+            <p className="deploy-copy">
+              来源账号、OpenList 令牌和密码保存在配置目录的{' '}
+              <code>streampulse.json</code> 中（权限 600），不会写入 STRM 或日志目录。
+            </p>
+            <div className="code-block">
+              <span>{system?.dataDir ?? '/data'}/streampulse.json</span>
+            </div>
+            <p className="deploy-copy">
+              115 或其他网盘请先在 OpenList / AList 中添加存储，StreamPulse 保存对应的
+              OpenList 凭据，不直接保存 115 密码。
+            </p>
           </section>
 
           <section className="panel deploy-panel">
@@ -402,7 +452,7 @@ export function SettingsPage() {
                 <h2>容器部署</h2>
               </div>
             </div>
-            <p className="deploy-copy">数据与生成的 STRM 都保存在挂载卷中，升级镜像不会丢失配置。</p>
+            <p className="deploy-copy">配置、STRM 与日志分别保存在挂载卷中，升级镜像不会丢失数据。</p>
             <div className="code-block">
               <span>docker compose pull</span>
               <span>docker compose up -d</span>
@@ -423,7 +473,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.2.0'}</span>
+            <span>v{system?.version ?? '1.3.0'}</span>
           </section>
         </aside>
       </div>

@@ -6,6 +6,7 @@ import { Auth } from './auth.js';
 import { config } from './config.js';
 import { RunManager } from './runner.js';
 import { Scheduler } from './scheduler.js';
+import { initLogging } from './logger.js';
 import { createStreamServer } from './stream.js';
 import { Store } from './store.js';
 import { HttpError } from './types.js';
@@ -14,6 +15,7 @@ async function main(): Promise<void> {
   if (config.streamPort === config.port) {
     throw new Error('PORT 与 STREAM_PORT 不能相同');
   }
+  const logFile = await initLogging();
   const store = new Store();
   await store.init();
   const auth = new Auth(store);
@@ -117,7 +119,8 @@ async function main(): Promise<void> {
     console.log(`  → 302 stream    http://localhost:${config.streamPort}`);
     console.log(`  data:           ${config.dataDir}`);
     console.log(`  output:         ${store.snapshot.settings.outputDir}`);
-    console.log(`  auth:           ${auth.envManaged ? 'environment password' : auth.passwordSet ? 'local password' : 'first-run setup'}`);
+    console.log(`  logs:           ${logFile}`);
+    console.log(`  auth:           ${auth.envManaged ? 'environment account' : auth.passwordSet ? `local account (${auth.username})` : 'first-run setup'}`);
     console.log('');
   });
   streamServer.listen(config.streamPort, config.host, () => {

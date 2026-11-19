@@ -74,7 +74,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenLi
 | **失效清理** | 可选删除源文件已消失、且由 StreamPulse 记录的 `.strm`，不碰用户自己的文件。 |
 | **实时运行台** | SSE 实时日志、取消任务、统计扫描 / 生成 / 跳过 / 失败数量，历史记录可回看。 |
 | **手机适配** | 响应式布局、底部五栏导航、移动端任务卡片、全屏表单，支持添加到手机主屏幕。 |
-| **安全默认** | 首次启动设置管理员密码，scrypt 加盐散列，HMAC 会话 Cookie，来源密钥不回传浏览器。 |
+| **安全默认** | 首次启动设置管理员账号与密码，之后可在界面修改；scrypt 加盐散列、HMAC 会话 Cookie。 |
 | **Docker 优先** | 单镜像、多架构（amd64 / arm64）、健康检查、GHCR 自动发布。 |
 
 ## 快速开始
@@ -82,7 +82,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenLi
 ### 1. 使用 Docker 运行
 
 ```bash
-mkdir -p streampulse/data
+mkdir -p streampulse/{data,strm,logs}
 cd streampulse
 
 docker run -d \
@@ -91,11 +91,13 @@ docker run -d \
   -p 1024:1024 \
   -p 2048:2048 \
   -v "$(pwd)/data:/data" \
+  -v "$(pwd)/strm:/strm" \
+  -v "$(pwd)/logs:/logs" \
   -e TZ=Asia/Shanghai \
   ghcr.io/daisyyijin/streampulse:latest
 ```
 
-打开 `http://你的服务器地址:1024`，首次访问会要求创建管理员密码。
+打开 `http://你的服务器地址:1024`，首次访问会要求创建**管理员账号和密码**。
 
 > **两个端口都要映射：**
 >
@@ -111,12 +113,20 @@ docker run -d \
 
 ```bash
 cp .env.example .env
-# 编辑 .env：至少改 STREAM_PUBLIC_URL 或设置 STREAMPULSE_PASSWORD
+# 编辑 .env：设置管理员账号密码、302 地址等
 docker compose up -d
 docker compose logs -f
 ```
 
-默认映射 `1024:1024` 与 `2048:2048`，数据保存在 `./data`。升级：
+默认映射：
+
+```text
+./data  → /data   配置、数据库、清单、凭据
+./strm  → /strm   STRM 文件
+./logs  → /logs   应用日志
+```
+
+升级：
 
 ```bash
 docker compose pull
@@ -140,14 +150,14 @@ docker compose up -d
 
 1. 点击 **媒体库 → 创建媒体库**。
 2. 选择来源，浏览并选中媒体目录，例如 `/Movies`。
-3. 设置输出目录，例如 `Movies/4K`（相对于 `/data/strm`）。
+3. 设置输出目录，例如 `Movies/4K`（相对于 `/strm`）。
 4. 按需修改 URL 模板、扩展名、排除规则与定时计划。
 5. 保存后点击 **立即同步**。
 
 生成的目录会像这样：
 
 ```text
-/data/strm/Movies/4K/
+/strm/Movies/4K/
 ├── Dune Part Two (2024)/
 │   └── Dune.Part.Two.2024.2160p.HDR.strm
 └── Inception (2010)/
@@ -166,11 +176,11 @@ Emby 请求这个本地地址后，StreamPulse 会调用 OpenList API 解析真�
 
 ### 5. 接入 Emby / Jellyfin
 
-把 `/data/strm`（或其中的 `Movies/4K`）映射给媒体服务器，然后添加对应的媒体库：
+把宿主机的 `./strm`（或其中的 `Movies/4K`）映射给媒体服务器，然后添加对应的媒体库：
 
 ```yaml
 volumes:
-  - ./streampulse/data/strm:/media/streampulse
+  - ./streampulse/strm:/media/streampulse:ro
 ```
 
 媒体服务器里选择 `/media/streampulse/Movies/4K` 即可。扫描完成后，海报与
@@ -179,6 +189,33 @@ volumes:
 > **重要：** 302 模式要求 Emby 能访问 `2048` 端口，StreamPulse 容器能访问
 > OpenList API。若解析失败，StreamPulse 会回退到 OpenList 的 `/d/` 地址，这时
 > 才需要播放器能直接访问 OpenList。详见 [FAQ](#faq)。
+
+## 管理员账号
+
+首次访问 `http://NAS_IP:1024` 时会创建管理员账号：
+
+- 账号：3–32 位字母、数字、点、下划线或短横线，默认 `admin`
+- 密码：至少 8 个字符
+- 没有默认密码，首次安装必须自行设置
+
+登录后在 **设置 → 管理员账号与安全** 可以修改账号和密码：
+
+- 修改账号或密码都需要验证当前密码
+- 新密码留空表示只改账号
+- 修改后会注销其他已登录会话
+
+也可以完全用环境变量管理：
+
+```ini
+STREAMPULSE_USERNAME=admin
+STREAMPULSE_PASSWORD=你的强密码
+```
+
+设置 `STREAMPULSE_PASSWORD` 后，网页首次初始化会被跳过，界面中的账号修改会被锁定；
+修改 `.env` 后执行 `docker compose up -d --force-recreate` 生效。
+
+> 当前是单管理员模式，没有多用户。所有来源凭据与管理员密码哈希都保存在
+> `/data/streampulse.json`（权限 0600），不会写入 `/strm` 或 `/logs`。
 
 ## 双端口与 302 模式
 
@@ -261,24 +298,47 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 | `STREAM_PORT` | `2048` | 302 直链服务监听端口。 |
 | `STREAM_PUBLIC_URL` | 空 | 302 服务公开地址，例如 `http://192.168.1.10:2048`；空则首次创建媒体库时自动推断。 |
 | `HOST` | `0.0.0.0` | 监听地址。 |
-| `DATA_DIR` | `/data` | 数据库、清单和默认输出目录所在的数据卷。 |
-| `OUTPUT_DIR` | `/data/strm` | 默认 STRM 输出根目录；也可在界面设置中修改（需绝对路径且可写）。 |
-| `STREAMPULSE_PASSWORD` | 空 | 设置后跳过首次初始化，并锁定界面中的密码修改。 |
+| `DATA_DIR` | `/data` | 配置、数据库、清单和凭据目录。 |
+| `OUTPUT_DIR` | `/strm` | STRM 输出根目录；也可在界面设置中修改（需绝对路径且可写）。 |
+| `LOG_DIR` | `/logs` | 应用日志目录，按天写入 `streampulse-YYYY-MM-DD.log`。 |
+| `LOG_RETENTION_DAYS` | `14` | 自动清理超过天数的旧日志。 |
+| `STREAMPULSE_USERNAME` | `admin` | 环境变量管理模式下使用的管理员账号。 |
+| `STREAMPULSE_PASSWORD` | 空 | 设置后跳过首次初始化，并锁定界面中的账号/密码修改。 |
 | `TZ` | `Asia/Shanghai` | 容器时区；Cron 的默认时区来自界面设置。 |
 | `TRUST_PROXY` | `false` | 置于 HTTPS 反向代理后时设为 `true`，以正确签发 Secure Cookie。 |
 | `STREAMPULSE_VERSION` | 构建版本 | 覆盖界面展示的版本号，一般无需设置。 |
 
-`DATA_DIR` 中会包含：
+三个目录的职责：
+
+| 宿主机 | 容器内 | 内容 |
+| --- | --- | --- |
+| `./data` | `/data` | `streampulse.json`、`manifests/`、管理员账号哈希、来源凭据 |
+| `./strm` | `/strm` | 生成的 `.strm` 文件 |
+| `./logs` | `/logs` | 每日应用日志 |
 
 ```text
 /data/
-├── streampulse.json      # 配置、来源凭据、运行历史（权限 0600）
-├── manifests/            # 每个媒体库的增量清单
-└── strm/                 # 默认输出目录
+├── streampulse.json      # 管理员账号、密码哈希、来源凭据、运行历史（0600）
+└── manifests/            # 每个媒体库的增量清单
+
+/strm/                    # 生成的 STRM 文件
+/logs/                    # streampulse-YYYY-MM-DD.log
 ```
 
-**备份只需要备份整个 `/data`**。凭据以明文 JSON 保存在数据卷中，请确保宿主机
-磁盘与备份的访问权限受控。
+**备份需要备份 `/data` 和 `/strm`**；日志目录按需备份。来源账号和令牌只会在
+`/data/streampulse.json` 中，不会写入 `/strm` 或 `/logs`。该文件权限为 `0600`，
+但仍建议保护宿主机磁盘和备份。
+
+### 115 / 其他网盘的账号存储
+
+StreamPulse 不直接保存 115 密码。正确方式是：
+
+1. 在 OpenList / AList 中添加 115 或其他网盘存储；
+2. 在 OpenList 获取访问令牌，或准备 OpenList 管理员账号；
+3. 在 StreamPulse 的 **来源** 中连接 OpenList。
+
+因此 `/data/streampulse.json` 保存的是 **OpenList 凭据**，由它再访问 115。
+如果你需要直接填写 115 账号（不经 OpenList），那是另一套原生驱动，需要单独开发。
 
 ## 从源码运行
 
@@ -297,7 +357,7 @@ npm run dev
 
 ```bash
 npm run build
-DATA_DIR=./data OUTPUT_DIR=./data/strm PORT=1024 STREAM_PORT=2048 npm start
+DATA_DIR=./data OUTPUT_DIR=./strm LOG_DIR=./logs PORT=1024 STREAM_PORT=2048 npm start
 ```
 
 质量检查：
@@ -320,7 +380,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.2.0
+ghcr.io/daisyyijin/streampulse:1.3.0
 ```
 
 ### 首次发布后设为公开
@@ -343,7 +403,9 @@ PAT 需要 `read:packages` 权限。
 
 ```bash
 docker build -t streampulse:local .
-docker run --rm -p 1024:1024 -p 2048:2048 -v "$(pwd)/data:/data" streampulse:local
+docker run --rm -p 1024:1024 -p 2048:2048 \
+  -v "$(pwd)/data:/data" -v "$(pwd)/strm:/strm" -v "$(pwd)/logs:/logs" \
+  streampulse:local
 ```
 
 ## 工作原理
@@ -361,7 +423,7 @@ OpenList / AList
   Incremental Planner ◄── manifests/<library>.json
       │
       ▼
-  /data/strm/**/*.strm
+  /strm/**/*.strm
       │
       ▼
 Emby / Jellyfin ──► StreamPulse:2048 ──302──► 网盘真实直链
@@ -393,12 +455,12 @@ Server-Sent Events 实时推送到浏览器。
 
 ## 安全说明
 
-- 管理员密码使用 **scrypt** 加盐散列；会话是 HMAC-SHA256 签名的 HttpOnly Cookie。
+- 管理员账号与密码使用 **scrypt** 加盐散列；会话是 HMAC-SHA256 签名的 HttpOnly Cookie。
 - 登录接口有基础限流（每个 IP 15 分钟 12 次失败）。
 - 来源令牌/密码仅保存在服务端数据卷，列表接口只返回末尾提示。
-- 首次启动的初始化接口在密码设置后自动失效。
+- 首次启动的初始化接口在管理员账号设置后自动失效。
 - 建议通过 HTTPS 反向代理访问，并设置 `TRUST_PROXY=true`。
-- 不要将 `/data` 暴露到公网；凭据在其中以明文存储。
+- 不要将 `/data` 暴露到公网；来源凭据在其中以明文存储。
 - 本项目不会删除清单之外的文件；删除媒体库也不会删除已生成的 STRM。
 - 302 链接中的随机密钥可以访问该来源的直链解析，请像密码一样保护 STRM 文件。
 
@@ -432,16 +494,16 @@ OpenList API、来源令牌是否有效。
 
 停止容器，二选一：
 
-1. 给容器加上 `STREAMPULSE_PASSWORD=新密码` 环境变量后重启（会覆盖本地密码）；
+1. 在 `.env` 设置 `STREAMPULSE_USERNAME` / `STREAMPULSE_PASSWORD` 后重建容器；
 2. 编辑 `/data/streampulse.json`，把 `"passwordHash"` 改为 `null` 后重启，重新进入首次初始化。
 
 编辑前请先备份数据卷，且不要在服务运行时修改数据库文件。
 
 **Q：Docker 提示输出目录不可写？**
 
-默认数据卷内的 `/data` 会由入口脚本调整给容器用户。若你把 `OUTPUT_DIR`
-指向其他挂载目录，请确保容器 UID `1000` 对该目录有写权限，或使用
-`docker compose` 中的 `user:` 指定有权限的 UID/GID。
+默认的 `/data`、`/strm`、`/logs` 会由入口脚本调整给容器用户。若你把
+`OUTPUT_DIR` 或 `LOG_DIR` 指向其他挂载目录，请确保容器 UID `1000` 对该目录有
+写权限，或使用 `docker compose` 中的 `user:` 指定有权限的 UID/GID。
 
 **Q：支持 ARM / 群晖 / 威联通吗？**
 

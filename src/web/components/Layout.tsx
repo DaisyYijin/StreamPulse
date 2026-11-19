@@ -93,8 +93,8 @@ export function Layout({
             <span className="admin-presence" />
           </div>
           <div className="admin-meta">
-            <strong>管理员</strong>
-            <span>{auth.envManaged ? '环境变量密码' : '本地账户'}</span>
+            <strong>{auth.username || '管理员'}</strong>
+            <span>{auth.envManaged ? '环境变量账号' : '本地账号'}</span>
           </div>
           <button className="icon-btn" onClick={onLogout} title="退出登录" aria-label="退出登录">
             <LogOut size={16} />

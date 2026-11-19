@@ -18,8 +18,13 @@ You can expect an initial response within 72 hours.
 
 ## Deployment notes
 
-- StreamPulse stores source credentials in `/data/streampulse.json` (mode 0600).
-  Protect and encrypt the host volume; do not expose `/data` over the network.
+- StreamPulse stores the administrator username, password hash, source credentials,
+  and per-source stream keys in `/data/streampulse.json` (mode 0600). Protect and
+  encrypt the host volume; do not expose `/data` over the network.
+- Application logs live in `/logs` and contain source names/paths and errors, but
+  never source tokens or passwords. Protect the log volume accordingly.
+- 115 and other cloud-drive accounts should be configured inside OpenList/AList.
+  StreamPulse stores only the resulting OpenList credentials.
 - Put the web UI behind HTTPS when it is reachable from the internet.
 - Set `TRUST_PROXY=true` only when a trusted reverse proxy terminates TLS.
 - Set `STREAMPULSE_PASSWORD` for automated deployments, or complete the

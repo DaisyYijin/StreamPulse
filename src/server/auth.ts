@@ -60,6 +60,14 @@ function safeEqualStrings(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+function validateUsername(value: string): string {
+  const username = value.trim();
+  if (!/^[A-Za-z0-9_.-]{3,32}$/.test(username)) {
+    throw new HttpError(400, '账号需为 3–32 位字母、数字、点、下划线或短横线');
+  }
+  return username;
+}
+
 export class Auth {
   private readonly store: Store;
 
@@ -79,40 +87,57 @@ export class Auth {
     return !this.passwordSet;
   }
 
-  async setup(password: string): Promise<void> {
+  get username(): string {
+    if (this.envManaged) return config.envUsername || 'admin';
+    return this.store.snapshot.username || 'admin';
+  }
+
+  async setup(username: string, password: string): Promise<void> {
     if (this.setupRequired === false) {
-      throw new HttpError(409, '管理员密码已设置');
+      throw new HttpError(409, '管理员账号已设置');
     }
+    const normalized = validateUsername(username);
     if (password.length < 8) {
       throw new HttpError(400, '密码至少需要 8 个字符');
     }
     const hash = await hashPassword(password);
     await this.store.mutate((db) => {
+      db.username = normalized;
       db.passwordHash = hash;
     });
   }
 
-  async verify(password: string): Promise<boolean> {
+  async verify(username: string, password: string): Promise<boolean> {
     if (this.envManaged) {
-      return safeEqualStrings(password, config.envPassword);
+      return (
+        safeEqualStrings(username.trim(), config.envUsername || 'admin') &&
+        safeEqualStrings(password, config.envPassword)
+      );
     }
+    if (!safeEqualStrings(username.trim(), this.username)) return false;
     const hash = this.store.snapshot.passwordHash;
     if (!hash) return false;
     return comparePassword(password, hash);
   }
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  async changeCredentials(
+    currentPassword: string,
+    nextUsername: string,
+    nextPassword?: string,
+  ): Promise<void> {
     if (this.envManaged) {
-      throw new HttpError(400, '密码由 STREAMPULSE_PASSWORD 环境变量管理，无法在界面修改');
+      throw new HttpError(400, '管理员账号由环境变量管理，无法在界面修改');
     }
-    if (!(await this.verify(currentPassword))) {
+    if (!(await this.verify(this.username, currentPassword))) {
       throw new HttpError(403, '当前密码不正确');
     }
-    if (newPassword.length < 8) {
+    const normalized = validateUsername(nextUsername);
+    if (nextPassword !== undefined && nextPassword.length < 8) {
       throw new HttpError(400, '新密码至少需要 8 个字符');
     }
-    const hash = await hashPassword(newPassword);
+    const hash = nextPassword ? await hashPassword(nextPassword) : this.store.snapshot.passwordHash;
     await this.store.mutate((db) => {
+      db.username = normalized;
       db.passwordHash = hash;
       // Rotate the signing secret so every previously issued session is invalid.
       db.secret = randomBytes(32).toString('hex');

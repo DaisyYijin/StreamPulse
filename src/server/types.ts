@@ -12,6 +12,7 @@ export type LibraryRecord = Omit<Library, 'sourceName' | 'nextRunAt'>;
 export interface Database {
   schemaVersion: 1;
   secret: string;
+  username: string;
   passwordHash: string | null;
   sources: SourceRecord[];
   libraries: LibraryRecord[];

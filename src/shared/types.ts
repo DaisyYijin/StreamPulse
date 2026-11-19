@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -141,6 +141,7 @@ export interface AuthStatus {
   setupRequired: boolean;
   authenticated: boolean;
   envManaged: boolean;
+  username: string;
   appName: string;
   version: string;
 }
@@ -154,6 +155,8 @@ export interface SystemInfo {
   dataDir: string;
   outputDir: string;
   outputWritable: boolean;
+  logDir: string;
+  logWritable: boolean;
   manifestCount: number;
   streamPort: number;
   authMode: 'env' | 'local' | 'setup';

@@ -22,7 +22,7 @@ import type { Store } from '../store.js';
 import { HttpError, makeId, makeStreamKey, nowIso, type LibraryRecord, type SourceRecord } from '../types.js';
 import { libraryToPublic, runToPublic, sourceToPublic, systemInfo } from './helpers.js';
 import {
-  changePasswordSchema,
+  accountUpdateSchema,
   libraryCreateSchema,
   libraryUpdateSchema,
   loginSchema,
@@ -215,6 +215,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       setupRequired: auth.setupRequired,
       authenticated: auth.isAuthenticated(req),
       envManaged: auth.envManaged,
+      username: auth.username,
       appName: APP_NAME,
       version: config.version,
     });
@@ -222,10 +223,10 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/auth/login', loginGuard, async (req, res) => {
     const body = parseBody(loginSchema, req.body);
-    if (auth.setupRequired) throw new HttpError(409, '请先创建管理员密码');
-    if (!(await auth.verify(body.password))) {
+    if (auth.setupRequired) throw new HttpError(409, '请先创建管理员账号');
+    if (!(await auth.verify(body.username, body.password))) {
       failLogin(req);
-      throw new HttpError(401, '密码错误');
+      throw new HttpError(401, '账号或密码错误');
     }
     attempts.delete(req.ip || 'unknown');
     auth.setCookie(req, res);
@@ -234,9 +235,9 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/auth/setup', async (req, res) => {
     const body = parseBody(setupSchema, req.body);
-    await auth.setup(body.password);
+    await auth.setup(body.username, body.password);
     auth.setCookie(req, res);
-    res.status(201).json({ ok: true });
+    res.status(201).json({ ok: true, username: auth.username });
   });
 
   router.post('/auth/logout', (_req, res) => {
@@ -246,11 +247,15 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.use(auth.requireAuth);
 
-  router.post('/auth/password', async (req, res) => {
-    const body = parseBody(changePasswordSchema, req.body);
-    await auth.changePassword(body.currentPassword, body.newPassword);
+  router.post('/auth/account', async (req, res) => {
+    const body = parseBody(accountUpdateSchema, req.body);
+    await auth.changeCredentials(
+      body.currentPassword,
+      body.username,
+      body.newPassword || undefined,
+    );
     auth.setCookie(req, res);
-    res.json({ ok: true });
+    res.json({ ok: true, username: auth.username });
   });
 
   router.get('/overview', async (_req, res) => {

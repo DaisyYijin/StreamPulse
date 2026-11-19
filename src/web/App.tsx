@@ -64,9 +64,11 @@ export default function App() {
     };
     window.addEventListener('hashchange', onHash);
     window.addEventListener('sp:unauthorized', onUnauthorized);
+    window.addEventListener('sp:auth-changed', loadAuth);
     return () => {
       window.removeEventListener('hashchange', onHash);
       window.removeEventListener('sp:unauthorized', onUnauthorized);
+      window.removeEventListener('sp:auth-changed', loadAuth);
     };
   }, [loadAuth]);
 

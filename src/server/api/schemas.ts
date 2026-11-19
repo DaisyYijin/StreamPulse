@@ -131,16 +131,19 @@ export const settingsUpdateSchema = z.object({
 });
 
 export const loginSchema = z.object({
+  username: z.string().trim().min(1, '请输入账号').max(64),
   password: z.string().min(1, '请输入密码').max(1000),
 });
 
 export const setupSchema = z.object({
+  username: z.string().trim().min(3, '账号至少需要 3 个字符').max(32),
   password: z.string().min(8, '密码至少需要 8 个字符').max(200),
 });
 
-export const changePasswordSchema = z.object({
+export const accountUpdateSchema = z.object({
   currentPassword: z.string().min(1).max(1000),
-  newPassword: z.string().min(8, '新密码至少需要 8 个字符').max(200),
+  username: z.string().trim().min(3, '账号至少需要 3 个字符').max(32),
+  newPassword: z.string().min(8, '新密码至少需要 8 个字符').max(200).optional(),
 });
 
 export function validateSchedule(schedule: string): void {

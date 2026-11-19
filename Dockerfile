@@ -14,7 +14,7 @@ RUN npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim AS runtime
-ARG STREAMPULSE_VERSION=1.2.0
+ARG STREAMPULSE_VERSION=1.3.0
 
 LABEL org.opencontainers.image.title="StreamPulse" \
       org.opencontainers.image.description="Turn OpenList cloud media into STRM libraries for Emby and Jellyfin." \
@@ -31,7 +31,8 @@ ENV NODE_ENV=production \
     PORT=1024 \
     STREAM_PORT=2048 \
     DATA_DIR=/data \
-    OUTPUT_DIR=/data/strm \
+    OUTPUT_DIR=/strm \
+    LOG_DIR=/logs \
     WEB_DIST=/app/dist/web \
     STREAMPULSE_VERSION=${STREAMPULSE_VERSION}
 
@@ -41,10 +42,10 @@ COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-    && mkdir -p /data \
-    && chown -R node:node /data /app
+    && mkdir -p /data /strm /logs \
+    && chown -R node:node /data /strm /logs /app
 
-VOLUME ["/data"]
+VOLUME ["/data", "/strm", "/logs"]
 EXPOSE 1024 2048
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

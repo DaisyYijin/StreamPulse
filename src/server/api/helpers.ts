@@ -60,6 +60,13 @@ export async function systemInfo(store: Store): Promise<SystemInfo> {
   } catch {
     outputWritable = false;
   }
+  let logWritable = false;
+  try {
+    await fs.access(config.logDir, constants.W_OK);
+    logWritable = true;
+  } catch {
+    logWritable = false;
+  }
   let manifestCount = 0;
   try {
     manifestCount = (await fs.readdir(store.manifestDir)).filter((file) => file.endsWith('.json')).length;
@@ -75,6 +82,8 @@ export async function systemInfo(store: Store): Promise<SystemInfo> {
     dataDir: store.dataDir,
     outputDir,
     outputWritable,
+    logDir: config.logDir,
+    logWritable,
     manifestCount,
     streamPort: config.streamPort,
     authMode: config.envPassword ? 'env' : store.snapshot.passwordHash ? 'local' : 'setup',

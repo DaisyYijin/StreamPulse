@@ -12,3 +12,5 @@ coverage
 README.md
 LICENSE
 docker-compose.yml
+strm
+logs

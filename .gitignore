@@ -11,3 +11,5 @@ Thumbs.db
 
 # Local-only GitHub credential, never commit
 .github-token
+strm/
+logs/

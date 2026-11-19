@@ -1,4 +1,4 @@
-import { ArrowRight, Check, Eye, EyeOff, KeyRound, Layers3, ShieldCheck, Waves } from 'lucide-react';
+import { ArrowRight, Check, Eye, EyeOff, KeyRound, Layers3, ShieldCheck, UserRound, Waves } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { AuthStatus } from '../../shared/types';
 import { api } from '../api';
@@ -12,6 +12,7 @@ export function AuthPage({
   auth: AuthStatus;
   onAuthenticated: () => void;
 }) {
+  const [username, setUsername] = useState(auth.username || 'admin');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -30,12 +31,16 @@ export function AuthPage({
       setError('密码至少需要 8 个字符');
       return;
     }
+    if (!username.trim()) {
+      setError('请输入管理员账号');
+      return;
+    }
     setBusy(true);
     try {
       if (setup) {
-        await api.post('/api/auth/setup', { password });
+        await api.post('/api/auth/setup', { username, password });
       } else {
-        await api.post('/api/auth/login', { password });
+        await api.post('/api/auth/login', { username, password });
       }
       onAuthenticated();
     } catch (caught) {
@@ -101,17 +106,32 @@ export function AuthPage({
           </div>
           <div className="auth-form-head">
             <span className="eyebrow">{setup ? 'FIRST RUN SETUP' : 'SECURE ACCESS'}</span>
-            <h2>{setup ? '创建管理员密码' : '欢迎回来'}</h2>
+            <h2>{setup ? '创建管理员账号' : '欢迎回来'}</h2>
             <p>
               {setup
-                ? '这是首次启动。设置一个密码来保护你的 StreamPulse 控制台。'
-                : '输入管理员密码，继续管理你的 STRM 媒体库。'}
+                ? '这是首次启动。设置管理员账号和密码，以后可以在设置中修改。'
+                : '输入管理员账号和密码，继续管理你的 STRM 媒体库。'}
             </p>
           </div>
 
           <form onSubmit={submit} className="auth-form">
             <label className="auth-field">
-              <span>{setup ? '设置密码' : '管理员密码'}</span>
+              <span>{setup ? '管理员账号' : '账号'}</span>
+              <div className="input-with-icon auth-username">
+                <UserRound size={17} />
+                <Input
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  placeholder="admin"
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  autoFocus={setup}
+                />
+              </div>
+            </label>
+            <label className="auth-field">
+              <span>{setup ? '设置密码' : '密码'}</span>
               <div className="password-input">
                 <KeyRound size={17} />
                 <Input
@@ -119,7 +139,7 @@ export function AuthPage({
                   value={password}
                   onChange={(event) => setPassword(event.target.value)}
                   placeholder={setup ? '至少 8 个字符' : '输入密码'}
-                  autoFocus
+                  autoFocus={!setup}
                   autoComplete={setup ? 'new-password' : 'current-password'}
                 />
                 <button
@@ -161,8 +181,8 @@ export function AuthPage({
 
           <div className="auth-note">
             {auth.envManaged
-              ? '密码由 STREAMPULSE_PASSWORD 环境变量管理。'
-              : '密码使用 scrypt 加盐散列存储于数据卷中。'}
+              ? '账号和密码由 STREAMPULSE_USERNAME / STREAMPULSE_PASSWORD 环境变量管理。'
+              : '账号保存在数据卷中，密码使用 scrypt 加盐散列。'}
           </div>
           <div className="auth-footer">
             <span>StreamPulse</span>

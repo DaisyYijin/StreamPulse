@@ -1,13 +1,20 @@
 #!/bin/sh
 set -eu
 
-# The container starts as root so bind-mounted data directories created by the
-# host can be adopted by the unprivileged runtime user. All application code
-# runs as node afterwards.
+# The container starts as root so bind-mounted directories created by the host
+# can be adopted by the unprivileged runtime user. Application code runs as node.
 if [ "$(id -u)" = "0" ]; then
-  data_dir="${DATA_DIR:-/data}"
-  mkdir -p "$data_dir"
-  chown node:node "$data_dir" 2>/dev/null || true
+  for dir in "${DATA_DIR:-/data}" "${OUTPUT_DIR:-/strm}" "${LOG_DIR:-/logs}"; do
+    case "$dir" in
+      /data|/data/*|/strm|/strm/*|/logs|/logs/*)
+        mkdir -p "$dir"
+        chown node:node "$dir" 2>/dev/null || true
+        ;;
+      *)
+        # Custom host mounts are the operator's responsibility; do not chown them.
+        ;;
+    esac
+  done
   exec gosu node "$@"
 fi
 

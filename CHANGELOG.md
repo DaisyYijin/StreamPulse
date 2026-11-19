@@ -2,6 +2,26 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.3.0] - 2026-11-19
+
+### Added
+
+- Administrator **username + password** setup on first run, with account/password
+  editing in Settings. Account changes rotate sessions.
+- `STREAMPULSE_USERNAME` environment variable alongside `STREAMPULSE_PASSWORD`.
+- Separate Docker volumes for configuration (`/data`), STRM output (`/strm`) and
+  application logs (`/logs`).
+- Persistent daily application logs with `LOG_RETENTION_DAYS` cleanup.
+- Settings now shows config, STRM, log and credential storage locations.
+- Credential storage guidance for 115 and other cloud drives via OpenList.
+
+### Changed
+
+- `OUTPUT_DIR` now defaults to `/strm` in Docker; `LOG_DIR` defaults to `/logs`.
+- Existing databases are migrated with the default administrator username `admin`.
+- Existing deployments upgrading from 1.2 should update their volume mappings or
+  set `OUTPUT_DIR`/`LOG_DIR` explicitly.
+
 ## [1.2.0] - 2026-11-19
 
 ### Added
