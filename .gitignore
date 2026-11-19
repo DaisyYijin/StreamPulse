@@ -1,0 +1,13 @@
+node_modules/
+dist/
+data/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+.DS_Store
+Thumbs.db
+
+# Local-only GitHub credential, never commit
+.github-token

@@ -1,0 +1,35 @@
+name: streampulse
+
+services:
+  streampulse:
+    image: ${STREAMPULSE_IMAGE:-ghcr.io/OWNER/streampulse:latest}
+    container_name: streampulse
+    restart: unless-stopped
+    ports:
+      - "8088:8080"
+    environment:
+      TZ: ${TZ:-Asia/Shanghai}
+      # Optional: skip the first-run setup by setting a password here.
+      # STREAMPULSE_PASSWORD: "change-me-please"
+      # Set to true when StreamPulse is behind a reverse proxy and you want
+      # Secure session cookies to be issued for HTTPS.
+      # TRUST_PROXY: "true"
+    volumes:
+      # Database, manifests and generated STRM files live together here.
+      - ./data:/data
+      # To write STRM files directly to an existing media share, uncomment
+      # and set OUTPUT_DIR below:
+      # - /volume1/media/strm:/media/strm
+      # Then add OUTPUT_DIR: /media/strm to the environment block above.
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:8080/api/health').then((r)=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

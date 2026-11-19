@@ -1,0 +1,53 @@
+# syntax=docker/dockerfile:1.7
+
+FROM node:24-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+FROM deps AS build
+WORKDIR /app
+COPY tsconfig.web.json tsconfig.server.json vite.config.ts vitest.config.ts index.html ./
+COPY public ./public
+COPY src ./src
+RUN npm run build
+RUN npm prune --omit=dev --no-audit --no-fund
+
+FROM node:24-bookworm-slim AS runtime
+ARG STREAMPULSE_VERSION=1.0.0
+
+LABEL org.opencontainers.image.title="StreamPulse" \
+      org.opencontainers.image.description="Turn OpenList cloud media into STRM libraries for Emby and Jellyfin." \
+      org.opencontainers.image.source="https://github.com/OWNER/streampulse" \
+      org.opencontainers.image.licenses="MIT" \
+      org.opencontainers.image.version="${STREAMPULSE_VERSION}"
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates tini gosu \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV NODE_ENV=production \
+    PORT=8080 \
+    DATA_DIR=/data \
+    OUTPUT_DIR=/data/strm \
+    WEB_DIST=/app/dist/web \
+    STREAMPULSE_VERSION=${STREAMPULSE_VERSION}
+
+COPY --from=build --chown=node:node /app/node_modules ./node_modules
+COPY --from=build --chown=node:node /app/dist ./dist
+COPY --from=build --chown=node:node /app/package.json ./package.json
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
+    && mkdir -p /data \
+    && chown -R node:node /data /app
+
+VOLUME ["/data"]
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/api/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
+CMD ["node", "dist/server/index.js"]
