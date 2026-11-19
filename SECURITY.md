@@ -19,7 +19,7 @@ You can expect an initial response within 72 hours.
 ## Deployment notes
 
 - StreamPulse stores the administrator username and password hash in
-  `/config/accounts/admin.json`; per-source tokens/passwords live in
+  `/config/accounts/<username>.json`; per-source tokens/passwords live in
   `/config/sources/<source-id>.json` (mode 0600). Protect and encrypt the
   `/config` volume; do not expose it over the network.
 - Application logs live in `/logs` and contain source names/paths and errors, but

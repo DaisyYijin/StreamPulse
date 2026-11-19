@@ -1,6 +1,5 @@
 import fs from 'node:fs/promises';
 import { constants } from 'node:fs';
-import path from 'node:path';
 import type {
   Library,
   Run,
@@ -81,8 +80,11 @@ export async function systemInfo(store: Store): Promise<SystemInfo> {
     arch: process.arch,
     uptimeSeconds: Math.floor(process.uptime()),
     configDir: store.configDir,
+    stateDir: store.stateDir,
     credentialsDir: store.credentialsDir,
-    accountsDir: path.join(store.configDir, 'accounts'),
+    accountsDir: store.accountsDir,
+    librariesDir: store.librariesDir,
+    runsDir: store.runsDir,
     outputDir,
     outputWritable,
     logDir: config.logDir,

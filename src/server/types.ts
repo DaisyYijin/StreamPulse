@@ -12,7 +12,7 @@ export type LibraryRecord = Omit<Library, 'sourceName' | 'nextRunAt'>;
 export interface Database {
   schemaVersion: 1;
   secret: string;
-  /** Legacy fields; migrated to /config/accounts/admin.json on startup. */
+  /** Legacy fields; migrated to /config/accounts/<username>.json on startup. */
   username: string;
   passwordHash: string | null;
   sources: SourceRecord[];

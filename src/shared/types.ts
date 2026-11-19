@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.4.0';
+export const APP_VERSION = '1.5.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -153,8 +153,11 @@ export interface SystemInfo {
   arch: string;
   uptimeSeconds: number;
   configDir: string;
+  stateDir: string;
   credentialsDir: string;
   accountsDir: string;
+  librariesDir: string;
+  runsDir: string;
   outputDir: string;
   outputWritable: boolean;
   logDir: string;

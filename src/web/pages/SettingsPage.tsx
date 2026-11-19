@@ -397,6 +397,10 @@ export function SettingsPage() {
                 <code>{system?.configDir ?? '—'}</code>
               </div>
               <div>
+                <span>状态目录</span>
+                <code>{system?.stateDir ?? '—'}</code>
+              </div>
+              <div>
                 <span>输出目录</span>
                 <code>{system?.outputDir ?? '—'}</code>
               </div>
@@ -431,13 +435,21 @@ export function SettingsPage() {
               </div>
             </div>
             <p className="deploy-copy">
-              管理员账号一个文件，每个来源令牌/密码一个文件，权限均为 600。
-              非敏感配置单独保存，均不会写入 STRM 或日志目录。
+              管理员账号、每个来源、每个媒体库、每个任务都拆成独立文件，权限均为 600。
+              配置与运行状态分目录存放，均不会写入 STRM 或应用日志。
             </p>
             <div className="code-block">
-              <span>{system?.accountsDir ?? '/config/accounts'}/admin.json</span>
+              <span>{system?.accountsDir ?? '/config/accounts'}/&lt;username&gt;.json</span>
               <span>{system?.credentialsDir ?? '/config/sources'}/&lt;source-id&gt;.json</span>
-              <span>{system?.configDir ?? '/config'}/streampulse.json</span>
+              <span>{system?.librariesDir ?? '/config/libraries'}/&lt;library-id&gt;.json</span>
+              <span>{system?.configDir ?? '/config'}/settings.json</span>
+            </div>
+            <p className="deploy-copy">
+              运行状态放在状态目录：
+            </p>
+            <div className="code-block">
+              <span>{system?.runsDir ?? '/data/runs'}/&lt;run-id&gt;.json</span>
+              <span>{system?.stateDir ?? '/data'}/manifests/&lt;library-id&gt;.json</span>
             </div>
             <p className="deploy-copy">
               115 或其他网盘请先在 OpenList / AList 中添加存储，StreamPulse 为每个来源
@@ -454,7 +466,7 @@ export function SettingsPage() {
                 <h2>容器部署</h2>
               </div>
             </div>
-            <p className="deploy-copy">配置、STRM 与日志分别保存在挂载卷中，升级镜像不会丢失数据。</p>
+            <p className="deploy-copy">配置、状态、STRM 与日志分别保存在挂载卷中，升级镜像不会丢失数据。</p>
             <div className="code-block">
               <span>docker compose pull</span>
               <span>docker compose up -d</span>
@@ -475,7 +487,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.4.0'}</span>
+            <span>v{system?.version ?? '1.5.0'}</span>
           </section>
         </aside>
       </div>

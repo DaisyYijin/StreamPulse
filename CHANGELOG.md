@@ -2,6 +2,21 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.5.0] - 2026-11-19
+
+### Changed
+
+- Split configuration by concern:
+  - `/config/settings.json` for global settings
+  - `/config/accounts/<username>.json` per administrator
+  - `/config/sources/<source-id>.json` per source/account (complete record)
+  - `/config/libraries/<library-id>.json` per media library
+- Added `/data` state volume:
+  - `/data/runs/<run-id>.json` per run, including its logs
+  - `/data/manifests/<library-id>.json` per incremental manifest
+- `settings.json` is the commit marker for a complete save.
+- Legacy `streampulse.json` is migrated automatically and removed after a successful split save.
+
 ## [1.4.0] - 2026-11-19
 
 ### Changed
