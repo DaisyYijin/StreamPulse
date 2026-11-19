@@ -11,6 +11,7 @@ import type {
 import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
+import { pollQrLogin, startQrLogin, takeQrSession } from '../qr.js';
 import { PathSafetyError, normalizeExtensions, normalizeSourcePath, normalizeTargetPath, strmRelativePath } from '../core/paths.js';
 import { renderUrlTemplate, TemplateError, validateUrlTemplate } from '../core/template.js';
 import { config } from '../config.js';
@@ -26,6 +27,7 @@ import {
   libraryCreateSchema,
   libraryUpdateSchema,
   loginSchema,
+  qrStartSchema,
   runOptionsSchema,
   normalizeBaseUrl,
   normalizePublicUrl,
@@ -110,8 +112,8 @@ function checkSourceCredentials(
     return;
   }
   if (source.type === '123') {
-    if (!source.username || !source.password) {
-      throw new HttpError(400, '123 云盘需要填写账号和密码');
+    if (!source.token && (!source.username || !source.password)) {
+      throw new HttpError(400, '123 云盘需要账号密码或扫码令牌');
     }
     return;
   }
@@ -291,6 +293,54 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.get('/sources', (_req, res) => {
     res.json(store.snapshot.sources.map(sourceToPublic));
+  });
+
+  router.post('/sources/qr/start', async (req, res) => {
+    const body = parseBody(qrStartSchema, req.body);
+    const session = await startQrLogin({
+      provider: body.provider,
+      device: body.device,
+      name: body.name,
+      sourceId: body.sourceId,
+    });
+    res.status(201).json(session);
+  });
+
+  router.get('/sources/qr/:id', async (req, res) => {
+    const session = await pollQrLogin(idOf(req));
+    if (!session) throw new HttpError(404, '二维码会话不存在或已过期');
+    if (session.status !== 'confirmed' || !session.credentials) {
+      res.json(session);
+      return;
+    }
+    const stored = takeQrSession(session.id);
+    if (!stored?.credentials) throw new HttpError(409, '二维码会话已被使用');
+    const credentials = stored.credentials;
+    const source = store.source(stored.sourceId || '');
+    const now = nowIso();
+    const draft: SourceRecord = {
+      id: source?.id || makeId('src'),
+      name: stored.name,
+      type: stored.provider,
+      baseUrl: '',
+      publicUrl: '',
+      authType: stored.provider === '115' ? 'cookie' : 'token',
+      username: '',
+      token: credentials.token || '',
+      password: '',
+      cookie: credentials.cookie || '',
+      streamKey: source?.streamKey || makeStreamKey(),
+      createdAt: source?.createdAt || now,
+      updatedAt: now,
+      lastCheck: null,
+    };
+    checkSourceCredentials(draft);
+    await store.mutate((db) => {
+      const index = db.sources.findIndex((item) => item.id === draft.id);
+      if (index >= 0) db.sources[index] = draft;
+      else db.sources.unshift(draft);
+    });
+    res.json(sourceToPublic(draft));
   });
 
   router.post('/sources', async (req, res) => {

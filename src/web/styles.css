@@ -4951,3 +4951,79 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+.source-login-switch {
+  margin-top: -2px;
+}
+
+.qr-login {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(5, 8, 7, 0.35);
+}
+
+.qr-image-wrap {
+  display: grid;
+  place-items: center;
+  width: 232px;
+  height: 232px;
+  border-radius: 12px;
+  background: #fff;
+  padding: 8px;
+}
+
+.qr-image {
+  width: 216px;
+  height: 216px;
+  display: block;
+}
+
+.qr-placeholder {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  color: #5d6b60;
+  font-size: 11px;
+}
+
+.qr-device {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.qr-device > span {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.qr-device .select {
+  flex: 1;
+}
+
+.qr-status {
+  color: var(--muted);
+  font-size: 11.5px;
+  text-align: center;
+}
+
+.qr-status.scanned {
+  color: var(--lime);
+}
+
+.qr-status.error,
+.qr-status.expired {
+  color: var(--danger);
+}
+
+.qr-hint {
+  color: var(--dim);
+  font-size: 10px;
+  text-align: center;
+}

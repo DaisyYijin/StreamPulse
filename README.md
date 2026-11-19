@@ -414,6 +414,15 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 
 权限均为 `0600`。Cookie/密码过期后，在来源页面编辑账号并重新保存即可。
 
+#### 扫码登录
+
+115 和 123 都支持扫码：
+
+- **115**：选择登录设备（Web / Android / iOS / TV），用 115 App 扫码
+- **123**：用 123 App 或微信扫码
+
+二维码在 StreamPulse 服务端生成，扫码确认后自动写入对应账号文件，不经过浏览器中转凭据。
+
 #### 115 Cookie 获取
 
 1. 浏览器登录 `115.com`
@@ -500,7 +509,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.7.0
+ghcr.io/daisyyijin/streampulse:1.8.0
 ```
 
 ### 首次发布后设为公开

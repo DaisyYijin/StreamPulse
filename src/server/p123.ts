@@ -63,7 +63,9 @@ export class P123Client implements StorageClient {
     this.username = options.username.trim();
     this.password = options.password;
     this.token = options.token?.trim() || tokenCache.get(this.username) || '';
-    if (!this.username || !this.password) throw new P123Error('请填写 123 云盘账号和密码', 401);
+    if (!this.token && (!this.username || !this.password)) {
+      throw new P123Error('请填写 123 云盘账号密码，或使用扫码登录', 401);
+    }
   }
 
   private headers(): Record<string, string> {

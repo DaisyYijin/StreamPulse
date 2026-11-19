@@ -2,6 +2,23 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.8.0] - 2026-11-19
+
+### Added
+
+- **115 扫码登录** with selectable login device: Web / Android / iOS / TV.
+- **123 云盘扫码登录** via 123 App or WeChat, with automatic token login.
+- QR session endpoints:
+  - `POST /api/sources/qr/start`
+  - `GET /api/sources/qr/:id`
+- QR code rendering is server-side; credentials never leave the server until the
+  scanned session is confirmed and written to the per-account file.
+
+### Changed
+
+- Source account form has credential login and QR login modes for 115/123.
+- 123 token-only accounts are supported after QR login.
+
 ## [1.7.0] - 2026-11-19
 
 ### Added

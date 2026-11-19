@@ -131,6 +131,13 @@ export const runOptionsSchema = z.object({
   mode: z.enum(['incremental', 'full']).optional(),
 });
 
+export const qrStartSchema = z.object({
+  provider: z.enum(['115', '123']),
+  device: z.enum(['web', 'android', 'ios', 'tv']).optional(),
+  name: z.string().trim().min(1, '名称不能为空').max(80),
+  sourceId: z.string().trim().min(1).optional(),
+});
+
 export const settingsUpdateSchema = z.object({
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),

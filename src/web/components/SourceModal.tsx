@@ -1,10 +1,21 @@
-import { Cloud, Eye, EyeOff, Info, KeyRound, Link2, ServerCog, UserRound } from 'lucide-react';
-import { useEffect, useState, type FormEvent } from 'react';
+import { Cloud, Eye, EyeOff, Info, KeyRound, Link2, QrCode, ServerCog, UserRound } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import type { Source, SourceInput, SourceType } from '../../shared/types';
 import { api } from '../api';
-import { Button, Field, Input, Modal, toast } from './ui';
+import { Button, Field, Input, Modal, Select, toast } from './ui';
 
 type AuthMode = 'token' | 'password' | 'cookie';
+type LoginMode = 'credential' | 'qr';
+
+interface QrSessionView {
+  id: string;
+  provider: '115' | '123';
+  device: 'web' | 'android' | 'ios' | 'tv';
+  status: 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error';
+  message: string;
+  qrDataUrl: string;
+  expiresAt: string;
+}
 
 const PROVIDERS: Array<{ value: SourceType; label: string; hint: string }> = [
   { value: '115', label: '115 网盘', hint: '浏览器 Cookie' },
@@ -32,6 +43,11 @@ export function SourceModal({
   const [token, setToken] = useState('');
   const [password, setPassword] = useState('');
   const [cookie, setCookie] = useState('');
+  const [loginMode, setLoginMode] = useState<LoginMode>('credential');
+  const [qrDevice, setQrDevice] = useState<'web' | 'android' | 'ios' | 'tv'>('web');
+  const [qr, setQr] = useState<QrSessionView | null>(null);
+  const [qrBusy, setQrBusy] = useState(false);
+  const qrTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showSecret, setShowSecret] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -47,20 +63,88 @@ export function SourceModal({
     setToken('');
     setPassword('');
     setCookie('');
+    setLoginMode('credential');
+    setQrDevice('web');
+    setQr(null);
+    clearQrTimer();
     setShowSecret(false);
     setError('');
   }, [open, source]);
 
+  useEffect(() => {
+    if (!open) clearQrTimer();
+    return () => clearQrTimer();
+  }, [open]);
+
+  const clearQrTimer = () => {
+    if (qrTimer.current) {
+      clearTimeout(qrTimer.current);
+      qrTimer.current = null;
+    }
+  };
+
   const chooseType = (next: SourceType) => {
     setType(next);
     setError('');
+    clearQrTimer();
+    setQr(null);
+    setLoginMode('credential');
     if (next === '115') setAuthType('cookie');
     if (next === '123') setAuthType('password');
     if (next === 'openlist' && authType === 'cookie') setAuthType('token');
   };
 
+  const qrMode = loginMode === 'qr' && (type === '115' || type === '123');
+
+  const pollQr = async (id: string) => {
+    try {
+      const result = await api.get<QrSessionView | Source>(`/api/sources/qr/${id}`);
+      if (!result || !('status' in result)) {
+        const saved = result as Source;
+        toast.success('扫码登录成功');
+        onSaved(saved);
+        onClose();
+        return;
+      }
+      setQr(result);
+      if (result.status === 'expired' || result.status === 'error') return;
+      qrTimer.current = setTimeout(() => void pollQr(id), 1500);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '扫码登录失败');
+    }
+  };
+
+  const startQr = async () => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      setError('请先填写账号名称');
+      return;
+    }
+    clearQrTimer();
+    setQrBusy(true);
+    setError('');
+    try {
+      const session = await api.post<QrSessionView>('/api/sources/qr/start', {
+        provider: type,
+        device: type === '115' ? qrDevice : 'web',
+        name: trimmedName,
+        sourceId: source?.id,
+      });
+      setQr(session);
+      void pollQr(session.id);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : '二维码生成失败');
+    } finally {
+      setQrBusy(false);
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (qrMode) {
+      await startQr();
+      return;
+    }
     setError('');
     const trimmedName = name.trim();
     if (!trimmedName) {
@@ -126,9 +210,15 @@ export function SourceModal({
           <Button variant="ghost" onClick={onClose} disabled={busy}>
             取消
           </Button>
-          <Button variant="primary" onClick={submit} loading={busy} icon={<Link2 size={16} />}>
-            {source ? '保存更改' : '保存账号'}
-          </Button>
+          {qrMode ? (
+            <Button variant="primary" onClick={startQr} loading={qrBusy} icon={<QrCode size={16} />}>
+              {qr ? '刷新二维码' : '生成二维码'}
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={submit} loading={busy} icon={<Link2 size={16} />}>
+              {source ? '保存更改' : '保存账号'}
+            </Button>
+          )}
         </>
       }
     >
@@ -157,7 +247,75 @@ export function SourceModal({
           />
         </Field>
 
-        {type === '115' ? (
+        {type !== 'openlist' ? (
+          <div className="auth-mode source-login-switch">
+            <button
+              type="button"
+              className={!qrMode ? 'active' : ''}
+              onClick={() => {
+                setLoginMode('credential');
+                clearQrTimer();
+                setQr(null);
+              }}
+            >
+              <KeyRound size={16} />
+              {type === '115' ? 'Cookie 登录' : '账号密码'}
+            </button>
+            <button
+              type="button"
+              className={qrMode ? 'active' : ''}
+              onClick={() => {
+                setLoginMode('qr');
+                setError('');
+              }}
+            >
+              <QrCode size={16} />
+              扫码登录
+            </button>
+          </div>
+        ) : null}
+
+        {qrMode ? (
+          <div className="qr-login">
+            <div className="qr-image-wrap">
+              {qr ? (
+                <img className="qr-image" src={qr.qrDataUrl} alt="登录二维码" />
+              ) : (
+                <div className="qr-placeholder">
+                  <QrCode size={42} />
+                  <span>生成二维码后扫码</span>
+                </div>
+              )}
+            </div>
+            {type === '115' ? (
+              <div className="qr-device">
+                <span>登录设备</span>
+                <Select
+                  value={qrDevice}
+                  onChange={(event) => setQrDevice(event.target.value as typeof qrDevice)}
+                >
+                  <option value="web">Web / 网页端</option>
+                  <option value="android">Android App</option>
+                  <option value="ios">iOS App</option>
+                  <option value="tv">TV 端</option>
+                </Select>
+              </div>
+            ) : null}
+            <div className={`qr-status ${qr?.status ?? ''}`}>
+              {qr?.message || (type === '115' ? '用 115 App 扫码，支持选择登录设备' : '用 123 App 或微信扫码')}
+            </div>
+            {qr && (qr.status === 'waiting' || qr.status === 'scanned') ? (
+              <div className="qr-hint">二维码有效期约 5 分钟，扫码后请在手机上确认。</div>
+            ) : null}
+            {qr && (qr.status === 'expired' || qr.status === 'error') ? (
+              <Button variant="secondary" size="sm" onClick={startQr} loading={qrBusy} icon={<QrCode size={14} />}>
+                重新生成
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+
+        {type === '115' && !qrMode ? (
           <Field
             label={source?.hasCookie ? '115 Cookie（留空保持不变）' : '115 Cookie'}
             hint="从浏览器登录 115 后复制 Cookie，至少包含 UID、CID、SEID、KID。"
@@ -173,7 +331,7 @@ export function SourceModal({
           </Field>
         ) : null}
 
-        {type === '123' ? (
+        {type === '123' && !qrMode ? (
           <>
             <Field label="123 云盘账号" hint="手机号、用户名或邮箱">
               <div className="input-with-icon">
@@ -294,11 +452,15 @@ export function SourceModal({
 
         <div className="form-hint-line">
           <Info size={14} />
-          {type === '115'
-            ? '115 使用 Cookie 登录；Cookie 过期后需要重新复制。不会经过 OpenList。'
-            : type === '123'
-              ? '123 云盘使用账号密码登录并自动获取访问令牌；不经过 OpenList。'
-              : 'OpenList / AList 通过 API 访问；如果已有 115/123 直连账号，请切换到对应类型。'}
+          {qrMode
+            ? type === '115'
+              ? '扫码后在手机上确认；115 登录设备可选 Web / Android / iOS / TV。二维码约 5 分钟有效。'
+              : '用 123 App 或微信扫码，确认后自动保存登录令牌。二维码约 5 分钟有效。'
+            : type === '115'
+              ? '115 使用 Cookie 登录；Cookie 过期后需要重新复制。不会经过 OpenList。'
+              : type === '123'
+                ? '123 云盘使用账号密码登录并自动获取访问令牌；不经过 OpenList。'
+                : 'OpenList / AList 通过 API 访问；如果已有 115/123 直连账号，请切换到对应类型。'}
         </div>
         {error ? <div className="form-error">{error}</div> : null}
         <button type="submit" hidden />
