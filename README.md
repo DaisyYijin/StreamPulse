@@ -38,6 +38,17 @@
 
 </details>
 
+## 手机端
+
+StreamPulse 的手机界面不是简单缩放桌面版：底部固定导航、任务卡片、全屏表单和
+安全区适配都已针对触屏重新排布，可以直接在手机浏览器中完成连接来源、创建媒体库、
+立即同步、查看实时日志和修改设置。
+
+<img src="docs/screenshot-mobile.jpg" alt="StreamPulse 手机端控制台" width="330" />
+
+手机访问 `http://NAS_IP:1024` 即可。通过浏览器菜单选择“添加到主屏幕”，可以获得
+接近原生 App 的独立窗口体验；已提供 PWA manifest 和 iPhone / Android 图标。
+
 ## 这是什么？
 
 StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenList / AList API
@@ -62,6 +73,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenLi
 | **定时脉冲** | 每个媒体库独立的 5 段 Cron 表达式，按指定时区自动同步。 |
 | **失效清理** | 可选删除源文件已消失、且由 StreamPulse 记录的 `.strm`，不碰用户自己的文件。 |
 | **实时运行台** | SSE 实时日志、取消任务、统计扫描 / 生成 / 跳过 / 失败数量，历史记录可回看。 |
+| **手机适配** | 响应式布局、底部五栏导航、移动端任务卡片、全屏表单，支持添加到手机主屏幕。 |
 | **安全默认** | 首次启动设置管理员密码，scrypt 加盐散列，HMAC 会话 Cookie，来源密钥不回传浏览器。 |
 | **Docker 优先** | 单镜像、多架构（amd64 / arm64）、健康检查、GHCR 自动发布。 |
 
@@ -306,7 +318,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.1.0
+ghcr.io/daisyyijin/streampulse:1.2.0
 ```
 
 ### 首次发布后设为公开

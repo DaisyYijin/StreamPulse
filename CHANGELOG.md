@@ -2,6 +2,23 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.2.0] - 2026-11-19
+
+### Added
+
+- Mobile-first application shell with a fixed five-tab bottom navigation, mobile
+  logout, and safe-area insets for notched phones.
+- Mobile run history cards, full-width bottom-sheet modals, touch-friendly
+  controls, and 16px form inputs to prevent browser zoom on focus.
+- PWA manifest, maskable app icons, Apple touch icon, and add-to-home-screen meta.
+- Mobile screenshot and documentation.
+
+### Changed
+
+- The desktop sidebar is hidden below 960px in favor of bottom navigation.
+- Activity rows are rendered as cards on phones instead of a horizontally
+  scrolling table.
+
 ## [1.1.0] - 2026-11-19
 
 ### Added

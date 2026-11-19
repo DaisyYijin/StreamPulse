@@ -1,0 +1,43 @@
+{
+  "id": "/",
+  "name": "StreamPulse — STRM 媒体库",
+  "short_name": "StreamPulse",
+  "description": "把 OpenList 云盘媒体生成 STRM 媒体库，支持 Emby / Jellyfin 302 直链播放。",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "any",
+  "background_color": "#080b0a",
+  "theme_color": "#080b0a",
+  "categories": ["utilities", "entertainment"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "媒体库",
+      "short_name": "媒体库",
+      "url": "/#/libraries",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "运行记录",
+      "short_name": "记录",
+      "url": "/#/activity",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}

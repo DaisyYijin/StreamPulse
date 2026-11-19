@@ -23,5 +23,5 @@ export const config = {
   runLogLimit: 600,
   runRetentionDefault: 80,
   scanFileLimit: 250_000,
-  version: process.env.STREAMPULSE_VERSION || '1.1.0',
+  version: process.env.STREAMPULSE_VERSION || '1.2.0',
 };

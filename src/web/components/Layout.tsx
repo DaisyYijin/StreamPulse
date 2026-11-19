@@ -5,12 +5,10 @@ import {
   LayoutDashboard,
   LibraryBig,
   LogOut,
-  Menu,
   RefreshCw,
   Settings,
-  X,
 } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import type { AuthStatus } from '../../shared/types';
 import { cx } from '../utils';
 import { Logo, LogoMark } from './Logo';
@@ -51,22 +49,12 @@ export function Layout({
   syncing: boolean;
   children: ReactNode;
 }) {
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [route]);
-
   return (
     <div className="app-shell">
-      {mobileOpen ? <div className="sidebar-scrim" onClick={() => setMobileOpen(false)} /> : null}
-      <aside className={cx('sidebar', mobileOpen && 'sidebar-open')}>
+      <aside className="sidebar">
         <div className="sidebar-top">
           <button className="sidebar-brand" onClick={() => onNavigate('dashboard')} aria-label="回到控制台">
             <Logo />
-          </button>
-          <button className="sidebar-close" aria-label="关闭菜单" onClick={() => setMobileOpen(false)}>
-            <X size={18} />
           </button>
         </div>
 
@@ -118,9 +106,9 @@ export function Layout({
       <div className="main-shell">
         <header className="topbar">
           <div className="topbar-left">
-            <button className="mobile-menu" aria-label="打开菜单" onClick={() => setMobileOpen(true)}>
-              <Menu size={20} />
-            </button>
+            <span className="topbar-mobile-brand">
+              <LogoMark size={27} />
+            </span>
             <div className="topbar-crumb">
               <span>StreamPulse</span>
               <ChevronRight size={13} />
@@ -141,9 +129,30 @@ export function Layout({
             >
               同步全部
             </Button>
+            <button
+              className="mobile-logout"
+              onClick={onLogout}
+              aria-label="退出登录"
+              title="退出登录"
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
         <main className="page">{children}</main>
+        <nav className="mobile-tabbar" aria-label="移动端导航">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              className={cx('mobile-tab', route === item.id && 'mobile-tab-active')}
+              onClick={() => onNavigate(item.id)}
+              aria-current={route === item.id ? 'page' : undefined}
+            >
+              <span className="mobile-tab-icon">{item.icon}</span>
+              <span>{item.label}</span>
+            </button>
+          ))}
+        </nav>
       </div>
       <ToastViewport />
     </div>
