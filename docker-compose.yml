@@ -19,14 +19,15 @@ services:
       # Emby will request this address. Leave empty to auto-detect from the
       # browser's hostname when you create your first library.
       STREAM_PUBLIC_URL: ${STREAM_PUBLIC_URL:-}
+      CONFIG_DIR: ${CONFIG_DIR:-/config}
       OUTPUT_DIR: ${OUTPUT_DIR:-/strm}
       LOG_DIR: ${LOG_DIR:-/logs}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
       # Set to true when StreamPulse is behind an HTTPS reverse proxy.
       TRUST_PROXY: ${TRUST_PROXY:-false}
     volumes:
-      # Configuration, database, manifests and credentials.
-      - ./data:/data
+      # Config, database, manifests, administrator account and per-source credentials.
+      - ./config:/config
       # Generated .strm files. Map this directory into Emby / Jellyfin.
       - ./strm:/strm
       # Persistent application logs, rotated daily.

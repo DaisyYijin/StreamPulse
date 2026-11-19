@@ -2,6 +2,27 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.4.0] - 2026-11-19
+
+### Changed
+
+- Configuration volume is now `/config` (`CONFIG_DIR`); `DATA_DIR` remains a
+  migration alias.
+- Administrator credentials moved to `/config/accounts/admin.json`.
+- Each source/cloud account now stores its token/password in
+  `/config/sources/<source-id>.json`, one file per account.
+- `/config/streampulse.json` is sanitized and no longer contains tokens,
+  passwords or password hashes.
+- Compose maps `./config:/config`, `./strm:/strm`, `./logs:/logs`.
+
+### Migration
+
+- Existing `/data` databases are migrated automatically: source secrets are
+  written to per-source files and the old administrator hash to
+  `accounts/admin.json`.
+- Existing deployments should either rename the `data` directory to `config` or
+  set `CONFIG_DIR=/data` and keep mounting `./data:/data`.
+
 ## [1.3.0] - 2026-11-19
 
 ### Added

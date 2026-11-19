@@ -182,7 +182,7 @@ export function AuthPage({
           <div className="auth-note">
             {auth.envManaged
               ? '账号和密码由 STREAMPULSE_USERNAME / STREAMPULSE_PASSWORD 环境变量管理。'
-              : '账号保存在数据卷中，密码使用 scrypt 加盐散列。'}
+              : '账号保存在配置目录中，密码使用 scrypt 加盐散列。'}
           </div>
           <div className="auth-footer">
             <span>StreamPulse</span>

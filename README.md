@@ -82,7 +82,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenLi
 ### 1. 使用 Docker 运行
 
 ```bash
-mkdir -p streampulse/{data,strm,logs}
+mkdir -p streampulse/{config,strm,logs}
 cd streampulse
 
 docker run -d \
@@ -90,7 +90,7 @@ docker run -d \
   --restart unless-stopped \
   -p 1024:1024 \
   -p 2048:2048 \
-  -v "$(pwd)/data:/data" \
+  -v "$(pwd)/config:/config" \
   -v "$(pwd)/strm:/strm" \
   -v "$(pwd)/logs:/logs" \
   -e TZ=Asia/Shanghai \
@@ -121,7 +121,7 @@ docker compose logs -f
 默认映射：
 
 ```text
-./data  → /data   配置、数据库、清单、凭据
+./config → /config 配置、数据库、清单、账号、凭据
 ./strm  → /strm   STRM 文件
 ./logs  → /logs   应用日志
 ```
@@ -214,8 +214,9 @@ STREAMPULSE_PASSWORD=你的强密码
 设置 `STREAMPULSE_PASSWORD` 后，网页首次初始化会被跳过，界面中的账号修改会被锁定；
 修改 `.env` 后执行 `docker compose up -d --force-recreate` 生效。
 
-> 当前是单管理员模式，没有多用户。所有来源凭据与管理员密码哈希都保存在
-> `/data/streampulse.json`（权限 0600），不会写入 `/strm` 或 `/logs`。
+> 当前是单管理员模式，没有多用户。管理员账号与密码哈希保存在
+> `/config/accounts/admin.json`；每个来源的凭据在 `/config/sources/<source-id>.json`，
+> 权限均为 0600。
 
 ## 双端口与 302 模式
 
@@ -298,7 +299,7 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 | `STREAM_PORT` | `2048` | 302 直链服务监听端口。 |
 | `STREAM_PUBLIC_URL` | 空 | 302 服务公开地址，例如 `http://192.168.1.10:2048`；空则首次创建媒体库时自动推断。 |
 | `HOST` | `0.0.0.0` | 监听地址。 |
-| `DATA_DIR` | `/data` | 配置、数据库、清单和凭据目录。 |
+| `CONFIG_DIR` | `/config` | 配置、数据库、清单、管理员账号和来源凭据目录；旧版 `DATA_DIR` 仍兼容。 |
 | `OUTPUT_DIR` | `/strm` | STRM 输出根目录；也可在界面设置中修改（需绝对路径且可写）。 |
 | `LOG_DIR` | `/logs` | 应用日志目录，按天写入 `streampulse-YYYY-MM-DD.log`。 |
 | `LOG_RETENTION_DAYS` | `14` | 自动清理超过天数的旧日志。 |
@@ -312,22 +313,31 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 
 | 宿主机 | 容器内 | 内容 |
 | --- | --- | --- |
-| `./data` | `/data` | `streampulse.json`、`manifests/`、管理员账号哈希、来源凭据 |
+| `./config` | `/config` | `streampulse.json`、`accounts/`、`sources/`、`manifests/` |
 | `./strm` | `/strm` | 生成的 `.strm` 文件 |
 | `./logs` | `/logs` | 每日应用日志 |
 
 ```text
-/data/
-├── streampulse.json      # 管理员账号、密码哈希、来源凭据、运行历史（0600）
-└── manifests/            # 每个媒体库的增量清单
+/config/
+├── streampulse.json          # 设置、媒体库、运行历史、来源元数据（无密钥）
+├── accounts/
+│   └── admin.json            # 管理员账号 + 密码哈希（0600）
+├── sources/
+│   ├── src_xxx.json          # 来源 1 的 OpenList token / 账号密码（0600）
+│   └── src_yyy.json          # 来源 2 ...
+└── manifests/                # 每个媒体库的增量清单
 
-/strm/                    # 生成的 STRM 文件
-/logs/                    # streampulse-YYYY-MM-DD.log
+/strm/                        # 生成的 STRM 文件
+/logs/                        # streampulse-YYYY-MM-DD.log
 ```
 
-**备份需要备份 `/data` 和 `/strm`**；日志目录按需备份。来源账号和令牌只会在
-`/data/streampulse.json` 中，不会写入 `/strm` 或 `/logs`。该文件权限为 `0600`，
-但仍建议保护宿主机磁盘和备份。
+**一个账号一个文件**：
+
+- 管理员账号：`/config/accounts/admin.json`
+- 每个来源/115/其他 Token：`/config/sources/<source-id>.json`
+
+`streampulse.json` 中不再保存 token、密码或密码哈希。凭据文件权限为 `0600`，
+不会写入 `/strm` 或 `/logs`。**备份 `/config` 和 `/strm`**；日志目录按需备份。
 
 ### 115 / 其他网盘的账号存储
 
@@ -337,8 +347,40 @@ StreamPulse 不直接保存 115 密码。正确方式是：
 2. 在 OpenList 获取访问令牌，或准备 OpenList 管理员账号；
 3. 在 StreamPulse 的 **来源** 中连接 OpenList。
 
-因此 `/data/streampulse.json` 保存的是 **OpenList 凭据**，由它再访问 115。
+因此每个来源的 `/config/sources/<source-id>.json` 保存的是 **OpenList 凭据**，
+由它再访问 115。
 如果你需要直接填写 115 账号（不经 OpenList），那是另一套原生驱动，需要单独开发。
+
+## 从 1.3 升级
+
+1.4 把配置目录从 `/data` 改为 `/config`，并把账号拆分为独立文件。
+
+推荐直接迁移目录（先保留旧 STRM 文件）：
+
+```bash
+mkdir -p strm
+mv data/strm/* strm/ 2>/dev/null || true
+mv data config
+docker compose pull
+docker compose up -d --force-recreate
+```
+
+启动后到设置中确认 **STRM 输出根目录** 是 `/strm`。
+
+如果暂时不想移动目录，可以保留旧的 `data` 映射，并设置：
+
+```yaml
+environment:
+  CONFIG_DIR: /data
+volumes:
+  - ./data:/data
+```
+
+启动时会自动迁移：
+
+- 旧管理员密码哈希 → `config/accounts/admin.json`
+- 每个来源的 token/密码 → `config/sources/<source-id>.json`
+- `streampulse.json` 中移除敏感字段
 
 ## 从源码运行
 
@@ -357,7 +399,7 @@ npm run dev
 
 ```bash
 npm run build
-DATA_DIR=./data OUTPUT_DIR=./strm LOG_DIR=./logs PORT=1024 STREAM_PORT=2048 npm start
+CONFIG_DIR=./config OUTPUT_DIR=./strm LOG_DIR=./logs PORT=1024 STREAM_PORT=2048 npm start
 ```
 
 质量检查：
@@ -380,7 +422,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.3.0
+ghcr.io/daisyyijin/streampulse:1.4.0
 ```
 
 ### 首次发布后设为公开
@@ -404,7 +446,7 @@ PAT 需要 `read:packages` 权限。
 ```bash
 docker build -t streampulse:local .
 docker run --rm -p 1024:1024 -p 2048:2048 \
-  -v "$(pwd)/data:/data" -v "$(pwd)/strm:/strm" -v "$(pwd)/logs:/logs" \
+  -v "$(pwd)/config:/config" -v "$(pwd)/strm:/strm" -v "$(pwd)/logs:/logs" \
   streampulse:local
 ```
 
@@ -457,10 +499,10 @@ Server-Sent Events 实时推送到浏览器。
 
 - 管理员账号与密码使用 **scrypt** 加盐散列；会话是 HMAC-SHA256 签名的 HttpOnly Cookie。
 - 登录接口有基础限流（每个 IP 15 分钟 12 次失败）。
-- 来源令牌/密码仅保存在服务端数据卷，列表接口只返回末尾提示。
+- 管理员账号在 `/config/accounts/admin.json`，来源令牌/密码在 `/config/sources/`，列表接口只返回末尾提示。
 - 首次启动的初始化接口在管理员账号设置后自动失效。
 - 建议通过 HTTPS 反向代理访问，并设置 `TRUST_PROXY=true`。
-- 不要将 `/data` 暴露到公网；来源凭据在其中以明文存储。
+- 不要将 `/config` 暴露到公网；来源凭据在 `sources/` 中以明文存储。
 - 本项目不会删除清单之外的文件；删除媒体库也不会删除已生成的 STRM。
 - 302 链接中的随机密钥可以访问该来源的直链解析，请像密码一样保护 STRM 文件。
 
@@ -495,13 +537,13 @@ OpenList API、来源令牌是否有效。
 停止容器，二选一：
 
 1. 在 `.env` 设置 `STREAMPULSE_USERNAME` / `STREAMPULSE_PASSWORD` 后重建容器；
-2. 编辑 `/data/streampulse.json`，把 `"passwordHash"` 改为 `null` 后重启，重新进入首次初始化。
+2. 停止容器，删除 `/config/accounts/admin.json`，重启后重新进入首次初始化（不会删除媒体库和来源）。
 
 编辑前请先备份数据卷，且不要在服务运行时修改数据库文件。
 
 **Q：Docker 提示输出目录不可写？**
 
-默认的 `/data`、`/strm`、`/logs` 会由入口脚本调整给容器用户。若你把
+默认的 `/config`、`/strm`、`/logs` 会由入口脚本调整给容器用户。若你把
 `OUTPUT_DIR` 或 `LOG_DIR` 指向其他挂载目录，请确保容器 UID `1000` 对该目录有
 写权限，或使用 `docker compose` 中的 `user:` 指定有权限的 UID/GID。
 

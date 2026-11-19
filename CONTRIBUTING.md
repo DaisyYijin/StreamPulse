@@ -10,11 +10,11 @@ npm run dev
 ```
 
 The Vite dev server runs on `http://localhost:5173` and proxies `/api` to the
-API server on `http://localhost:1024`; the 302 stream service runs on `http://localhost:2048`. Use `DATA_DIR` / `OUTPUT_DIR` to keep
+API server on `http://localhost:1024`; the 302 stream service runs on `http://localhost:2048`. Use `CONFIG_DIR` / `OUTPUT_DIR` / `LOG_DIR` to keep
 local test data out of the repository:
 
 ```bash
-DATA_DIR=/tmp/streampulse-dev OUTPUT_DIR=/tmp/streampulse-dev/strm npm run dev
+CONFIG_DIR=/tmp/streampulse-dev/config OUTPUT_DIR=/tmp/streampulse-dev/strm LOG_DIR=/tmp/streampulse-dev/logs npm run dev
 ```
 
 ## Before opening a pull request

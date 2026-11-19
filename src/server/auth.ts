@@ -1,6 +1,7 @@
 import { createHmac, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { NextFunction, Request, Response } from 'express';
+import type { AccountStore } from './accounts.js';
 import { config } from './config.js';
 import type { Store } from './store.js';
 import { HttpError } from './types.js';
@@ -70,9 +71,11 @@ function validateUsername(value: string): string {
 
 export class Auth {
   private readonly store: Store;
+  private readonly accounts: AccountStore;
 
-  constructor(store: Store) {
+  constructor(store: Store, accounts: AccountStore) {
     this.store = store;
+    this.accounts = accounts;
   }
 
   get envManaged(): boolean {
@@ -80,7 +83,7 @@ export class Auth {
   }
 
   get passwordSet(): boolean {
-    return this.envManaged || Boolean(this.store.snapshot.passwordHash);
+    return this.envManaged || Boolean(this.accounts.current);
   }
 
   get setupRequired(): boolean {
@@ -89,7 +92,7 @@ export class Auth {
 
   get username(): string {
     if (this.envManaged) return config.envUsername || 'admin';
-    return this.store.snapshot.username || 'admin';
+    return this.accounts.current?.username || 'admin';
   }
 
   async setup(username: string, password: string): Promise<void> {
@@ -101,10 +104,7 @@ export class Auth {
       throw new HttpError(400, '密码至少需要 8 个字符');
     }
     const hash = await hashPassword(password);
-    await this.store.mutate((db) => {
-      db.username = normalized;
-      db.passwordHash = hash;
-    });
+    await this.accounts.set(normalized, hash);
   }
 
   async verify(username: string, password: string): Promise<boolean> {
@@ -115,7 +115,7 @@ export class Auth {
       );
     }
     if (!safeEqualStrings(username.trim(), this.username)) return false;
-    const hash = this.store.snapshot.passwordHash;
+    const hash = this.accounts.current?.passwordHash;
     if (!hash) return false;
     return comparePassword(password, hash);
   }
@@ -135,10 +135,10 @@ export class Auth {
     if (nextPassword !== undefined && nextPassword.length < 8) {
       throw new HttpError(400, '新密码至少需要 8 个字符');
     }
-    const hash = nextPassword ? await hashPassword(nextPassword) : this.store.snapshot.passwordHash;
+    const hash = nextPassword ? await hashPassword(nextPassword) : this.accounts.current?.passwordHash;
+    if (!hash) throw new HttpError(500, '管理员账号文件不存在');
+    await this.accounts.set(normalized, hash);
     await this.store.mutate((db) => {
-      db.username = normalized;
-      db.passwordHash = hash;
       // Rotate the signing secret so every previously issued session is invalid.
       db.secret = randomBytes(32).toString('hex');
     });

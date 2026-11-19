@@ -5,16 +5,18 @@ function intEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-const dataDir = path.resolve(process.env.DATA_DIR || path.join(process.cwd(), 'data'));
+const configDir = path.resolve(
+  process.env.CONFIG_DIR || process.env.DATA_DIR || path.join(process.cwd(), 'config'),
+);
 
 export const config = {
   port: intEnv(process.env.PORT, 1024),
   streamPort: intEnv(process.env.STREAM_PORT, 2048),
   streamPublicUrl: (process.env.STREAM_PUBLIC_URL || '').trim().replace(/\/+$/, ''),
   host: process.env.HOST || '0.0.0.0',
-  dataDir,
-  outputDir: path.resolve(process.env.OUTPUT_DIR || path.join(dataDir, 'strm')),
-  logDir: path.resolve(process.env.LOG_DIR || path.join(dataDir, 'logs')),
+  configDir,
+  outputDir: path.resolve(process.env.OUTPUT_DIR || path.join(configDir, 'strm')),
+  logDir: path.resolve(process.env.LOG_DIR || path.join(configDir, 'logs')),
   webDist: path.resolve(process.env.WEB_DIST || path.join(process.cwd(), 'dist', 'web')),
   envPassword: process.env.STREAMPULSE_PASSWORD || '',
   envUsername: (process.env.STREAMPULSE_USERNAME || 'admin').trim(),
@@ -26,5 +28,5 @@ export const config = {
   runRetentionDefault: 80,
   logRetentionDays: intEnv(process.env.LOG_RETENTION_DAYS, 14),
   scanFileLimit: 250_000,
-  version: process.env.STREAMPULSE_VERSION || '1.3.0',
+  version: process.env.STREAMPULSE_VERSION || '1.4.0',
 };

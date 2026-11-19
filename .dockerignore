@@ -14,3 +14,4 @@ LICENSE
 docker-compose.yml
 strm
 logs
+config

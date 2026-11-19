@@ -3,7 +3,23 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { DEFAULT_URL_TEMPLATE } from '../shared/types.js';
 import { config } from './config.js';
-import { makeStreamKey, nowIso, type Database, type LibraryRecord, type SourceRecord } from './types.js';
+import {
+  makeStreamKey,
+  nowIso,
+  type Database,
+  type LibraryRecord,
+  type SourceRecord,
+} from './types.js';
+
+interface SourceCredentialFile {
+  id: string;
+  name: string;
+  username: string;
+  authType: 'token' | 'password';
+  token: string;
+  password: string;
+  updatedAt: string;
+}
 
 function createDefaultDatabase(): Database {
   const now = nowIso();
@@ -65,21 +81,28 @@ function normalizeDatabase(raw: unknown): Database {
   };
 }
 
+function credentialFileFor(directory: string, sourceId: string): string {
+  return path.join(directory, `${sourceId}.json`);
+}
+
 export class Store {
-  readonly dataDir: string;
+  readonly configDir: string;
+  readonly credentialsDir: string;
   readonly manifestDir: string;
   readonly filePath: string;
   data!: Database;
   private writeChain: Promise<void> = Promise.resolve();
 
-  constructor(dataDir = config.dataDir) {
-    this.dataDir = dataDir;
-    this.manifestDir = path.join(dataDir, 'manifests');
-    this.filePath = path.join(dataDir, 'streampulse.json');
+  constructor(configDir = config.configDir) {
+    this.configDir = configDir;
+    this.credentialsDir = path.join(configDir, 'sources');
+    this.manifestDir = path.join(configDir, 'manifests');
+    this.filePath = path.join(configDir, 'streampulse.json');
   }
 
   async init(): Promise<void> {
-    await fs.mkdir(this.dataDir, { recursive: true, mode: 0o750 });
+    await fs.mkdir(this.configDir, { recursive: true, mode: 0o750 });
+    await fs.mkdir(this.credentialsDir, { recursive: true, mode: 0o750 });
     await fs.mkdir(this.manifestDir, { recursive: true, mode: 0o750 });
     await fs.mkdir(config.outputDir, { recursive: true }).catch(() => undefined);
 
@@ -97,13 +120,71 @@ export class Store {
       return;
     }
 
+    await this.loadSourceCredentials();
     await fs.mkdir(this.data.settings.outputDir, { recursive: true }).catch(() => undefined);
     this.data.runs = this.data.runs.slice(0, Math.max(1, this.data.settings.runRetention));
     if (!this.data.settings.streamBaseUrl && config.streamPublicUrl) {
       this.data.settings.streamBaseUrl = config.streamPublicUrl;
     }
-    // Persist newly added defaults and generated stream keys.
+    // Persist defaults, generated stream keys, sanitized DB and per-source files.
     await this.save();
+  }
+
+  private async loadSourceCredentials(): Promise<void> {
+    for (const source of this.data.sources) {
+      try {
+        const raw = JSON.parse(
+          await fs.readFile(credentialFileFor(this.credentialsDir, source.id), 'utf8'),
+        ) as Partial<SourceCredentialFile>;
+        source.token = typeof raw.token === 'string' ? raw.token : '';
+        source.password = typeof raw.password === 'string' ? raw.password : '';
+        if (raw.authType === 'token' || raw.authType === 'password') source.authType = raw.authType;
+        if (typeof raw.username === 'string') source.username = raw.username;
+      } catch {
+        // No credential file yet: keep any legacy values from the database.
+      }
+    }
+  }
+
+  private async writeSourceCredentials(sources: SourceRecord[]): Promise<void> {
+    await fs.mkdir(this.credentialsDir, { recursive: true, mode: 0o750 });
+    const activeIds = new Set(sources.map((source) => source.id));
+
+    for (const source of sources) {
+      const payload: SourceCredentialFile = {
+        id: source.id,
+        name: source.name,
+        username: source.username,
+        authType: source.authType,
+        token: source.token,
+        password: source.password,
+        updatedAt: source.updatedAt || nowIso(),
+      };
+      const file = credentialFileFor(this.credentialsDir, source.id);
+      const temporary = `${file}.tmp`;
+      await fs.writeFile(temporary, `${JSON.stringify(payload, null, 2)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+      });
+      await fs.rename(temporary, file);
+    }
+
+    const files = await fs.readdir(this.credentialsDir).catch(() => [] as string[]);
+    await Promise.all(
+      files
+        .filter((file) => file.endsWith('.json') && !activeIds.has(file.slice(0, -5)))
+        .map((file) => fs.unlink(path.join(this.credentialsDir, file)).catch(() => undefined)),
+    );
+  }
+
+  private sanitizedForDisk(): Record<string, unknown> {
+    return {
+      ...this.data,
+      sources: this.data.sources.map((source) => {
+        const { token: _token, password: _password, username: _username, ...metadata } = source;
+        return metadata;
+      }),
+    };
   }
 
   get snapshot(): Database {
@@ -123,13 +204,27 @@ export class Store {
   }
 
   async save(): Promise<void> {
-    const serialized = JSON.stringify(this.data, null, 2);
+    const sources = this.data.sources.map((source) => ({ ...source }));
+    const serialized = JSON.stringify(this.sanitizedForDisk(), null, 2);
     this.writeChain = this.writeChain.then(async () => {
+      await this.writeSourceCredentials(sources);
       const temporary = `${this.filePath}.tmp`;
       await fs.writeFile(temporary, serialized, { encoding: 'utf8', mode: 0o600 });
       await fs.rename(temporary, this.filePath);
     });
     await this.writeChain;
+  }
+
+  getLegacyAccount(): { username: string; passwordHash: string } | null {
+    if (!this.data.passwordHash) return null;
+    return { username: this.data.username || 'admin', passwordHash: this.data.passwordHash };
+  }
+
+  async clearLegacyAccount(): Promise<void> {
+    if (!this.data.passwordHash && this.data.username === 'admin') return;
+    this.data.username = 'admin';
+    this.data.passwordHash = null;
+    await this.save();
   }
 
   source(id: string): SourceRecord | undefined {

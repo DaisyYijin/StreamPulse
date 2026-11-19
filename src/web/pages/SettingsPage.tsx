@@ -196,7 +196,7 @@ export function SettingsPage() {
                   <Input
                     value={outputDir}
                     onChange={(event) => setOutputDir(event.target.value)}
-                    placeholder="/data/strm"
+                    placeholder="/strm"
                     spellCheck={false}
                   />
                 </div>
@@ -393,8 +393,8 @@ export function SettingsPage() {
                 <strong>{system ? uptimeLabel(system.uptimeSeconds) : '—'}</strong>
               </div>
               <div>
-                <span>数据目录</span>
-                <code>{system?.dataDir ?? '—'}</code>
+                <span>配置目录</span>
+                <code>{system?.configDir ?? '—'}</code>
               </div>
               <div>
                 <span>输出目录</span>
@@ -431,15 +431,17 @@ export function SettingsPage() {
               </div>
             </div>
             <p className="deploy-copy">
-              来源账号、OpenList 令牌和密码保存在配置目录的{' '}
-              <code>streampulse.json</code> 中（权限 600），不会写入 STRM 或日志目录。
+              管理员账号一个文件，每个来源令牌/密码一个文件，权限均为 600。
+              非敏感配置单独保存，均不会写入 STRM 或日志目录。
             </p>
             <div className="code-block">
-              <span>{system?.dataDir ?? '/data'}/streampulse.json</span>
+              <span>{system?.accountsDir ?? '/config/accounts'}/admin.json</span>
+              <span>{system?.credentialsDir ?? '/config/sources'}/&lt;source-id&gt;.json</span>
+              <span>{system?.configDir ?? '/config'}/streampulse.json</span>
             </div>
             <p className="deploy-copy">
-              115 或其他网盘请先在 OpenList / AList 中添加存储，StreamPulse 保存对应的
-              OpenList 凭据，不直接保存 115 密码。
+              115 或其他网盘请先在 OpenList / AList 中添加存储，StreamPulse 为每个来源
+              保存独立的 OpenList 凭据文件，不直接保存 115 密码。
             </p>
           </section>
 
@@ -459,7 +461,7 @@ export function SettingsPage() {
             </div>
             <div className="deploy-meta">
               <span>
-                <Database size={13} /> /data
+                <Database size={13} /> /config
               </span>
               <span>
                 <RefreshCcw size={13} /> 自动重启
@@ -473,7 +475,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.3.0'}</span>
+            <span>v{system?.version ?? '1.4.0'}</span>
           </section>
         </aside>
       </div>

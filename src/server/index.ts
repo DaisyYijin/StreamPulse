@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import express, { type ErrorRequestHandler, type NextFunction, type Request, type Response } from 'express';
+import { AccountStore } from './accounts.js';
 import { createApiRouter } from './api/index.js';
 import { Auth } from './auth.js';
 import { config } from './config.js';
@@ -18,7 +19,10 @@ async function main(): Promise<void> {
   const logFile = await initLogging();
   const store = new Store();
   await store.init();
-  const auth = new Auth(store);
+  const accounts = new AccountStore(store.configDir);
+  await accounts.init(store.getLegacyAccount());
+  await store.clearLegacyAccount();
+  const auth = new Auth(store, accounts);
   const runner = new RunManager(store);
   await runner.init();
   const scheduler = new Scheduler(store, runner);
@@ -117,7 +121,7 @@ async function main(): Promise<void> {
     console.log(`  StreamPulse v${config.version}`);
     console.log(`  → Web UI        http://localhost:${config.port}`);
     console.log(`  → 302 stream    http://localhost:${config.streamPort}`);
-    console.log(`  data:           ${config.dataDir}`);
+    console.log(`  config:         ${config.configDir}`);
     console.log(`  output:         ${store.snapshot.settings.outputDir}`);
     console.log(`  logs:           ${logFile}`);
     console.log(`  auth:           ${auth.envManaged ? 'environment account' : auth.passwordSet ? `local account (${auth.username})` : 'first-run setup'}`);
