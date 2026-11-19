@@ -58,6 +58,8 @@ function normalizeDatabase(raw: unknown): Database {
       const record = source as Partial<SourceRecord>;
       return {
         ...record,
+        type: record.type || 'openlist',
+        cookie: record.cookie || '',
         streamKey:
           typeof record.streamKey === 'string' && record.streamKey.length >= 16
             ? record.streamKey
@@ -191,7 +193,15 @@ export class Store {
       (await listJson(this.credentialsDir)).map((file) =>
         readJson<SourceRecord>(path.join(this.credentialsDir, file)),
       ),
-    )).filter((source): source is SourceRecord => Boolean(source?.id));
+    )).filter((source): source is SourceRecord => Boolean(source?.id))
+      .map((source) => ({
+        ...source,
+        type: source.type || 'openlist',
+        cookie: source.cookie || '',
+        token: source.token || '',
+        password: source.password || '',
+        username: source.username || '',
+      }));
     const libraries = (await Promise.all(
       (await listJson(this.librariesDir)).map((file) =>
         readJson<LibraryRecord>(path.join(this.librariesDir, file)),

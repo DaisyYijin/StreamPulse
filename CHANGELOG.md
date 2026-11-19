@@ -2,6 +2,23 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.7.0] - 2026-11-19
+
+### Added
+
+- Native **115** storage driver (browser Cookie, directory listing, pickcode
+  direct URL), no OpenList required.
+- Native **123 云盘** storage driver (account/password login, directory listing,
+  download URL), no OpenList required.
+- Source account picker: 115 / 123 / OpenList, one account per
+  `/config/sources/<source-id>.json`.
+- Provider-specific account forms and connection tests.
+
+### Security
+
+- 115 Cookie, 123 password and 123 access token are stored in the per-source
+  file with mode `0600`; they are never returned to the browser.
+
 ## [1.6.0] - 2026-11-19
 
 ### Added

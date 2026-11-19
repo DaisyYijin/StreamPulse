@@ -452,8 +452,8 @@ export function SettingsPage() {
               <span>{system?.stateDir ?? '/data'}/manifests/&lt;library-id&gt;.json</span>
             </div>
             <p className="deploy-copy">
-              115 或其他网盘请先在 OpenList / AList 中添加存储，StreamPulse 为每个来源
-              保存独立的 OpenList 凭据文件，不直接保存 115 密码。
+              115 使用浏览器 Cookie，123 使用账号密码；两者均直连，不经过 OpenList。
+              每个来源账号单独一个文件，权限 0600。
             </p>
           </section>
 
@@ -487,7 +487,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.6.0'}</span>
+            <span>v{system?.version ?? '1.7.0'}</span>
           </section>
         </aside>
       </div>

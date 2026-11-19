@@ -64,6 +64,7 @@ beforeAll(async () => {
     username: '',
     token: 'test-token',
     password: '',
+    cookie: '',
     streamKey: STREAM_KEY,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',

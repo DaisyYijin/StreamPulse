@@ -1,3 +1,5 @@
+import type { StorageClient, StorageEntry } from './storage.js';
+
 interface ListItem {
   name?: string;
   size?: number;
@@ -19,12 +21,7 @@ export interface OpenListOptions {
   password?: string;
 }
 
-export interface OpenListEntry {
-  name: string;
-  isDir: boolean;
-  size: number;
-  modified: string;
-}
+export type OpenListEntry = StorageEntry;
 
 export class OpenListError extends Error {
   readonly status: number;
@@ -58,7 +55,8 @@ function errorMessage(payload: unknown, fallback: string): string {
   return fallback;
 }
 
-export class OpenListClient {
+export class OpenListClient implements StorageClient {
+  readonly kind = 'openlist' as const;
   private readonly baseUrl: string;
   private readonly staticToken: string;
   private readonly username: string;

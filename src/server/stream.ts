@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { config } from './config.js';
-import { OpenListClient } from './openlist.js';
+import { clientForSource } from './client.js';
+import type { StorageClient } from './storage.js';
 import { normalizeSourcePath, PathSafetyError } from './core/paths.js';
 import { encodePath } from './core/template.js';
 import type { Store } from './store.js';
@@ -40,18 +41,13 @@ function normalizeRedirect(raw: string, baseUrl: string): string | null {
 
 export function createStreamServer(store: Store): http.Server {
   const urlCache = new Map<string, CacheEntry>();
-  const clients = new Map<string, OpenListClient>();
+  const clients = new Map<string, StorageClient>();
 
-  const clientFor = (source: SourceRecord): OpenListClient => {
+  const clientFor = (source: SourceRecord): StorageClient => {
     const key = `${source.id}:${source.updatedAt}`;
     const existing = clients.get(key);
     if (existing) return existing;
-    const client = new OpenListClient({
-      baseUrl: source.baseUrl,
-      token: source.token,
-      username: source.username,
-      password: source.password,
-    });
+    const client = clientForSource(source);
     if (clients.size > 80) clients.clear();
     clients.set(key, client);
     return client;
@@ -82,9 +78,14 @@ export function createStreamServer(store: Store): http.Server {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.warn(`[stream] ${source.name}: 无法解析直链，回退到 OpenList /d/（${message}）`);
+      if (source.type === 'openlist') {
+        console.warn(`[stream] ${source.name}: 无法解析直链，回退到 OpenList /d/（${message}）`);
+      }
     }
 
+    if (source.type !== 'openlist') {
+      throw new Error('无法解析直链');
+    }
     const fallback = fallbackUrl(source, sourcePath);
     remember(cacheKey, fallback, 15_000);
     return fallback;

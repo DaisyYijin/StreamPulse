@@ -98,7 +98,7 @@ export function SourcesPage() {
             SOURCE CONNECTIONS
           </span>
           <h1>来源</h1>
-          <p>连接 OpenList / AList，让 StreamPulse 拥有目录读取与直链能力。</p>
+          <p>统一管理 115、123 和 OpenList 存储账号，每个账号一个文件。</p>
         </div>
         <div className="page-actions">
           <Button
@@ -119,10 +119,10 @@ export function SourcesPage() {
           <ServerCog size={20} />
         </div>
         <div>
-          <strong>OpenList / AList API 兼容</strong>
+          <strong>115 / 123 / OpenList</strong>
           <p>
             支持访问令牌或用户名密码登录。默认由 StreamPulse 的 2048 服务解析直链并
-            302 跳转，Emby 不需要直接访问 OpenList。
+            302 跳转，Emby 不需要直接访问云盘；115/123 使用原生登录。
           </p>
         </div>
         <Badge tone="accent">API v3</Badge>
@@ -141,7 +141,7 @@ export function SourcesPage() {
           <EmptyState
             icon={<Cloud size={28} />}
             title="连接第一个存储来源"
-            description="填入 OpenList / AList 的根地址与访问令牌。连接成功后即可浏览目录并创建媒体库。"
+            description="选择 115、123 或 OpenList，填写对应账号凭据。一个账号保存为一个文件。"
             action={
               <Button
                 variant="primary"
@@ -168,7 +168,7 @@ export function SourcesPage() {
                   </span>
                   <div className="source-title">
                     <h3>{source.name}</h3>
-                    <span className="source-type">OpenList / AList</span>
+                    <span className="source-type">{source.type === '115' ? '115 网盘' : source.type === '123' ? '123 云盘' : 'OpenList / AList'}</span>
                   </div>
                   <Badge tone={source.lastCheck?.ok ? 'success' : source.lastCheck ? 'danger' : 'neutral'}>
                     {source.lastCheck ? (source.lastCheck.ok ? '连接正常' : '连接异常') : '未测试'}
@@ -278,7 +278,7 @@ export function SourcesPage() {
               「{deleting?.name}」仍被 {usageCount(deleting?.id ?? '')} 个媒体库使用，请先修改这些媒体库的来源。
             </>
           ) : (
-            <>将移除「{deleting?.name}」的连接配置，不会影响 OpenList 中的数据。</>
+            <>将移除「{deleting?.name}」的账号配置，不会删除云盘中的文件。</>
           )
         }
         loading={deleteBusy}

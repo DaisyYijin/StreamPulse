@@ -23,6 +23,7 @@ export function sourceToPublic(source: SourceRecord): Source {
     tokenHint: source.token ? `••••${source.token.slice(-4)}` : null,
     hasToken: Boolean(source.token),
     hasPassword: Boolean(source.password),
+    hasCookie: Boolean(source.cookie),
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
     lastCheck: source.lastCheck,

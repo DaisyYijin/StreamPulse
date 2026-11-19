@@ -1,0 +1,230 @@
+import { randomBytes } from 'node:crypto';
+import type { StorageClient, StorageEntry } from './storage.js';
+
+const API = 'https://webapi.115.com';
+const STATUS = 'https://my.115.com/?ct=guide&ac=status';
+const DOWNLOAD = 'https://proapi.115.com/app/chrome/downurl';
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36';
+
+const XOR_SEED = Buffer.from([
+  0xf0,0xe5,0x69,0xae,0xbf,0xdc,0xbf,0x8a,0x1a,0x45,0xe8,0xbe,0x7d,0xa6,0x73,0xb8,
+  0xde,0x8f,0xe7,0xc4,0x45,0xda,0x86,0xc4,0x9b,0x64,0x8b,0x14,0x6a,0xb4,0xf1,0xaa,
+  0x38,0x01,0x35,0x9e,0x26,0x69,0x2c,0x86,0x00,0x6b,0x4f,0xa5,0x36,0x34,0x62,0xa6,
+  0x2a,0x96,0x68,0x18,0xf2,0x4a,0xfd,0xbd,0x6b,0x97,0x8f,0x4d,0x8f,0x89,0x13,0xb7,
+  0x6c,0x8e,0x93,0xed,0x0e,0x0d,0x48,0x3e,0xd7,0x2f,0x88,0xd8,0xfe,0xfe,0x7e,0x86,
+  0x50,0x95,0x4f,0xd1,0xeb,0x83,0x26,0x34,0xdb,0x66,0x7b,0x9c,0x7e,0x9d,0x7a,0x81,
+  0x32,0xea,0xb6,0x33,0xde,0x3a,0xa9,0x59,0x34,0x66,0x3b,0xaa,0xba,0x81,0x60,0x48,
+  0xb9,0xd5,0x81,0x9c,0xf8,0x6c,0x84,0x77,0xff,0x54,0x78,0x26,0x5f,0xbe,0xe8,0x1e,
+  0x36,0x9f,0x34,0x80,0x5c,0x45,0x2c,0x9b,0x76,0xd5,0x1b,0x8f,0xcc,0xc3,0xb8,0xf5,
+]);
+const XOR_CLIENT = Buffer.from([0x78,0x06,0xad,0x4c,0x33,0x86,0x5d,0x18,0x4c,0x01,0x3f,0x46]);
+const N = BigInt('0x' + '8686980c0f5a24c4b9d43020cd2c22703ff3f450756529058b1cf88f09b86021'
+  + '36477198a6e2683149659bd122c33592fdb5ad47944ad1ea4d36c6b172aad633'
+  + '8c3bb6ac6227502d010993ac967d1aef00f0c8e038de2e4d3bc2ec368af2e9f1'
+  + '0a6f1eda4f7262f136420c07c331b871bf139f74f3010e3c4fe57df3afb71683');
+const E = 0x10001n;
+const RSA_BYTES = 128;
+
+function modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+  let result = 1n;
+  let b = base % mod;
+  let e = exp;
+  while (e > 0n) {
+    if (e & 1n) result = (result * b) % mod;
+    b = (b * b) % mod;
+    e >>= 1n;
+  }
+  return result;
+}
+
+function xorDerive(seed: Buffer, size: number): Buffer {
+  const key = Buffer.alloc(size);
+  for (let i = 0; i < size; i += 1) {
+    key[i] = (seed[i] + XOR_SEED[size * i]) & 0xff;
+    key[i] ^= XOR_SEED[size * (size - i - 1)];
+  }
+  return key;
+}
+
+function xorTransform(data: Buffer, key: Buffer): void {
+  const mod = data.length % 4;
+  for (let i = 0; i < mod; i += 1) data[i] ^= key[i % key.length];
+  for (let i = mod; i < data.length; i += 1) data[i] ^= key[(i - mod) % key.length];
+}
+
+function rsaEncrypt(input: Buffer): Buffer {
+  const out: Buffer[] = [];
+  for (let offset = 0; offset < input.length; offset += RSA_BYTES - 11) {
+    const slice = input.subarray(offset, Math.min(offset + RSA_BYTES - 11, input.length));
+    const pad = randomBytes(RSA_BYTES - slice.length - 3);
+    const block = Buffer.alloc(RSA_BYTES);
+    block[0] = 0;
+    block[1] = 2;
+    for (let i = 0; i < pad.length; i += 1) block[2 + i] = (pad[i] % 0xff) + 1;
+    block[pad.length + 2] = 0;
+    slice.copy(block, pad.length + 3);
+    const encrypted = modPow(BigInt('0x' + block.toString('hex')), E, N).toString(16).padStart(RSA_BYTES * 2, '0');
+    out.push(Buffer.from(encrypted, 'hex'));
+  }
+  return Buffer.concat(out);
+}
+
+function rsaDecrypt(input: Buffer): Buffer {
+  const out: Buffer[] = [];
+  for (let offset = 0; offset < input.length; offset += RSA_BYTES) {
+    const block = input.subarray(offset, Math.min(offset + RSA_BYTES, input.length));
+    const decrypted = modPow(BigInt('0x' + block.toString('hex')), E, N).toString(16).padStart(RSA_BYTES * 2, '0');
+    const raw = Buffer.from(decrypted, 'hex');
+    let start = 0;
+    for (let i = 1; i < raw.length; i += 1) {
+      if (raw[i] === 0) { start = i + 1; break; }
+    }
+    out.push(raw.subarray(start));
+  }
+  return Buffer.concat(out);
+}
+
+function encryptPayload(value: unknown): { data: string; key: Buffer } {
+  const key = randomBytes(16);
+  const input = Buffer.from(JSON.stringify(value));
+  const buffer = Buffer.concat([key, input]);
+  const body = buffer.subarray(16);
+  xorTransform(body, xorDerive(key, 4));
+  body.reverse();
+  xorTransform(body, XOR_CLIENT);
+  return { data: rsaEncrypt(buffer).toString('base64'), key };
+}
+
+function decryptPayload(data: string, key: Buffer): Buffer {
+  const decoded = rsaDecrypt(Buffer.from(data, 'base64'));
+  const out = Buffer.from(decoded.subarray(16));
+  xorTransform(out, xorDerive(decoded.subarray(0, 16), 12));
+  out.reverse();
+  xorTransform(out, xorDerive(key, 4));
+  return out;
+}
+
+interface P115Item {
+  fid?: string;
+  cid?: string;
+  pid?: string;
+  n?: string;
+  s?: number | string;
+  pc?: string;
+  t?: string;
+  sha?: string;
+}
+
+export class P115Error extends Error {
+  constructor(message: string, readonly status = 502) { super(message); this.name = 'P115Error'; }
+}
+
+export class P115Client implements StorageClient {
+  readonly kind = '115' as const;
+  readonly origin = 'https://115.com';
+  private readonly cookie: string;
+  private readonly dirIds = new Map<string, string>([['/', '0']]);
+
+  constructor(cookie: string) {
+    this.cookie = cookie.trim().replace(/\s*\r?\n\s*/g, '; ');
+    if (!this.cookie) throw new P115Error('115 Cookie 不能为空', 401);
+  }
+
+  private headers(contentType?: string): Record<string, string> {
+    return {
+      Cookie: this.cookie,
+      'User-Agent': UA,
+      ...(contentType ? { 'Content-Type': contentType } : {}),
+    };
+  }
+
+  private async request(url: string, init: RequestInit = {}, signal?: AbortSignal): Promise<any> {
+    const timeout = AbortSignal.timeout(25_000);
+    const response = await fetch(url, {
+      ...init,
+      headers: { ...this.headers(), ...(init.headers as Record<string, string> | undefined) },
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+    const text = await response.text();
+    let payload: any = {};
+    try { payload = text ? JSON.parse(text) : {}; } catch { throw new P115Error(`115 返回非 JSON（HTTP ${response.status}）`); }
+    if (!response.ok) throw new P115Error(`115 请求失败（HTTP ${response.status}）`, response.status === 401 ? 401 : 502);
+    if (payload?.state === false || (payload?.errno && Number(payload.errno) !== 0)) {
+      throw new P115Error(payload?.error || payload?.message || '115 请求失败', payload?.errno === 401 ? 401 : 502);
+    }
+    return payload;
+  }
+
+  private async listDir(cid: string, signal?: AbortSignal): Promise<P115Item[]> {
+    const items: P115Item[] = [];
+    const limit = 1150;
+    for (let offset = 0; offset < 100_000; offset += limit) {
+      const params = new URLSearchParams({
+        aid: '1', cid, o: 'user_ptime', asc: '0', offset: String(offset), show_dir: '1',
+        limit: String(limit), snap: '0', natsort: '0', record_open_time: '1', format: 'json', fc_mix: '0',
+      });
+      const payload = await this.request(`${API}/files?${params}`, {}, signal);
+      const page = Array.isArray(payload?.data) ? payload.data as P115Item[] : [];
+      items.push(...page);
+      const count = Number(payload?.count ?? items.length);
+      if (page.length < limit || offset + page.length >= count) break;
+    }
+    return items;
+  }
+
+  private async dirId(path: string, signal?: AbortSignal): Promise<string> {
+    const normalized = path === '/' ? '/' : `/${path.replace(/^\/+|\/+$/g, '')}`;
+    const cached = this.dirIds.get(normalized);
+    if (cached) return cached;
+    let current = '0';
+    let prefix = '';
+    for (const segment of normalized.split('/').filter(Boolean)) {
+      const items = await this.listDir(current, signal);
+      const child = items.find((item) => !item.fid && item.n === segment);
+      if (!child?.cid) throw new P115Error(`115 目录不存在：${prefix}/${segment}`, 404);
+      current = String(child.cid);
+      prefix += `/${segment}`;
+      this.dirIds.set(prefix, current);
+    }
+    return current;
+  }
+
+  async list(path: string, signal?: AbortSignal): Promise<StorageEntry[]> {
+    const cid = await this.dirId(path, signal);
+    return (await this.listDir(cid, signal)).map((item) => ({
+      name: item.n || '',
+      isDir: !item.fid,
+      size: Number(item.s || 0) || 0,
+      modified: item.t || '',
+    })).filter((item) => item.name);
+  }
+
+  async getRawUrl(path: string, signal?: AbortSignal): Promise<string | null> {
+    const normalized = `/${path.replace(/^\/+|\/+$/g, '')}`;
+    const parent = normalized.slice(0, normalized.lastIndexOf('/')) || '/';
+    const name = normalized.slice(normalized.lastIndexOf('/') + 1);
+    const parentId = await this.dirId(parent, signal);
+    const item = (await this.listDir(parentId, signal)).find((entry) => entry.fid && entry.n === name);
+    if (!item?.pc) return null;
+    const { data, key } = encryptPayload({ pickcode: item.pc });
+    const payload = await this.request(`${DOWNLOAD}?t=${Math.floor(Date.now() / 1000)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ data }).toString(),
+    }, signal);
+    if (typeof payload?.data !== 'string') return null;
+    const decoded = JSON.parse(decryptPayload(payload.data, key).toString()) as Record<string, { url?: { url?: string } }>;
+    for (const value of Object.values(decoded)) {
+      const url = value?.url?.url;
+      if (url) return url;
+    }
+    return null;
+  }
+
+  async testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }> {
+    const status = await this.request(STATUS, {}, signal);
+    if (status?.state !== true) throw new P115Error('115 Cookie 无效或已过期', 401);
+    const entries = await this.list('/', signal);
+    return { message: '已连接 115', sampleCount: entries.length };
+  }
+}

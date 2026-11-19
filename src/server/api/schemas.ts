@@ -67,22 +67,26 @@ const pathValue = z.string().min(1, '路径不能为空').max(2000, '路径过�
 
 export const sourceCreateSchema = z.object({
   name,
-  baseUrl: z.string().trim().min(1, '来源地址不能为空').max(2000),
+  type: z.enum(['openlist', '115', '123']).default('openlist'),
+  baseUrl: z.string().trim().max(2000).optional().default(''),
   publicUrl: z.string().trim().max(2000).optional().default(''),
-  authType: z.enum(['token', 'password']).default('token'),
+  authType: z.enum(['token', 'password', 'cookie']).default('token'),
   username: z.string().trim().max(200).optional().default(''),
   token: z.string().trim().max(4000).optional().default(''),
   password: z.string().max(1000).optional().default(''),
+  cookie: z.string().max(20000).optional().default(''),
 });
 
 export const sourceUpdateSchema = z.object({
   name: name.optional(),
-  baseUrl: z.string().trim().min(1).max(2000).optional(),
+  type: z.enum(['openlist', '115', '123']).optional(),
+  baseUrl: z.string().trim().max(2000).optional(),
   publicUrl: z.string().trim().max(2000).optional(),
-  authType: z.enum(['token', 'password']).optional(),
+  authType: z.enum(['token', 'password', 'cookie']).optional(),
   username: z.string().trim().max(200).optional(),
   token: z.string().trim().max(4000).optional(),
   password: z.string().max(1000).optional(),
+  cookie: z.string().max(20000).optional(),
 });
 
 export type SourceCreateBody = z.infer<typeof sourceCreateSchema>;

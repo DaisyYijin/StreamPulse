@@ -65,6 +65,12 @@ function mapOpenListError(error: unknown): never {
     const status = error.status === 401 ? 400 : error.status >= 400 && error.status < 500 ? error.status : 502;
     throw new HttpError(status, error.message);
   }
+  if (error && typeof error === 'object' && 'status' in error && 'message' in error) {
+    const status = Number((error as { status: unknown }).status);
+    if (Number.isFinite(status) && status >= 400) {
+      throw new HttpError(status >= 500 ? 502 : status, String((error as { message: unknown }).message));
+    }
+  }
   throw error;
 }
 
@@ -96,7 +102,19 @@ function validateLibraryInput(input: {
   return { sourcePath, targetPath, extensions };
 }
 
-function checkSourceCredentials(source: Pick<SourceRecord, 'authType' | 'token' | 'username' | 'password'>): void {
+function checkSourceCredentials(
+  source: Pick<SourceRecord, 'type' | 'authType' | 'token' | 'username' | 'password' | 'cookie'>,
+): void {
+  if (source.type === '115') {
+    if (!source.cookie) throw new HttpError(400, '115 账号需要填写浏览器 Cookie');
+    return;
+  }
+  if (source.type === '123') {
+    if (!source.username || !source.password) {
+      throw new HttpError(400, '123 云盘需要填写账号和密码');
+    }
+    return;
+  }
   if (source.authType === 'token' && !source.token) {
     throw new HttpError(400, '令牌模式需要填写访问令牌');
   }
@@ -277,18 +295,19 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/sources', async (req, res) => {
     const body = parseBody(sourceCreateSchema, req.body);
-    const baseUrl = normalizeBaseUrl(body.baseUrl);
-    const publicUrl = normalizePublicUrl(body.publicUrl || '');
+    const baseUrl = body.type === 'openlist' ? normalizeBaseUrl(body.baseUrl) : '';
+    const publicUrl = body.type === 'openlist' ? normalizePublicUrl(body.publicUrl || '') : '';
     const draft: SourceRecord = {
       id: makeId('src'),
       name: body.name,
-      type: 'openlist',
+      type: body.type,
       baseUrl,
       publicUrl,
       authType: body.authType,
       username: body.username ?? '',
       token: body.token ?? '',
       password: body.password ?? '',
+      cookie: body.cookie ?? '',
       streamKey: makeStreamKey(),
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -308,13 +327,24 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     const next: SourceRecord = {
       ...source,
       name: body.name ?? source.name,
-      baseUrl: body.baseUrl !== undefined ? normalizeBaseUrl(body.baseUrl) : source.baseUrl,
+      type: body.type ?? source.type,
+      baseUrl:
+        (body.type ?? source.type) === 'openlist' && body.baseUrl !== undefined
+          ? normalizeBaseUrl(body.baseUrl)
+          : (body.type ?? source.type) === 'openlist'
+            ? source.baseUrl
+            : '',
       publicUrl:
-        body.publicUrl !== undefined ? normalizePublicUrl(body.publicUrl) : source.publicUrl,
+        (body.type ?? source.type) === 'openlist' && body.publicUrl !== undefined
+          ? normalizePublicUrl(body.publicUrl)
+          : (body.type ?? source.type) === 'openlist'
+            ? source.publicUrl
+            : '',
       authType: body.authType ?? source.authType,
       username: body.username !== undefined ? body.username : source.username,
       token: body.token !== undefined ? body.token : source.token,
       password: body.password !== undefined ? body.password : source.password,
+      cookie: body.cookie !== undefined ? body.cookie : source.cookie,
       updatedAt: nowIso(),
       lastCheck: null,
     };

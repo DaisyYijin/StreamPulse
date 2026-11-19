@@ -5,7 +5,7 @@
 <h1 align="center">StreamPulse</h1>
 
 <p align="center">
-  把 OpenList / AList 云盘媒体，变成 Emby 与 Jellyfin 能原生识别的 STRM 媒体库。
+  把 115、123、OpenList 云盘媒体，变成 Emby 与 Jellyfin 能原生识别的 STRM 媒体库。
   <br />
   <sub>Scan · Mirror · Pulse</sub>
 </p>
@@ -51,7 +51,7 @@ StreamPulse 的手机界面不是简单缩放桌面版：底部固定导航、�
 
 ## 这是什么？
 
-StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenList / AList API
+StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 115 / 123 原生账号或 OpenList API
 递归扫描网盘目录，并在本地镜像出同样的文件夹结构，为每个视频生成一个轻量的
 `.strm` 文件。默认情况下，文件内容指向 StreamPulse 的 2048 端口，由它解析并
 `302` 跳转到云盘直链；Emby、Jellyfin 或 Infuse 读取后即可把云盘内容当作本地媒体播放。
@@ -64,6 +64,8 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenLi
 
 | | |
 | --- | --- |
+| **115 网盘** | 浏览器 Cookie 登录，原生列目录与 pickcode 直链，不经过 OpenList。 |
+| **123 云盘** | 账号密码登录，原生列目录与下载直链，不经过 OpenList。 |
 | **OpenList / AList** | 兼容 Alist v3 API，支持访问令牌或用户名密码登录，连接测试与目录浏览器。 |
 | **目录镜像** | 递归保留电影、剧集、季目录结构，输出可直接挂载给媒体服务器。 |
 | **STRM 模板** | `{streamBase}`、`{streamToken}`、`{sourceUrl}`、`{encodedPath}` 等变量自由组合。 |
@@ -137,7 +139,17 @@ docker compose pull
 docker compose up -d
 ```
 
-### 3. 连接 OpenList
+### 3. 添加存储账号
+
+在 **来源** 页面选择账号类型：
+
+- **115 网盘**：粘贴浏览器 Cookie（至少 UID、CID、SEID、KID）
+- **123 云盘**：填写手机号/邮箱/用户名和密码
+- **OpenList / AList**：填写 API 地址和访问令牌，或用户名密码
+
+115/123 是原生登录，不经过 OpenList；一个账号保存为一个文件。
+
+OpenList 方式：
 
 1. 确认 OpenList / AList 可从 StreamPulse 容器访问。
 2. 在 StreamPulse 的 **来源 → 连接来源** 中填写 API 地址，例如
@@ -174,8 +186,8 @@ docker compose up -d
 http://192.168.1.10:2048/r/9f3c...c21/Movies/Inception%20(2010)/Inception.2010.2160p.mkv
 ```
 
-Emby 请求这个本地地址后，StreamPulse 会调用 OpenList API 解析真实直链并返回
-`302`，播放器再直接连接网盘。真实直链不会写进 STRM，OpenList 也不需要暴露给
+Emby 请求这个本地地址后，StreamPulse 会调用对应网盘（115/123）或 OpenList API
+解析真实直链并返回 `302`，播放器再直接连接网盘。真实直链不会写进 STRM。
 播放器。
 
 ### 5. 接入 Emby / Jellyfin
@@ -191,8 +203,8 @@ volumes:
 元数据仍由 Emby / Jellyfin 正常刮削。
 
 > **重要：** 302 模式要求 Emby 能访问 `2048` 端口，StreamPulse 容器能访问
-> OpenList API。若解析失败，StreamPulse 会回退到 OpenList 的 `/d/` 地址，这时
-> 才需要播放器能直接访问 OpenList。详见 [FAQ](#faq)。
+> 115/123 直链解析失败会返回 502；OpenList 解析失败才会回退到 `/d/` 地址。
+> 详见 [FAQ](#faq)。
 
 ## 同步方式
 
@@ -386,7 +398,7 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 拆分为：
 
 - 管理员账号：`/config/accounts/<username>.json`
-- 每个来源/115/其他 Token：`/config/sources/<source-id>.json`
+- 每个存储账号（115 / 123 / OpenList）：`/config/sources/<source-id>.json`
 - 每个媒体库：`/config/libraries/<library-id>.json`
 - 每个运行任务：`/data/runs/<run-id>.json`
 - 增量清单：`/data/manifests/<library-id>.json`
@@ -394,17 +406,26 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 配置、状态、输出、日志互不混合。凭据文件权限为 `0600`，不会写入 `/strm` 或
 `/logs`。**备份 `/config`、`/data` 和 `/strm`**；日志目录按需备份。
 
-### 115 / 其他网盘的账号存储
+### 115 / 123 账号存储
 
-StreamPulse 不直接保存 115 密码。正确方式是：
+- **115**：`/config/sources/<id>.json` 保存浏览器 Cookie（UID/CID/SEID/KID），不经过 OpenList。
+- **123**：同一文件保存账号、密码和自动登录得到的令牌，不经过 OpenList。
+- **OpenList**：同一文件保存 OpenList 地址、令牌或用户名密码。
 
-1. 在 OpenList / AList 中添加 115 或其他网盘存储；
-2. 在 OpenList 获取访问令牌，或准备 OpenList 管理员账号；
-3. 在 StreamPulse 的 **来源** 中连接 OpenList。
+权限均为 `0600`。Cookie/密码过期后，在来源页面编辑账号并重新保存即可。
 
-因此每个来源的 `/config/sources/<source-id>.json` 保存的是该来源的完整
-**OpenList 凭据**，由它再访问 115。
-如果你需要直接填写 115 账号（不经 OpenList），那是另一套原生驱动，需要单独开发。
+#### 115 Cookie 获取
+
+1. 浏览器登录 `115.com`
+2. 打开开发者工具 → Network
+3. 任选一个 `webapi.115.com` 请求
+4. 复制请求头里的完整 `Cookie`
+5. 至少确认包含 `UID`、`CID`、`SEID`、`KID`
+
+Cookie 过期后重新复制并保存即可。
+
+115 直链通过 pickcode 解析；123 直链通过下载信息接口解析。若网盘接口变更，测试连接会显示具体错误。
+
 
 ## 从 1.4 升级
 
@@ -479,7 +500,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.6.0
+ghcr.io/daisyyijin/streampulse:1.7.0
 ```
 
 ### 首次发布后设为公开
@@ -543,7 +564,7 @@ Server-Sent Events 实时推送到浏览器。
 | `GET` | `:2048/health` | 302 服务健康检查。 |
 | `GET` | `/api/overview` | 控制台统计。 |
 | `GET/POST` | `/api/sources` | 来源列表 / 新建来源。 |
-| `POST` | `/api/sources/:id/test` | 测试 OpenList 连接。 |
+| `POST` | `/api/sources/:id/test` | 测试 115 / 123 / OpenList 连接。 |
 | `GET` | `/api/sources/:id/browse?path=/` | 浏览远程目录。 |
 | `GET/POST` | `/api/libraries` | 媒体库列表 / 新建。 |
 | `POST` | `/api/libraries/:id/run` | 立即同步。 |
@@ -570,7 +591,7 @@ Server-Sent Events 实时推送到浏览器。
 
 先确认 Emby 能访问 `2048` 端口，并且 **设置 → 302 服务公开地址** 填写的是
 Emby 实际可达的地址（不是 `127.0.0.1`）。再检查 StreamPulse 容器能否访问
-OpenList API、来源令牌是否有效。
+115 Cookie、123 账号或 OpenList API 是否有效。
 
 如果任务日志显示 302 解析失败并回退到 OpenList `/d/`，则播放器还需要能直接
 访问 OpenList，且目标文件需允许游客访问或直链可公开访问。
@@ -620,7 +641,7 @@ OpenList API、来源令牌是否有效。
 
 ```text
 src/
-├── server/           # Express API、扫描器、任务队列、OpenList 客户端
+├── server/           # Express API、扫描器、任务队列、115/123/OpenList 客户端
 │   ├── core/         # 路径安全、URL 模板、清单（含单元测试）
 │   ├── api/          # REST 路由、校验与序列化
 │   ├── runner.ts     # 队列 / 增量生成 / SSE 事件

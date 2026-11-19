@@ -24,8 +24,9 @@ You can expect an initial response within 72 hours.
   `/config` volume; do not expose it over the network.
 - Application logs live in `/logs` and contain source names/paths and errors, but
   never source tokens or passwords. Protect the log volume accordingly.
-- 115 and other cloud-drive accounts should be configured inside OpenList/AList.
-  StreamPulse stores only the resulting OpenList credentials.
+- Native 115 uses a browser Cookie; native 123 uses an account/password and an
+  in-memory token. Both are stored in `/config/sources/<source-id>.json` (mode
+  0600). StreamPulse does not proxy these credentials to OpenList.
 - Put the web UI behind HTTPS when it is reachable from the internet.
 - Set `TRUST_PROXY=true` only when a trusted reverse proxy terminates TLS.
 - Set `STREAMPULSE_PASSWORD` for automated deployments, or complete the

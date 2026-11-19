@@ -3,7 +3,7 @@ import { extname } from 'node:path';
 import { config } from './config.js';
 import { isIgnoredSegment, normalizeSourcePath, relativeSourcePath } from './core/paths.js';
 import type { RemoteFile } from './core/manifest.js';
-import type { OpenListClient } from './openlist.js';
+import type { StorageClient } from './storage.js';
 import type { LibraryRecord } from './types.js';
 
 export interface ScanProgress {
@@ -54,7 +54,7 @@ export function normalizeExcludePatterns(patterns: string[]): string[] {
 }
 
 export async function scanLibrary(
-  client: OpenListClient,
+  client: StorageClient,
   library: Pick<
     LibraryRecord,
     'sourcePath' | 'extensions' | 'excludePatterns' | 'minSizeMB'

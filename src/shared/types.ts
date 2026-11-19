@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.6.0';
+export const APP_VERSION = '1.7.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -36,8 +36,8 @@ export const SCHEDULE_PRESETS = [
   { label: '每周一 04:00', value: '0 4 * * 1' },
 ] as const;
 
-export type SourceType = 'openlist';
-export type SourceAuthType = 'token' | 'password';
+export type SourceType = 'openlist' | '115' | '123';
+export type SourceAuthType = 'token' | 'password' | 'cookie';
 
 export interface SourceCheck {
   ok: boolean;
@@ -56,6 +56,7 @@ export interface Source {
   tokenHint: string | null;
   hasToken: boolean;
   hasPassword: boolean;
+  hasCookie: boolean;
   createdAt: string;
   updatedAt: string;
   lastCheck: SourceCheck | null;
@@ -221,12 +222,14 @@ export interface PreviewResult {
 
 export interface SourceInput {
   name: string;
-  baseUrl: string;
+  type?: SourceType;
+  baseUrl?: string;
   publicUrl?: string;
   authType: SourceAuthType;
   username?: string;
   token?: string;
   password?: string;
+  cookie?: string;
 }
 
 export interface LibraryInput {
