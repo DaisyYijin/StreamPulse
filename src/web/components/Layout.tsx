@@ -7,6 +7,7 @@ import {
   LogOut,
   RefreshCw,
   Settings,
+  WandSparkles,
 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { AuthStatus } from '../../shared/types';
@@ -14,12 +15,13 @@ import { cx } from '../utils';
 import { Logo, LogoMark } from './Logo';
 import { Button, ToastViewport } from './ui';
 
-export type Route = 'dashboard' | 'libraries' | 'sources' | 'activity' | 'settings';
+export type Route = 'dashboard' | 'libraries' | 'sources' | 'organize' | 'activity' | 'settings';
 
 const NAV_ITEMS: Array<{ id: Route; label: string; icon: ReactNode; eyebrow: string }> = [
   { id: 'dashboard', label: '控制台', icon: <LayoutDashboard size={18} />, eyebrow: 'Overview' },
   { id: 'libraries', label: '媒体库', icon: <LibraryBig size={18} />, eyebrow: 'Libraries' },
   { id: 'sources', label: '来源', icon: <Cloud size={18} />, eyebrow: 'Sources' },
+  { id: 'organize', label: '整理', icon: <WandSparkles size={18} />, eyebrow: 'Organize' },
   { id: 'activity', label: '运行记录', icon: <Activity size={18} />, eyebrow: 'Activity' },
   { id: 'settings', label: '设置', icon: <Settings size={18} />, eyebrow: 'Settings' },
 ];
@@ -28,6 +30,7 @@ const PAGE_TITLE: Record<Route, string> = {
   dashboard: '控制台',
   libraries: '媒体库',
   sources: '来源',
+  organize: '整理',
   activity: '运行记录',
   settings: '设置',
 };

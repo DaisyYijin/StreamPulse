@@ -11,6 +11,7 @@ import type {
 import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
+import { executeOrganizerBatch, isTmdbError, scanOrganizer } from '../organizer.js';
 import { pollQrLogin, startQrLogin, takeQrSession } from '../qr.js';
 import { PathSafetyError, normalizeExtensions, normalizeSourcePath, normalizeTargetPath, strmRelativePath } from '../core/paths.js';
 import { renderUrlTemplate, TemplateError, validateUrlTemplate } from '../core/template.js';
@@ -27,6 +28,7 @@ import {
   libraryCreateSchema,
   libraryUpdateSchema,
   loginSchema,
+  organizeExecuteSchema,
   qrStartSchema,
   runOptionsSchema,
   normalizeBaseUrl,
@@ -738,6 +740,26 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     res.json({ settings: store.snapshot.settings, system: await systemInfo(store) });
   });
 
+  router.post('/organize/scan', async (_req, res) => {
+    try {
+      const batch = await scanOrganizer(store.snapshot.settings.organizer);
+      res.json(batch);
+    } catch (error) {
+      if (isTmdbError(error)) throw new HttpError(error.status === 401 ? 400 : error.status, error.message);
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+  });
+
+  router.post('/organize/execute', async (req, res) => {
+    const body = parseBody(organizeExecuteSchema, req.body);
+    try {
+      const result = await executeOrganizerBatch(body.batchId, store.snapshot.settings.organizer);
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : String(error));
+    }
+  });
+
   router.patch('/settings', async (req, res) => {
     const body = parseBody(settingsUpdateSchema, req.body);
     if (body.timezone !== undefined && !isTimezone(body.timezone)) {
@@ -781,6 +803,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
         db.settings.maxConcurrentRuns = body.maxConcurrentRuns;
       }
       if (body.runRetention !== undefined) db.settings.runRetention = body.runRetention;
+      if (body.organizer !== undefined) db.settings.organizer = body.organizer;
     });
     store.trimRuns();
     await store.save();

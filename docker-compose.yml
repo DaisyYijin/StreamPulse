@@ -21,6 +21,8 @@ services:
       STREAM_PUBLIC_URL: ${STREAM_PUBLIC_URL:-}
       CONFIG_DIR: ${CONFIG_DIR:-/config}
       STATE_DIR: ${STATE_DIR:-/data}
+      IMPORT_DIR: ${IMPORT_DIR:-/import}
+      MEDIA_DIR: ${MEDIA_DIR:-/media}
       OUTPUT_DIR: ${OUTPUT_DIR:-/strm}
       LOG_DIR: ${LOG_DIR:-/logs}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-14}
@@ -31,6 +33,9 @@ services:
       - ./config:/config
       # Runtime state: run history and per-library manifests.
       - ./data:/data
+      # Local download inbox and organized local media for the organizer.
+      - ./import:/import
+      - ./media:/media
       # Generated .strm files. Map this directory into Emby / Jellyfin.
       - ./strm:/strm
       # Persistent application logs, rotated daily.

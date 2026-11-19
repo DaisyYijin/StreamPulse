@@ -43,6 +43,15 @@ function createDefaultDatabase(): Database {
       streamBaseUrl: config.streamPublicUrl,
       maxConcurrentRuns: 2,
       runRetention: config.runRetentionDefault,
+      organizer: {
+        importDir: config.importDir,
+        libraryDir: config.mediaDir,
+        mode: 'move',
+        upgradeStrategy: 'better',
+        tmdbApiKey: '',
+        tmdbLanguage: 'zh-CN',
+        categories: [],
+      },
     },
     createdAt: now,
     updatedAt: now,
@@ -90,6 +99,13 @@ function normalizeDatabase(raw: unknown): Database {
       ...(input.settings ?? {}),
       streamBaseUrl:
         typeof input.settings?.streamBaseUrl === 'string' ? input.settings.streamBaseUrl : base.settings.streamBaseUrl,
+      organizer: {
+        ...base.settings.organizer,
+        ...(input.settings?.organizer ?? {}),
+        categories: Array.isArray(input.settings?.organizer?.categories)
+          ? input.settings.organizer.categories
+          : base.settings.organizer.categories,
+      },
     },
     createdAt: input.createdAt || base.createdAt,
     updatedAt: input.updatedAt || base.updatedAt,
@@ -227,7 +243,17 @@ export class Store {
       sources,
       libraries,
       runs,
-      settings: { ...base.settings, ...(settings.settings ?? {}) },
+      settings: {
+        ...base.settings,
+        ...(settings.settings ?? {}),
+        organizer: {
+          ...base.settings.organizer,
+          ...(settings.settings?.organizer ?? {}),
+          categories: Array.isArray(settings.settings?.organizer?.categories)
+            ? settings.settings.organizer.categories
+            : base.settings.organizer.categories,
+        },
+      },
       createdAt: settings.createdAt || base.createdAt,
       updatedAt: settings.updatedAt || base.updatedAt,
     };

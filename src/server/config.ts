@@ -8,6 +8,8 @@ function intEnv(value: string | undefined, fallback: number): number {
 const configDir = path.resolve(
   process.env.CONFIG_DIR || process.env.DATA_DIR || path.join(process.cwd(), 'config'),
 );
+const importDir = path.resolve(process.env.IMPORT_DIR || path.join(process.cwd(), 'import'));
+const mediaDir = path.resolve(process.env.MEDIA_DIR || path.join(process.cwd(), 'media'));
 const stateDir = path.resolve(
   process.env.STATE_DIR || path.join(process.cwd(), 'data'),
 );
@@ -19,6 +21,8 @@ export const config = {
   host: process.env.HOST || '0.0.0.0',
   configDir,
   stateDir,
+  importDir,
+  mediaDir,
   outputDir: path.resolve(process.env.OUTPUT_DIR || path.join(configDir, 'strm')),
   logDir: path.resolve(process.env.LOG_DIR || path.join(configDir, 'logs')),
   webDist: path.resolve(process.env.WEB_DIST || path.join(process.cwd(), 'dist', 'web')),
@@ -32,5 +36,5 @@ export const config = {
   runRetentionDefault: 80,
   logRetentionDays: intEnv(process.env.LOG_RETENTION_DAYS, 14),
   scanFileLimit: 250_000,
-  version: process.env.STREAMPULSE_VERSION || '1.8.1',
+  version: process.env.STREAMPULSE_VERSION || '1.9.0',
 };

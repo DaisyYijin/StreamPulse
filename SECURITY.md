@@ -31,6 +31,7 @@ You can expect an initial response within 72 hours.
 - Set `TRUST_PROXY=true` only when a trusted reverse proxy terminates TLS.
 - Set `STREAMPULSE_PASSWORD` for automated deployments, or complete the
   first-run setup immediately after exposing the service.
+- The TMDb API key and organizer settings live in `/config/settings.json` (mode 0600).
 - STRM files contain StreamPulse 302 URLs with a per-source stream key. Anyone
   with read access to the output directory can use those URLs to resolve media
   paths from that source; protect the output directory.

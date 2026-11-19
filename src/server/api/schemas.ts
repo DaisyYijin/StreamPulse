@@ -127,6 +127,10 @@ export const libraryUpdateSchema = z.object({
   watchInterval: z.number().int().min(0).max(60).optional(),
 });
 
+export const organizeExecuteSchema = z.object({
+  batchId: z.string().trim().min(1).max(120),
+});
+
 export const runOptionsSchema = z.object({
   mode: z.enum(['incremental', 'full']).optional(),
 });
@@ -138,7 +142,28 @@ export const qrStartSchema = z.object({
   sourceId: z.string().trim().min(1).optional(),
 });
 
+const organizeCategorySchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(80),
+  mediaType: z.enum(['movie', 'tv']),
+  genres: z.array(z.string().trim().max(80)).max(30).default([]),
+  countries: z.array(z.string().trim().max(20)).max(30).default([]),
+  languages: z.array(z.string().trim().max(20)).max(30).default([]),
+  keywords: z.array(z.string().trim().max(80)).max(30).default([]),
+});
+
+const organizerSchema = z.object({
+  importDir: z.string().trim().min(1).max(2000),
+  libraryDir: z.string().trim().min(1).max(2000),
+  mode: z.enum(['move', 'copy', 'hardlink']),
+  upgradeStrategy: z.enum(['off', 'better', 'always']),
+  tmdbApiKey: z.string().trim().max(500),
+  tmdbLanguage: z.string().trim().min(2).max(20),
+  categories: z.array(organizeCategorySchema).max(100),
+});
+
 export const settingsUpdateSchema = z.object({
+  organizer: organizerSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),
   defaultUrlTemplate: z.string().trim().min(1).max(1000).optional(),

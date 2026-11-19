@@ -2,6 +2,23 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.9.0] - 2026-11-19
+
+### Added
+
+- Local media organizer: scan `/import`, identify with TMDb, classify and place
+  into `/media`.
+- User-defined secondary categories based on TMDb genre, country, language and
+  filename keywords.
+- Upgrade/洗版 strategies: off, better quality only, always replace.
+- Move / copy / hardlink modes; old upgraded files are moved to `/media/.trash`.
+- Basic Kodi/Emby NFO (`movie.nfo`, `tvshow.nfo`) with TMDb id.
+- Preview before execute; batch expires after 30 minutes.
+
+### Docker
+
+- Added `./import:/import` and `./media:/media` volumes.
+
 ## [1.8.1] - 2026-11-19
 
 ### Fixed

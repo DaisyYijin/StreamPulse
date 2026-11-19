@@ -10,10 +10,11 @@ import { ActivityPage } from './pages/ActivityPage';
 import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LibrariesPage } from './pages/LibrariesPage';
+import { OrganizePage } from './pages/OrganizePage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SourcesPage } from './pages/SourcesPage';
 
-const ROUTES: Route[] = ['dashboard', 'libraries', 'sources', 'activity', 'settings'];
+const ROUTES: Route[] = ['dashboard', 'libraries', 'sources', 'organize', 'activity', 'settings'];
 
 function currentRoute(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0];
@@ -152,6 +153,8 @@ export default function App() {
           <LibrariesPage onOpenRun={openRun} />
         ) : route === 'sources' ? (
           <SourcesPage />
+        ) : route === 'organize' ? (
+          <OrganizePage />
         ) : route === 'activity' ? (
           <ActivityPage onOpenRun={openRun} />
         ) : (

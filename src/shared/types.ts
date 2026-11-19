@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.8.1';
+export const APP_VERSION = '1.9.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -131,6 +131,29 @@ export interface Run {
   logs: LogLine[];
 }
 
+export type OrganizeMode = 'move' | 'copy' | 'hardlink';
+export type UpgradeStrategy = 'off' | 'better' | 'always';
+
+export interface OrganizeCategory {
+  id: string;
+  name: string;
+  mediaType: 'movie' | 'tv';
+  genres: string[];
+  countries: string[];
+  languages: string[];
+  keywords: string[];
+}
+
+export interface OrganizerSettings {
+  importDir: string;
+  libraryDir: string;
+  mode: OrganizeMode;
+  upgradeStrategy: UpgradeStrategy;
+  tmdbApiKey: string;
+  tmdbLanguage: string;
+  categories: OrganizeCategory[];
+}
+
 export interface Settings {
   outputDir: string;
   timezone: string;
@@ -138,6 +161,7 @@ export interface Settings {
   streamBaseUrl: string;
   maxConcurrentRuns: number;
   runRetention: number;
+  organizer: OrganizerSettings;
 }
 
 export interface AuthStatus {
