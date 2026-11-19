@@ -2,7 +2,7 @@ name: streampulse
 
 services:
   streampulse:
-    image: ${STREAMPULSE_IMAGE:-ghcr.io/OWNER/streampulse:latest}
+    image: ${STREAMPULSE_IMAGE:-ghcr.io/daisyyijin/streampulse:latest}
     container_name: streampulse
     restart: unless-stopped
     ports:

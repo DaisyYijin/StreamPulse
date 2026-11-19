@@ -11,9 +11,9 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/OWNER/streampulse/actions/workflows/ci.yml"><img src="https://github.com/OWNER/streampulse/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://github.com/OWNER/streampulse/actions/workflows/docker.yml"><img src="https://github.com/OWNER/streampulse/actions/workflows/docker.yml/badge.svg" alt="Docker" /></a>
-  <a href="https://github.com/OWNER/streampulse/pkgs/container/streampulse"><img src="https://img.shields.io/badge/GHCR-streampulse-c9ff57?logo=github" alt="GHCR" /></a>
+  <a href="https://github.com/DaisyYijin/StreamPulse/actions/workflows/ci.yml"><img src="https://github.com/DaisyYijin/StreamPulse/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/DaisyYijin/StreamPulse/actions/workflows/docker.yml"><img src="https://github.com/DaisyYijin/StreamPulse/actions/workflows/docker.yml/badge.svg" alt="Docker" /></a>
+  <a href="https://github.com/DaisyYijin/StreamPulse/pkgs/container/streampulse"><img src="https://img.shields.io/badge/GHCR-streampulse-c9ff57?logo=github" alt="GHCR" /></a>
   <img src="https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white" alt="Node.js 24" />
   <img src="https://img.shields.io/badge/License-MIT-8b9a94" alt="MIT License" />
 </p>
@@ -78,7 +78,7 @@ docker run -d \
   -p 8088:8080 \
   -v "$(pwd)/data:/data" \
   -e TZ=Asia/Shanghai \
-  ghcr.io/OWNER/streampulse:latest
+  ghcr.io/daisyyijin/streampulse:latest
 ```
 
 打开 `http://你的服务器地址:8088`，首次访问会要求创建管理员密码。
@@ -249,9 +249,9 @@ npm test
 镜像地址：
 
 ```text
-ghcr.io/OWNER/streampulse:latest
-ghcr.io/OWNER/streampulse:sha-<commit>
-ghcr.io/OWNER/streampulse:1.0.0
+ghcr.io/daisyyijin/streampulse:latest
+ghcr.io/daisyyijin/streampulse:sha-<commit>
+ghcr.io/daisyyijin/streampulse:1.0.0
 ```
 
 ### 首次发布后设为公开
@@ -264,8 +264,8 @@ GitHub 的 GHCR 包默认可能是私有。若希望匿名 `docker pull`：
 私有包也可以使用：
 
 ```bash
-echo "$GITHUB_PAT" | docker login ghcr.io -u YOUR_USERNAME --password-stdin
-docker pull ghcr.io/OWNER/streampulse:latest
+echo "$GITHUB_PAT" | docker login ghcr.io -u DaisyYijin --password-stdin
+docker pull ghcr.io/daisyyijin/streampulse:latest
 ```
 
 PAT 需要 `read:packages` 权限。

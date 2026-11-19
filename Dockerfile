@@ -18,7 +18,7 @@ ARG STREAMPULSE_VERSION=1.0.0
 
 LABEL org.opencontainers.image.title="StreamPulse" \
       org.opencontainers.image.description="Turn OpenList cloud media into STRM libraries for Emby and Jellyfin." \
-      org.opencontainers.image.source="https://github.com/OWNER/streampulse" \
+      org.opencontainers.image.source="https://github.com/DaisyYijin/StreamPulse" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${STREAMPULSE_VERSION}"
 
