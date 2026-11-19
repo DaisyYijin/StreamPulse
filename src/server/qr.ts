@@ -128,10 +128,10 @@ async function poll115(session: QrSession): Promise<QrSession> {
           Referer: 'https://115.com/',
         },
       },
-      4_000,
+      35_000,
     );
   } catch (error) {
-    if (error instanceof Error && error.name === 'TimeoutError') {
+    if (error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
       session.status = 'waiting';
       session.message = '等待 115 App 扫码';
       return session;
@@ -180,7 +180,7 @@ async function poll115(session: QrSession): Promise<QrSession> {
       body: form.toString(),
     },
   );
-  const credential = login?.data?.credential;
+  const credential = login?.data?.cookie || login?.data?.credential;
   if (!credential?.UID || !credential?.CID || !credential?.SEID) {
     session.status = 'error';
     session.message = login?.message || login?.error || '115 登录未返回凭据';

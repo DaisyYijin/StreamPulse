@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.8.1] - 2026-11-19
+
+### Fixed
+
+- 115 QR login now reads the `data.cookie` credential returned by the 115
+  QR login endpoint (previously the response field was read incorrectly).
+- 115 QR status uses the long-poll endpoint with a 35 second window instead of
+  aborting every 4 seconds.
+- The `acw_tc` cookie from the QR token request is preserved for status and
+  login requests.
+
 ## [1.8.0] - 2026-11-19
 
 ### Added
