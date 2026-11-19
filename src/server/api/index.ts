@@ -19,7 +19,7 @@ import type { RunEvent, RunManager } from '../runner.js';
 import { isTimezone, type Scheduler } from '../scheduler.js';
 import { scanLibrary } from '../scanner.js';
 import type { Store } from '../store.js';
-import { HttpError, makeId, nowIso, type LibraryRecord, type SourceRecord } from '../types.js';
+import { HttpError, makeId, makeStreamKey, nowIso, type LibraryRecord, type SourceRecord } from '../types.js';
 import { libraryToPublic, runToPublic, sourceToPublic, systemInfo } from './helpers.js';
 import {
   changePasswordSchema,
@@ -28,6 +28,7 @@ import {
   loginSchema,
   normalizeBaseUrl,
   normalizePublicUrl,
+  normalizeStreamBaseUrl,
   parseBody,
   settingsUpdateSchema,
   setupSchema,
@@ -49,6 +50,13 @@ function asString(value: unknown): string {
 
 function idOf(req: Request): string {
   return String(req.params.id ?? '');
+}
+
+function requestStreamBase(req: Request): string {
+  const hostname = req.hostname.includes(':') && !req.hostname.startsWith('[')
+    ? `[${req.hostname}]`
+    : req.hostname;
+  return `${req.protocol}://${hostname || 'localhost'}:${config.streamPort}`;
 }
 
 function mapOpenListError(error: unknown): never {
@@ -275,6 +283,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       username: body.username ?? '',
       token: body.token ?? '',
       password: body.password ?? '',
+      streamKey: makeStreamKey(),
       createdAt: nowIso(),
       updatedAt: nowIso(),
       lastCheck: null,
@@ -396,6 +405,10 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     const body = parseBody(libraryCreateSchema, req.body);
     if (!store.source(body.sourceId)) throw new HttpError(400, '选择的来源不存在');
     const validated = validateLibraryInput(body);
+    const deriveStreamBase =
+      !store.snapshot.settings.streamBaseUrl && body.urlTemplate.includes('{streamBase}')
+        ? requestStreamBase(req)
+        : '';
     const now = nowIso();
     const library: LibraryRecord = {
       id: makeId('lib'),
@@ -418,6 +431,9 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       updatedAt: now,
     };
     await store.mutate((db) => {
+      if (deriveStreamBase && !db.settings.streamBaseUrl) {
+        db.settings.streamBaseUrl = deriveStreamBase;
+      }
       db.libraries.unshift(library);
     });
     scheduler.reload();
@@ -449,7 +465,14 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     };
     const validated = validateLibraryInput(merged);
     Object.assign(merged, validated);
+    const deriveStreamBase =
+      !store.snapshot.settings.streamBaseUrl && merged.urlTemplate.includes('{streamBase}')
+        ? requestStreamBase(req)
+        : '';
     await store.mutate((db) => {
+      if (deriveStreamBase && !db.settings.streamBaseUrl) {
+        db.settings.streamBaseUrl = deriveStreamBase;
+      }
       const index = db.libraries.findIndex((item) => item.id === library.id);
       db.libraries[index] = merged;
     });
@@ -487,6 +510,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     if (!source) throw new HttpError(400, '媒体库关联的来源已被删除');
     try {
       validateUrlTemplate(library.urlTemplate);
+      const streamBase = store.snapshot.settings.streamBaseUrl || requestStreamBase(req);
       const scan = await scanLibrary(clientForSource(source), library, {
         signal: AbortSignal.timeout(60_000),
       });
@@ -497,6 +521,8 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
           path: file.path,
           file: file.name,
           ext: file.extension,
+          streamBase,
+          streamToken: source.streamKey,
         });
         samples.push({
           sourcePath: file.path,
@@ -632,6 +658,10 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
         throw error;
       }
     }
+    const normalizedStreamBase =
+      body.streamBaseUrl !== undefined ? normalizeStreamBaseUrl(body.streamBaseUrl) : undefined;
+    const streamBaseUrl =
+      normalizedStreamBase === '' ? requestStreamBase(req) : normalizedStreamBase;
     let outputDir: string | undefined;
     if (body.outputDir !== undefined) {
       if (!path.isAbsolute(body.outputDir)) {
@@ -653,6 +683,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.defaultUrlTemplate !== undefined) {
         db.settings.defaultUrlTemplate = body.defaultUrlTemplate;
       }
+      if (streamBaseUrl !== undefined) db.settings.streamBaseUrl = streamBaseUrl;
       if (body.maxConcurrentRuns !== undefined) {
         db.settings.maxConcurrentRuns = body.maxConcurrentRuns;
       }

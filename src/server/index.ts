@@ -6,16 +6,21 @@ import { Auth } from './auth.js';
 import { config } from './config.js';
 import { RunManager } from './runner.js';
 import { Scheduler } from './scheduler.js';
+import { createStreamServer } from './stream.js';
 import { Store } from './store.js';
 import { HttpError } from './types.js';
 
 async function main(): Promise<void> {
+  if (config.streamPort === config.port) {
+    throw new Error('PORT 与 STREAM_PORT 不能相同');
+  }
   const store = new Store();
   await store.init();
   const auth = new Auth(store);
   const runner = new RunManager(store);
   await runner.init();
   const scheduler = new Scheduler(store, runner);
+  const streamServer = createStreamServer(store);
 
   const app = express();
   app.disable('x-powered-by');
@@ -105,18 +110,26 @@ async function main(): Promise<void> {
 
   scheduler.start();
 
-  const server = app.listen(config.port, config.host, () => {
+  const webServer = app.listen(config.port, config.host, () => {
     console.log('');
     console.log(`  StreamPulse v${config.version}`);
-    console.log(`  → http://localhost:${config.port}`);
-    console.log(`  data:   ${config.dataDir}`);
-    console.log(`  output: ${store.snapshot.settings.outputDir}`);
-    console.log(`  auth:   ${auth.envManaged ? 'environment password' : auth.passwordSet ? 'local password' : 'first-run setup'}`);
+    console.log(`  → Web UI        http://localhost:${config.port}`);
+    console.log(`  → 302 stream    http://localhost:${config.streamPort}`);
+    console.log(`  data:           ${config.dataDir}`);
+    console.log(`  output:         ${store.snapshot.settings.outputDir}`);
+    console.log(`  auth:           ${auth.envManaged ? 'environment password' : auth.passwordSet ? 'local password' : 'first-run setup'}`);
     console.log('');
   });
+  streamServer.listen(config.streamPort, config.host, () => {
+    console.log(`  [stream] 302 service listening on ${config.host}:${config.streamPort}`);
+  });
 
-  server.on('error', (error) => {
-    console.error('[server]', error);
+  webServer.on('error', (error) => {
+    console.error('[web]', error);
+    process.exitCode = 1;
+  });
+  streamServer.on('error', (error) => {
+    console.error('[stream]', error);
     process.exitCode = 1;
   });
 
@@ -127,7 +140,10 @@ async function main(): Promise<void> {
     console.log(`[server] ${signal} received, shutting down`);
     scheduler.stop();
     await runner.shutdown();
-    await new Promise<void>((resolve) => server.close(() => resolve()));
+    await Promise.all([
+      new Promise<void>((resolve) => webServer.close(() => resolve())),
+      new Promise<void>((resolve) => streamServer.close(() => resolve())),
+    ]);
     process.exit(0);
   };
   process.on('SIGTERM', () => void shutdown('SIGTERM'));

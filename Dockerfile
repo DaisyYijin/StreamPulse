@@ -14,7 +14,7 @@ RUN npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim AS runtime
-ARG STREAMPULSE_VERSION=1.0.0
+ARG STREAMPULSE_VERSION=1.1.0
 
 LABEL org.opencontainers.image.title="StreamPulse" \
       org.opencontainers.image.description="Turn OpenList cloud media into STRM libraries for Emby and Jellyfin." \
@@ -28,7 +28,8 @@ RUN apt-get update \
 
 WORKDIR /app
 ENV NODE_ENV=production \
-    PORT=8080 \
+    PORT=1024 \
+    STREAM_PORT=2048 \
     DATA_DIR=/data \
     OUTPUT_DIR=/data/strm \
     WEB_DIST=/app/dist/web \
@@ -44,10 +45,10 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
     && chown -R node:node /data /app
 
 VOLUME ["/data"]
-EXPOSE 8080
+EXPOSE 1024 2048
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD node -e "fetch('http://127.0.0.1:' + (process.env.PORT || 8080) + '/api/health').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"
+  CMD node -e "Promise.all([fetch('http://127.0.0.1:' + (process.env.PORT || 1024) + '/api/health'), fetch('http://127.0.0.1:' + (process.env.STREAM_PORT || 2048) + '/health')]).then((responses) => { if (responses.some((response) => !response.ok)) process.exit(1); }).catch(() => process.exit(1));"
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "dist/server/index.js"]

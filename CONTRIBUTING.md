@@ -10,7 +10,7 @@ npm run dev
 ```
 
 The Vite dev server runs on `http://localhost:5173` and proxies `/api` to the
-API server on `http://localhost:8080`. Use `DATA_DIR` / `OUTPUT_DIR` to keep
+API server on `http://localhost:1024`; the 302 stream service runs on `http://localhost:2048`. Use `DATA_DIR` / `OUTPUT_DIR` to keep
 local test data out of the repository:
 
 ```bash

@@ -13,6 +13,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { DEFAULT_URL_TEMPLATE } from '../../shared/types';
 import type { Library, PreviewResult, Run, Settings, Source } from '../../shared/types';
 import { api } from '../api';
 import { LibraryModal } from '../components/LibraryModal';
@@ -347,7 +348,7 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
         open={modalOpen}
         library={editing}
         sources={sources}
-        defaultUrlTemplate={settings?.defaultUrlTemplate ?? '{sourceUrl}/d{encodedPath}'}
+        defaultUrlTemplate={settings?.defaultUrlTemplate ?? DEFAULT_URL_TEMPLATE}
         outputDir={settings?.outputDir ?? '/data/strm'}
         onClose={() => setModalOpen(false)}
         onSaved={(saved) => {

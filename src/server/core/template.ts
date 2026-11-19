@@ -5,9 +5,21 @@ export interface UrlTemplateVars {
   path: string;
   file: string;
   ext: string;
+  streamBase?: string;
+  streamToken?: string;
 }
 
-const ALLOWED = new Set(['sourceUrl', 'encodedPath', 'path', 'file', 'name', 'ext', 'dir']);
+const ALLOWED = new Set([
+  'streamBase',
+  'streamToken',
+  'sourceUrl',
+  'encodedPath',
+  'path',
+  'file',
+  'name',
+  'ext',
+  'dir',
+]);
 
 export class TemplateError extends Error {
   constructor(message: string) {
@@ -27,6 +39,8 @@ function buildVars(input: UrlTemplateVars): Record<string, string> {
   const file = path.posix.basename(input.path);
   const ext = path.posix.extname(file);
   return {
+    streamBase: (input.streamBase || '').replace(/\/+$/, ''),
+    streamToken: input.streamToken || '',
     sourceUrl: input.sourceUrl.replace(/\/+$/, ''),
     encodedPath: encodePath(input.path),
     path: input.path,
@@ -55,6 +69,8 @@ export function validateUrlTemplate(template: string): void {
       path: '/Movies/Inception (2010)/Inception.mkv',
       file: 'Inception.mkv',
       ext: 'mkv',
+      streamBase: 'http://127.0.0.1:2048',
+      streamToken: '0123456789abcdef0123456789abcdef',
     });
   } catch (error) {
     throw new TemplateError(error instanceof Error ? error.message : 'URL 模板无效');
@@ -71,7 +87,7 @@ export function renderUrlTemplate(template: string, input: UrlTemplateVars): str
   try {
     parsed = new URL(rendered);
   } catch {
-    throw new TemplateError('模板生成的 URL 无效，请检查 {sourceUrl} 与模板格式');
+    throw new TemplateError('模板生成的 URL 无效，请检查 {sourceUrl}、{streamBase} 与模板格式');
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
     throw new TemplateError('STRM 链接必须是 http 或 https');

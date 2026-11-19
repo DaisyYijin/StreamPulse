@@ -42,10 +42,10 @@
 
 StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenList / AList API
 递归扫描网盘目录，并在本地镜像出同样的文件夹结构，为每个视频生成一个轻量的
-`.strm` 文件。文件内容是指向云盘直链的 URL，Emby、Jellyfin 或 Infuse
-读取后即可把云盘内容当作本地媒体播放。
+`.strm` 文件。默认情况下，文件内容指向 StreamPulse 的 2048 端口，由它解析并
+`302` 跳转到云盘直链；Emby、Jellyfin 或 Infuse 读取后即可把云盘内容当作本地媒体播放。
 
-- **不代理视频流量**：播放器直接连接你的 OpenList 直链。
+- **不中转视频流量**：StreamPulse 只做一次 302 解析，播放流量由播放器直接连接网盘。
 - **不复制大文件**：只写几行文本，扫描与更新都非常轻。
 - **不需要数据库**：单个容器、一个数据卷即可运行。
 
@@ -55,7 +55,8 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 OpenLi
 | --- | --- |
 | **OpenList / AList** | 兼容 Alist v3 API，支持访问令牌或用户名密码登录，连接测试与目录浏览器。 |
 | **目录镜像** | 递归保留电影、剧集、季目录结构，输出可直接挂载给媒体服务器。 |
-| **STRM 模板** | `{sourceUrl}`、`{encodedPath}`、`{path}` 等变量自由组合，支持 `/d/` 直链与 `/p/` 预览。 |
+| **STRM 模板** | `{streamBase}`、`{streamToken}`、`{sourceUrl}`、`{encodedPath}` 等变量自由组合。 |
+| **双端口 302** | Web 控制台与播放器直链服务分离；STRM 指向本地 302 端口，由 StreamPulse 解析网盘直链后跳转。 |
 | **增量同步** | 对比文件大小、修改时间与最终 URL；未变化且文件存在时跳过写入。 |
 | **精准过滤** | 视频扩展名、最小文件大小、glob 排除规则，自动忽略隐藏目录与回收站。 |
 | **定时脉冲** | 每个媒体库独立的 5 段 Cron 表达式，按指定时区自动同步。 |
@@ -75,16 +76,22 @@ cd streampulse
 docker run -d \
   --name streampulse \
   --restart unless-stopped \
-  -p 8088:8080 \
+  -p 1024:1024 \
+  -p 2048:2048 \
   -v "$(pwd)/data:/data" \
   -e TZ=Asia/Shanghai \
   ghcr.io/daisyyijin/streampulse:latest
 ```
 
-打开 `http://你的服务器地址:8088`，首次访问会要求创建管理员密码。
+打开 `http://你的服务器地址:1024`，首次访问会要求创建管理员密码。
 
-> 8088 只是推荐端口，你可以换成任何空闲端口。容器内部始终监听 `8080`。
-> 端口冲突时修改 `-p` 左侧的值即可。
+> **两个端口都要映射：**
+>
+> - `1024`：Web 控制台 / API
+> - `2048`：给 Emby / Jellyfin 使用的 302 直链服务
+>
+> 容器内部监听同样的端口。若宿主机端口冲突，只需修改 `-p` 左侧的值，
+> 同时把 302 服务地址改成新的宿主机端口。
 
 ### 2. 或使用 Docker Compose
 
@@ -95,7 +102,7 @@ docker compose up -d
 docker compose logs -f
 ```
 
-默认映射 `8088:8080`，数据保存在 `./data`。升级：
+默认映射 `1024:1024` 与 `2048:2048`，数据保存在 `./data`。升级：
 
 ```bash
 docker compose pull
@@ -107,9 +114,10 @@ docker compose up -d
 1. 确认 OpenList / AList 可从 StreamPulse 容器访问。
 2. 在 StreamPulse 的 **来源 → 连接来源** 中填写 API 地址，例如
    `http://192.168.1.20:5244`。
-3. **公开访问地址** 填播放器实际能访问的地址，例如 `https://cloud.example.com`。
-   - 若与 API 地址相同，可留空。
-   - 若 Emby 与 OpenList 在同一内网，可填内网地址；否则请填公网域名。
+3. **公开访问地址** 是可选项，仅在 302 解析失败时作为回退地址。
+   - 使用默认 302 模式时，Emby 只需要访问 StreamPulse，不需要直接访问 OpenList。
+   - 若 OpenList 与 StreamPulse 在同一网络，可留空。
+   - 若你使用 `{sourceUrl}` 直连模板，则必须填写播放器可访问的地址。
 4. 选择访问令牌或用户名密码，点击保存，然后使用 **测试** 验证连接。
 
 访问令牌位置：OpenList → **设置 → 其他 → 令牌**。
@@ -132,11 +140,15 @@ docker compose up -d
     └── Inception.2010.2160p.strm
 ```
 
-`.strm` 内容：
+`.strm` 内容（默认 302 模式）：
 
 ```text
-https://cloud.example.com/d/Movies/Inception%20(2010)/Inception.2010.2160p.mkv
+http://192.168.1.10:2048/r/9f3c...c21/Movies/Inception%20(2010)/Inception.2010.2160p.mkv
 ```
+
+Emby 请求这个本地地址后，StreamPulse 会调用 OpenList API 解析真实直链并返回
+`302`，播放器再直接连接网盘。真实直链不会写进 STRM，OpenList 也不需要暴露给
+播放器。
 
 ### 5. 接入 Emby / Jellyfin
 
@@ -150,21 +162,58 @@ volumes:
 媒体服务器里选择 `/media/streampulse/Movies/4K` 即可。扫描完成后，海报与
 元数据仍由 Emby / Jellyfin 正常刮削。
 
-> **重要：** 播放器必须能直接访问 STRM 中的 URL。OpenList 中对应文件需要允许
-> 游客访问，或者你的直链本身可公开访问。否则播放器会收到 401，这是权限问题，
-> 不是 STRM 生成问题。详见 [FAQ](#faq)。
+> **重要：** 302 模式要求 Emby 能访问 `2048` 端口，StreamPulse 容器能访问
+> OpenList API。若解析失败，StreamPulse 会回退到 OpenList 的 `/d/` 地址，这时
+> 才需要播放器能直接访问 OpenList。详见 [FAQ](#faq)。
+
+## 双端口与 302 模式
+
+StreamPulse 同时监听两个 HTTP 服务：
+
+| 端口 | 用途 | 谁访问 |
+| --- | --- | --- |
+| `1024` | Web 控制台、REST API、SSE 日志 | 浏览器 / 管理员 |
+| `2048` | 302 直链解析 | Emby / Jellyfin / Infuse |
+
+默认 STRM 模板：
+
+```text
+{streamBase}/r/{streamToken}{encodedPath}
+```
+
+请求流程：
+
+```text
+Emby ──► StreamPulse:2048/r/<key>/Movies/xxx.mkv
+             │  使用来源令牌调用 OpenList /api/fs/get
+             ▼
+        302 Location: https://网盘真实直链...
+             │
+Emby ◄───────┘  直接向网盘发起 Range 请求
+```
+
+- `{streamBase}`：在 **设置 → 302 服务公开地址** 配置，例如
+  `http://192.168.1.10:2048`。首次通过浏览器创建媒体库时，如果留空，会自动按
+  当前访问地址推断。
+- `{streamToken}`：每个来源随机生成的 302 密钥，不在界面中显示明文，也不需要手动填写。
+- 302 服务只接受 `/r/<key>/...` 请求，密钥不可猜测；它不会暴露管理员 API。
+
+如果 Emby 与 StreamPulse 不在同一台机器，请把 302 服务地址改成 Emby 实际能访问的
+内网 IP 或域名，而不是 `127.0.0.1`。
 
 ## URL 模板
 
 默认模板：
 
 ```text
-{sourceUrl}/d{encodedPath}
+{streamBase}/r/{streamToken}{encodedPath}
 ```
 
 | 变量 | 含义 | 示例 |
 | --- | --- | --- |
-| `{sourceUrl}` | 来源的公开地址（未设置时回落 API 地址），自动去掉末尾 `/` | `https://cloud.example.com` |
+| `{streamBase}` | 302 服务公开地址，自动去掉末尾 `/` | `http://192.168.1.10:2048` |
+| `{streamToken}` | 当前来源的 302 路由密钥 | `9f3c...c21` |
+| `{sourceUrl}` | 来源的公开地址（未设置时回落 API 地址） | `https://cloud.example.com` |
 | `{encodedPath}` | 完整路径，逐段 URL 编码，**推荐用于直链** | `/Movies/Dune%20Part%20Two.mkv` |
 | `{path}` | 完整原始路径，不做编码 | `/Movies/Dune Part Two.mkv` |
 | `{file}` | 含扩展名的文件名 | `Dune Part Two.mkv` |
@@ -177,10 +226,13 @@ volumes:
 常见写法：
 
 ```text
-# OpenList 直链下载
+# 默认：通过 StreamPulse 2048 做 302 跳转
+{streamBase}/r/{streamToken}{encodedPath}
+
+# 直连 OpenList /d/（不使用 302 服务）
 {sourceUrl}/d{encodedPath}
 
-# 使用预览 / 在线播放路径
+# OpenList 预览 / 在线播放
 {sourceUrl}/p{encodedPath}
 ```
 
@@ -191,7 +243,9 @@ volumes:
 
 | 变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `PORT` | `8080` | 容器内监听端口。 |
+| `PORT` | `1024` | Web 控制台监听端口。 |
+| `STREAM_PORT` | `2048` | 302 直链服务监听端口。 |
+| `STREAM_PUBLIC_URL` | 空 | 302 服务公开地址，例如 `http://192.168.1.10:2048`；空则首次创建媒体库时自动推断。 |
 | `HOST` | `0.0.0.0` | 监听地址。 |
 | `DATA_DIR` | `/data` | 数据库、清单和默认输出目录所在的数据卷。 |
 | `OUTPUT_DIR` | `/data/strm` | 默认 STRM 输出根目录；也可在界面设置中修改（需绝对路径且可写）。 |
@@ -221,14 +275,15 @@ npm ci
 npm run dev
 ```
 
-- 前端开发服务器：`http://localhost:5173`（自动代理 `/api` 到 8080）
-- API 服务：`http://localhost:8080`
+- 前端开发服务器：`http://localhost:5173`（自动代理 `/api` 到 1024）
+- Web API：`http://localhost:1024`
+- 302 服务：`http://localhost:2048`
 
 生产构建与本地启动：
 
 ```bash
 npm run build
-DATA_DIR=./data OUTPUT_DIR=./data/strm PORT=8080 npm start
+DATA_DIR=./data OUTPUT_DIR=./data/strm PORT=1024 STREAM_PORT=2048 npm start
 ```
 
 质量检查：
@@ -251,7 +306,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.0.0
+ghcr.io/daisyyijin/streampulse:1.1.0
 ```
 
 ### 首次发布后设为公开
@@ -274,7 +329,7 @@ PAT 需要 `read:packages` 权限。
 
 ```bash
 docker build -t streampulse:local .
-docker run --rm -p 8088:8080 -v "$(pwd)/data:/data" streampulse:local
+docker run --rm -p 1024:1024 -p 2048:2048 -v "$(pwd)/data:/data" streampulse:local
 ```
 
 ## 工作原理
@@ -286,13 +341,16 @@ OpenList / AList
   Scanner ──► 过滤扩展名 / 大小 / glob
       │
       ▼
-  URL Renderer（模板变量）
+  URL Renderer（{streamBase}/r/{streamToken}{encodedPath}）
       │
       ▼
   Incremental Planner ◄── manifests/<library>.json
       │
       ▼
-  /data/strm/**/*.strm  ──►  Emby / Jellyfin / Infuse
+  /data/strm/**/*.strm
+      │
+      ▼
+Emby / Jellyfin ──► StreamPulse:2048 ──302──► 网盘真实直链
 ```
 
 任务由内置队列管理，默认最多同时运行 2 个媒体库（可在设置中调整 1–4）。
@@ -305,7 +363,8 @@ Server-Sent Events 实时推送到浏览器。
 
 | 方法 | 路径 | 用途 |
 | --- | --- | --- |
-| `GET` | `/api/health` | 健康检查（供 Docker 使用）。 |
+| `GET` | `/api/health` | Web 健康检查（供 Docker 使用）。 |
+| `GET` | `:2048/health` | 302 服务健康检查。 |
 | `GET` | `/api/overview` | 控制台统计。 |
 | `GET/POST` | `/api/sources` | 来源列表 / 新建来源。 |
 | `POST` | `/api/sources/:id/test` | 测试 OpenList 连接。 |
@@ -327,14 +386,18 @@ Server-Sent Events 实时推送到浏览器。
 - 建议通过 HTTPS 反向代理访问，并设置 `TRUST_PROXY=true`。
 - 不要将 `/data` 暴露到公网；凭据在其中以明文存储。
 - 本项目不会删除清单之外的文件；删除媒体库也不会删除已生成的 STRM。
+- 302 链接中的随机密钥可以访问该来源的直链解析，请像密码一样保护 STRM 文件。
 
 ## FAQ
 
 **Q：Emby 能看到文件，但播放 401 / 403？**
 
-STRM 里是直链，播放器请求时不会携带 OpenList 的登录 Cookie。请确认
-OpenList 中目标目录允许游客访问，或直链本身可公开访问。必要时把来源的
-公开访问地址改为外部可访问的域名，并在 OpenList 中放开对应权限。
+先确认 Emby 能访问 `2048` 端口，并且 **设置 → 302 服务公开地址** 填写的是
+Emby 实际可达的地址（不是 `127.0.0.1`）。再检查 StreamPulse 容器能否访问
+OpenList API、来源令牌是否有效。
+
+如果任务日志显示 302 解析失败并回退到 OpenList `/d/`，则播放器还需要能直接
+访问 OpenList，且目标文件需允许游客访问或直链可公开访问。
 
 **Q：媒体库扫描不到文件？**
 
@@ -373,8 +436,9 @@ OpenList 中目标目录允许游客访问，或直链本身可公开访问。�
 
 **Q：会产生大量网络流量吗？**
 
-扫描只调用目录列表 API。播放流量由播放器直接连接 OpenList，不经过
-StreamPulse。生成 STRM 本身只写入极小文本文件。
+扫描只调用目录列表 API。默认 302 模式下，StreamPulse 只负责一次轻量的
+直链解析和 302 响应，播放流量由播放器直接连接网盘，不经过 StreamPulse。
+生成 STRM 本身只写入极小文本文件。
 
 ## 项目结构
 
@@ -385,7 +449,8 @@ src/
 │   ├── api/          # REST 路由、校验与序列化
 │   ├── runner.ts     # 队列 / 增量生成 / SSE 事件
 │   ├── scheduler.ts  # Cron 调度
-│   └── index.ts      # 服务入口与静态资源
+│   ├── stream.ts     # 2048 端口 302 直链服务
+│   └── index.ts      # 双端口服务入口与静态资源
 ├── shared/           # 前后端共享类型与常量
 └── web/              # React 19 + Vite 控制台
 docs/                 # 截图与横幅

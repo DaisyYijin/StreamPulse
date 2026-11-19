@@ -24,5 +24,9 @@ You can expect an initial response within 72 hours.
 - Set `TRUST_PROXY=true` only when a trusted reverse proxy terminates TLS.
 - Set `STREAMPULSE_PASSWORD` for automated deployments, or complete the
   first-run setup immediately after exposing the service.
-- STRM files contain direct media URLs. Anyone with read access to the output
-  directory can see those URLs.
+- STRM files contain StreamPulse 302 URLs with a per-source stream key. Anyone
+  with read access to the output directory can use those URLs to resolve media
+  paths from that source; protect the output directory.
+- The 302 service on port 2048 is intentionally unauthenticated so media players
+  can use it. Expose it only on trusted networks or behind your own access
+  control; it does not expose the admin API.

@@ -2,6 +2,24 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.1.0] - 2026-11-19
+
+### Added
+
+- Dedicated 302 stream service on port `2048`, separate from the web UI on `1024`.
+- Per-source random stream keys and `{streamBase}` / `{streamToken}` URL template
+  variables. STRM files now point at StreamPulse, which resolves the real direct
+  link through OpenList and returns an HTTP 302 to the player.
+- Settings field for the public 302 service URL, with automatic derivation from
+  the first browser request.
+- Health endpoint for the 302 service and dual-port Docker health checks.
+
+### Changed
+
+- Default web port changed from `8080` to `1024`; default STRM template now uses
+  the 302 service.
+- Docker Compose exposes `1024:1024` and `2048:2048`.
+
 ## [1.0.0] - 2026-11-19
 
 ### Added

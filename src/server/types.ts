@@ -4,6 +4,7 @@ import type { Library, Run, Settings, Source } from '../shared/types.js';
 export type SourceRecord = Omit<Source, 'tokenHint' | 'hasToken' | 'hasPassword'> & {
   token: string;
   password: string;
+  streamKey: string;
 };
 
 export type LibraryRecord = Omit<Library, 'sourceName' | 'nextRunAt'>;
@@ -41,4 +42,8 @@ export function makeId(prefix: string): string {
 
 export function nowIso(): string {
   return new Date().toISOString();
+}
+
+export function makeStreamKey(): string {
+  return randomBytes(16).toString('hex');
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_URL_TEMPLATE } from '../../shared/types.js';
 import { encodePath, renderUrlTemplate, TemplateError, validateUrlTemplate } from './template.js';
 
 const sample = {
@@ -38,5 +39,27 @@ describe('URL templates', () => {
 
   it('encodes a root path without changing slashes', () => {
     expect(encodePath('/A B/C#D/E.mkv')).toBe('/A%20B/C%23D/E.mkv');
+  });
+
+  it('renders the default 302 stream template', () => {
+    expect(
+      renderUrlTemplate(DEFAULT_URL_TEMPLATE, {
+        ...sample,
+        streamBase: 'http://192.168.1.10:2048/',
+        streamToken: '0123456789abcdef',
+      }),
+    ).toBe(
+      'http://192.168.1.10:2048/r/0123456789abcdef/Movies/%E6%B2%99%E4%B8%98%20%231/Dune%20Part%20Two%20(2024).mkv',
+    );
+  });
+
+  it('rejects the 302 template when the public stream base is missing', () => {
+    expect(() =>
+      renderUrlTemplate(DEFAULT_URL_TEMPLATE, {
+        ...sample,
+        streamBase: '',
+        streamToken: '0123456789abcdef',
+      }),
+    ).toThrow(TemplateError);
   });
 });

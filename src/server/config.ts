@@ -8,7 +8,9 @@ function intEnv(value: string | undefined, fallback: number): number {
 const dataDir = path.resolve(process.env.DATA_DIR || path.join(process.cwd(), 'data'));
 
 export const config = {
-  port: intEnv(process.env.PORT, 8080),
+  port: intEnv(process.env.PORT, 1024),
+  streamPort: intEnv(process.env.STREAM_PORT, 2048),
+  streamPublicUrl: (process.env.STREAM_PUBLIC_URL || '').trim().replace(/\/+$/, ''),
   host: process.env.HOST || '0.0.0.0',
   dataDir,
   outputDir: path.resolve(process.env.OUTPUT_DIR || path.join(dataDir, 'strm')),
@@ -21,5 +23,5 @@ export const config = {
   runLogLimit: 600,
   runRetentionDefault: 80,
   scanFileLimit: 250_000,
-  version: process.env.STREAMPULSE_VERSION || '1.0.0',
+  version: process.env.STREAMPULSE_VERSION || '1.1.0',
 };

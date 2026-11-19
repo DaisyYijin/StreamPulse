@@ -270,12 +270,12 @@ export function LibraryModal({
               <span className="form-step">02</span>
               <div>
                 <h3>STRM 链接</h3>
-                <p>每一行 .strm 的内容。使用公开地址，让播放器可以直连。</p>
+                <p>默认使用 302 服务：Emby 请求 2048 端口，再跳转到网盘直链。</p>
               </div>
             </div>
             <Field
               label="URL 模板"
-              hint="点击变量可追加到模板末尾。默认使用 OpenList 的 /d/ 直链路径。"
+              hint="点击变量可追加到模板末尾。默认走 StreamPulse 的 302 跳转。"
             >
               <div className="template-input">
                 <Link2 size={16} />
@@ -301,10 +301,10 @@ export function LibraryModal({
                 </button>
               ))}
             </div>
-            {selectedSource && !selectedSource.publicUrl ? (
+            {selectedSource && !selectedSource.publicUrl && urlTemplate.includes('{sourceUrl}') ? (
               <div className="form-hint-line">
                 <AlertTriangle size={14} />
-                此来源未设置公开访问地址。若播放器不在同一网络，请先在来源设置中填写公开地址。
+                当前模板使用 <code>{'{sourceUrl}'}</code> 直连，但此来源没有公开访问地址，播放器可能无法访问。
               </div>
             ) : null}
           </div>

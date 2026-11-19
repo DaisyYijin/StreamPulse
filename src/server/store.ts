@@ -1,8 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { DEFAULT_URL_TEMPLATE } from '../shared/types.js';
 import { config } from './config.js';
-import { nowIso, type Database, type LibraryRecord, type SourceRecord } from './types.js';
+import { makeStreamKey, nowIso, type Database, type LibraryRecord, type SourceRecord } from './types.js';
 
 function createDefaultDatabase(): Database {
   const now = nowIso();
@@ -16,7 +17,8 @@ function createDefaultDatabase(): Database {
     settings: {
       outputDir: config.outputDir,
       timezone: process.env.TZ || 'Asia/Shanghai',
-      defaultUrlTemplate: '{sourceUrl}/d{encodedPath}',
+      defaultUrlTemplate: DEFAULT_URL_TEMPLATE,
+      streamBaseUrl: config.streamPublicUrl,
       maxConcurrentRuns: 2,
       runRetention: config.runRetentionDefault,
     },
@@ -29,16 +31,33 @@ function normalizeDatabase(raw: unknown): Database {
   const base = createDefaultDatabase();
   if (!raw || typeof raw !== 'object') return base;
   const input = raw as Partial<Database>;
+  const sources = (Array.isArray(input.sources) ? input.sources.filter(Boolean) : []).map(
+    (source) => {
+      const record = source as Partial<SourceRecord>;
+      return {
+        ...record,
+        streamKey:
+          typeof record.streamKey === 'string' && record.streamKey.length >= 16
+            ? record.streamKey
+            : makeStreamKey(),
+      } as SourceRecord;
+    },
+  );
   return {
     ...base,
     ...input,
     schemaVersion: 1,
     secret: typeof input.secret === 'string' && input.secret.length >= 32 ? input.secret : base.secret,
     passwordHash: typeof input.passwordHash === 'string' ? input.passwordHash : null,
-    sources: Array.isArray(input.sources) ? input.sources.filter(Boolean) : [],
+    sources,
     libraries: Array.isArray(input.libraries) ? input.libraries.filter(Boolean) : [],
     runs: Array.isArray(input.runs) ? input.runs.filter(Boolean) : [],
-    settings: { ...base.settings, ...(input.settings ?? {}) },
+    settings: {
+      ...base.settings,
+      ...(input.settings ?? {}),
+      streamBaseUrl:
+        typeof input.settings?.streamBaseUrl === 'string' ? input.settings.streamBaseUrl : base.settings.streamBaseUrl,
+    },
     createdAt: input.createdAt || base.createdAt,
     updatedAt: input.updatedAt || base.updatedAt,
   };
@@ -78,6 +97,11 @@ export class Store {
 
     await fs.mkdir(this.data.settings.outputDir, { recursive: true }).catch(() => undefined);
     this.data.runs = this.data.runs.slice(0, Math.max(1, this.data.settings.runRetention));
+    if (!this.data.settings.streamBaseUrl && config.streamPublicUrl) {
+      this.data.settings.streamBaseUrl = config.streamPublicUrl;
+    }
+    // Persist newly added defaults and generated stream keys.
+    await this.save();
   }
 
   get snapshot(): Database {

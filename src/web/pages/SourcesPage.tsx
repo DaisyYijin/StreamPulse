@@ -121,8 +121,8 @@ export function SourcesPage() {
         <div>
           <strong>OpenList / AList API 兼容</strong>
           <p>
-            支持访问令牌或用户名密码登录。公开地址用于生成播放器可访问的直链，建议与 API
-            地址分开配置。
+            支持访问令牌或用户名密码登录。默认由 StreamPulse 的 2048 服务解析直链并
+            302 跳转，Emby 不需要直接访问 OpenList。
           </p>
         </div>
         <Badge tone="accent">API v3</Badge>

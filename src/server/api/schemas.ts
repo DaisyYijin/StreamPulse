@@ -28,6 +28,26 @@ export function normalizePublicUrl(value: string): string {
   return httpUrl(value, '公开访问地址');
 }
 
+export function normalizeStreamBaseUrl(value: string): string {
+  if (!value.trim()) return '';
+  let parsed: URL;
+  try {
+    parsed = new URL(value.trim());
+  } catch {
+    throw new HttpError(400, '302 服务地址不是有效的 URL');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new HttpError(400, '302 服务地址必须使用 http 或 https');
+  }
+  if (parsed.search || parsed.hash) {
+    throw new HttpError(400, '302 服务地址不能包含查询参数或锚点');
+  }
+  if (parsed.pathname !== '/' && parsed.pathname !== '') {
+    throw new HttpError(400, '302 服务地址请填写协议、主机和端口，不要包含路径');
+  }
+  return parsed.origin;
+}
+
 export function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
   const result = schema.safeParse(body);
   if (!result.success) {
@@ -105,6 +125,7 @@ export const settingsUpdateSchema = z.object({
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),
   defaultUrlTemplate: z.string().trim().min(1).max(1000).optional(),
+  streamBaseUrl: z.string().trim().max(2000).optional(),
   maxConcurrentRuns: z.number().int().min(1).max(4).optional(),
   runRetention: z.number().int().min(10).max(500).optional(),
 });

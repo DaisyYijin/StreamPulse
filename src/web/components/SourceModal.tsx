@@ -122,7 +122,7 @@ export function SourceModal({
         <Field
           label="公开访问地址"
           optional
-          hint="给 Emby / Jellyfin 使用的地址；留空则使用 API 地址。远程播放时建议填写公网域名。"
+          hint="仅在 302 解析失败时作为回退，或使用 {sourceUrl} 直连模板时使用。默认 302 模式可留空。"
         >
           <div className="input-with-icon">
             <Cloud size={16} />

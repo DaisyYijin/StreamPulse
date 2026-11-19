@@ -175,6 +175,21 @@ export class OpenListClient {
     return entries;
   }
 
+  async getRawUrl(path: string, signal?: AbortSignal): Promise<string | null> {
+    const headers = await this.authHeaders(signal);
+    const data = await this.request<{ raw_url?: string; url?: string }>(
+      '/api/fs/get',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ path, password: '' }),
+      },
+      signal,
+    );
+    const raw = data?.raw_url?.trim();
+    return raw || null;
+  }
+
   async testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }> {
     let title = '';
     try {

@@ -1,9 +1,11 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 
-export const DEFAULT_URL_TEMPLATE = '{sourceUrl}/d{encodedPath}';
+export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
 export const URL_TEMPLATE_VARIABLES = [
+  { token: '{streamBase}', label: '302 服务地址', description: 'StreamPulse 2048 端口的公开访问地址，例如 http://192.168.1.10:2048' },
+  { token: '{streamToken}', label: '302 密钥', description: '该来源的随机路由密钥，由 StreamPulse 自动生成' },
   { token: '{sourceUrl}', label: '源站地址', description: '来源的公开访问地址（未配置时使用 API 地址）' },
   { token: '{encodedPath}', label: '编码路径', description: '完整文件路径，空格等字符已进行 URL 编码' },
   { token: '{path}', label: '原始路径', description: '完整文件路径，保持原始字符' },
@@ -130,6 +132,7 @@ export interface Settings {
   outputDir: string;
   timezone: string;
   defaultUrlTemplate: string;
+  streamBaseUrl: string;
   maxConcurrentRuns: number;
   runRetention: number;
 }
@@ -152,6 +155,7 @@ export interface SystemInfo {
   outputDir: string;
   outputWritable: boolean;
   manifestCount: number;
+  streamPort: number;
   authMode: 'env' | 'local' | 'setup';
 }
 

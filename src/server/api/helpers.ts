@@ -76,6 +76,7 @@ export async function systemInfo(store: Store): Promise<SystemInfo> {
     outputDir,
     outputWritable,
     manifestCount,
+    streamPort: config.streamPort,
     authMode: config.envPassword ? 'env' : store.snapshot.passwordHash ? 'local' : 'setup',
   };
 }

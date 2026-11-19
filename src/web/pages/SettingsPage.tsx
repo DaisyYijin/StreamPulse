@@ -4,6 +4,7 @@ import {
   FolderCog,
   HardDrive,
   KeyRound,
+  Link2,
   Lock,
   RefreshCcw,
   Save,
@@ -45,6 +46,7 @@ export function SettingsPage() {
   const [outputDir, setOutputDir] = useState('');
   const [timezone, setTimezone] = useState('Asia/Shanghai');
   const [defaultUrlTemplate, setDefaultUrlTemplate] = useState('');
+  const [streamBaseUrl, setStreamBaseUrl] = useState('');
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(2);
   const [runRetention, setRunRetention] = useState(80);
   const [saving, setSaving] = useState(false);
@@ -67,6 +69,7 @@ export function SettingsPage() {
       setOutputDir(data.settings.outputDir);
       setTimezone(data.settings.timezone);
       setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
+      setStreamBaseUrl(data.settings.streamBaseUrl);
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
       setRunRetention(data.settings.runRetention);
     } catch (caught) {
@@ -87,10 +90,17 @@ export function SettingsPage() {
         outputDir,
         timezone,
         defaultUrlTemplate,
+        streamBaseUrl,
         maxConcurrentRuns,
         runRetention,
       });
       setSystem(data.system);
+      setOutputDir(data.settings.outputDir);
+      setTimezone(data.settings.timezone);
+      setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
+      setStreamBaseUrl(data.settings.streamBaseUrl);
+      setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
+      setRunRetention(data.settings.runRetention);
       toast.success('设置已保存');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '保存失败');
@@ -203,7 +213,21 @@ export function SettingsPage() {
                   </Select>
                 </Field>
               </div>
-              <Field label="默认 URL 模板" hint="新建媒体库时使用，可包含 {sourceUrl}、{encodedPath} 等变量">
+              <Field
+                label="302 服务公开地址"
+                hint={`Emby 访问的地址，例如 http://192.168.1.10:${system?.streamPort ?? 2048}；留空时会在创建媒体库时按当前访问地址自动推断。`}
+              >
+                <div className="input-with-icon">
+                  <Link2 size={16} />
+                  <Input
+                    value={streamBaseUrl}
+                    onChange={(event) => setStreamBaseUrl(event.target.value)}
+                    placeholder={`http://192.168.1.10:${system?.streamPort ?? 2048}`}
+                    spellCheck={false}
+                  />
+                </div>
+              </Field>
+              <Field label="默认 URL 模板" hint="新建媒体库时使用，可包含 {streamBase}、{streamToken}、{sourceUrl} 等变量">
                 <Input
                   value={defaultUrlTemplate}
                   onChange={(event) => setDefaultUrlTemplate(event.target.value)}
@@ -358,6 +382,10 @@ export function SettingsPage() {
                 <span>清单文件</span>
                 <strong>{system?.manifestCount ?? 0} 个</strong>
               </div>
+              <div>
+                <span>302 服务端口</span>
+                <strong>{system?.streamPort ?? 2048}</strong>
+              </div>
             </div>
             <div className={`system-health ${system?.outputWritable ? 'ok' : 'bad'}`}>
               {system?.outputWritable ? <CheckCircle2 size={15} /> : <Database size={15} />}
@@ -395,7 +423,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.0.0'}</span>
+            <span>v{system?.version ?? '1.1.0'}</span>
           </section>
         </aside>
       </div>
