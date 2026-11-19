@@ -44,8 +44,9 @@ function createDefaultDatabase(): Database {
       maxConcurrentRuns: 2,
       runRetention: config.runRetentionDefault,
       organizer: {
-        importDir: config.importDir,
-        libraryDir: config.mediaDir,
+        sourceId: '',
+        sourcePath: '/',
+        libraryPath: '/Media',
         mode: 'move',
         upgradeStrategy: 'better',
         tmdbApiKey: '',

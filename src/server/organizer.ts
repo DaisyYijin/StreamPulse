@@ -1,8 +1,9 @@
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { OrganizeCategory, OrganizerSettings } from '../shared/types.js';
-import { makeId } from './types.js';
+import { normalizeSourcePath } from './core/paths.js';
+import type { StorageClient, StorageEntry } from './storage.js';
 import { searchTmdb, TmdbError, type TmdbInfo } from './tmdb.js';
+import { makeId } from './types.js';
 
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.ts', '.m2ts', '.flv', '.webm', '.rmvb']);
 const QUALITY_RE = /(2160p|1080p|1080i|720p|576p|480p)/i;
@@ -19,9 +20,11 @@ export interface OrganizeItem {
   episode: number;
   tmdbId: number | null;
   category: string;
+  destinationDir: string;
+  destinationName: string;
   destination: string;
   quality: string;
-  existingPath: string | null;
+  existingPaths: string[];
   existingQuality: string;
   action: 'create' | 'upgrade' | 'skip' | 'error';
   reason: string;
@@ -29,15 +32,15 @@ export interface OrganizeItem {
 
 export interface OrganizeBatch {
   id: string;
+  sourceId: string;
   createdAt: string;
   items: OrganizeItem[];
 }
 
 const batches = new Map<string, OrganizeBatch>();
 
-function within(root: string, target: string): boolean {
-  const relative = path.relative(path.resolve(root), path.resolve(target));
-  return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
+function cloudJoin(...parts: string[]): string {
+  return normalizeSourcePath(`/${parts.join('/')}`.replace(/\/+/g, '/'));
 }
 
 function safeComponent(value: string): string {
@@ -75,28 +78,28 @@ function parseName(filename: string): {
 }
 
 function qualityOf(filename: string): string {
-  const resolution = filename.match(QUALITY_RE)?.[1]?.toLowerCase() || '';
-  const source = filename.match(SOURCE_RE)?.[1]?.toLowerCase() || '';
-  const hdr = /\b(DV|Dolby Vision|HDR10\+?|HDR)\b/i.exec(filename)?.[1]?.toUpperCase() || '';
-  const codec = /\b(HEVC|H\.?265|AVC|H\.?264|AV1)\b/i.exec(filename)?.[1]?.toUpperCase() || '';
-  return [resolution, source, hdr, codec].filter(Boolean).join(' ');
+  return [
+    filename.match(QUALITY_RE)?.[1]?.toLowerCase() || '',
+    filename.match(SOURCE_RE)?.[1]?.toLowerCase() || '',
+    (/\b(DV|Dolby Vision|HDR10\+?|HDR)\b/i.exec(filename)?.[1] || '').toUpperCase(),
+    (/\b(HEVC|H\.?265|AVC|H\.?264|AV1)\b/i.exec(filename)?.[1] || '').toUpperCase(),
+  ].filter(Boolean).join(' ');
 }
 
 function qualityScore(filename: string): number[] {
   const lower = filename.toLowerCase();
-  const resolution = lower.includes('2160p') ? 4 : lower.includes('1080p') ? 3 : lower.includes('720p') ? 2 : 1;
-  const source = /remux/.test(lower) ? 5 : /bluray|blu-ray/.test(lower) ? 4 : /web-dl/.test(lower) ? 3 : /webrip/.test(lower) ? 2 : /hdtv/.test(lower) ? 1 : 0;
-  const hdr = /dolby vision|\bdv\b|hdr/.test(lower) ? 1 : 0;
-  const codec = /hevc|h\.?265|av1/.test(lower) ? 2 : /avc|h\.?264/.test(lower) ? 1 : 0;
-  return [resolution, source, hdr, codec];
+  return [
+    lower.includes('2160p') ? 4 : lower.includes('1080p') ? 3 : lower.includes('720p') ? 2 : 1,
+    /remux/.test(lower) ? 5 : /bluray|blu-ray/.test(lower) ? 4 : /web-dl/.test(lower) ? 3 : /webrip/.test(lower) ? 2 : /hdtv/.test(lower) ? 1 : 0,
+    /dolby vision|\bdv\b|hdr/.test(lower) ? 1 : 0,
+    /hevc|h\.?265|av1/.test(lower) ? 2 : /avc|h\.?264/.test(lower) ? 1 : 0,
+  ];
 }
 
 function betterQuality(next: string, existing: string): boolean {
   const left = qualityScore(next);
   const right = qualityScore(existing);
-  for (let i = 0; i < left.length; i += 1) {
-    if (left[i] !== right[i]) return left[i] > right[i];
-  }
+  for (let i = 0; i < left.length; i += 1) if (left[i] !== right[i]) return left[i] > right[i];
   return false;
 }
 
@@ -113,78 +116,78 @@ function categoryFor(info: TmdbInfo, categories: OrganizeCategory[], filename: s
   return '其他';
 }
 
-async function listVideoFiles(root: string): Promise<string[]> {
-  const result: string[] = [];
-  const stack = [root];
-  while (stack.length && result.length < 2500) {
+async function listDir(client: StorageClient, dir: string): Promise<StorageEntry[]> {
+  return client.list(normalizeSourcePath(dir));
+}
+
+async function ensureDir(client: StorageClient, dir: string): Promise<void> {
+  if (!client.mkdir) throw new Error('当前来源不支持创建目录');
+  await client.mkdir(normalizeSourcePath(dir));
+}
+
+async function scanCloud(client: StorageClient, sourcePath: string): Promise<Array<{ path: string; entry: StorageEntry }>> {
+  const files: Array<{ path: string; entry: StorageEntry }> = [];
+  const stack = [normalizeSourcePath(sourcePath)];
+  let visited = 0;
+  while (stack.length > 0 && files.length < 2500) {
     const current = stack.pop()!;
-    const entries = await fs.readdir(current, { withFileTypes: true }).catch(() => []);
+    visited += 1;
+    if (visited > 800) break;
+    const entries = await listDir(client, current);
     for (const entry of entries) {
       if (entry.name.startsWith('.')) continue;
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else if (VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) result.push(full);
+      const full = cloudJoin(current === '/' ? '' : current, entry.name);
+      if (entry.isDir) stack.push(full);
+      else if (VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) files.push({ path: full, entry });
     }
   }
-  return result;
+  return files;
 }
 
-async function findExisting(destination: string, mediaType: 'movie' | 'tv', season: number, episode: number): Promise<string | null> {
-  const folder = path.dirname(destination);
-  const files = await fs.readdir(folder, { withFileTypes: true }).catch(() => []);
-  const candidates = files
-    .filter((entry) => entry.isFile() && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()))
-    .map((entry) => path.join(folder, entry.name));
-  const scoped = mediaType === 'tv'
-    ? candidates.filter((file) => new RegExp(`S0?${season}E0?${episode}`, 'i').test(path.basename(file)))
-    : candidates;
-  return scoped.sort((left, right) => {
-    const a = qualityScore(path.basename(left));
-    const b = qualityScore(path.basename(right));
-    for (let index = 0; index < a.length; index += 1) {
-      if (a[index] !== b[index]) return b[index] - a[index];
-    }
-    return 0;
-  })[0] || null;
-}
-
-function destinationFor(settings: OrganizerSettings, info: TmdbInfo, parsed: ReturnType<typeof parseName>, category: string, original: string): string {
+function targetFor(settings: OrganizerSettings, info: TmdbInfo, parsed: ReturnType<typeof parseName>, category: string, extension: string): { dir: string; name: string } {
   const title = safeComponent(info.title || parsed.title);
   const year = info.year || parsed.year;
-  const quality = qualityOf(original);
-  const ext = path.extname(original);
+  const quality = '';
   if (parsed.mediaType === 'tv') {
     const season = parsed.season || 1;
     const episode = parsed.episode || 1;
-    const root = path.join(settings.libraryDir, 'TV', category, `${title}${year ? ` (${year})` : ''}`, `Season ${String(season).padStart(2, '0')}`);
-    const episodeTag = `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`;
-    return path.join(root, `${title} - ${episodeTag}${quality ? ` [${quality}]` : ''}${ext}`);
+    const dir = cloudJoin(settings.libraryPath, 'TV', category, `${title}${year ? ` (${year})` : ''}`, `Season ${String(season).padStart(2, '0')}`);
+    const name = `${title} - S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}${quality}${extension}`;
+    return { dir, name };
   }
-  const root = path.join(settings.libraryDir, 'Movies', category, `${title}${year ? ` (${year})` : ''}`);
-  return path.join(root, `${title}${year ? ` (${year})` : ''}${quality ? ` [${quality}]` : ''}${ext}`);
+  const dir = cloudJoin(settings.libraryPath, 'Movies', category, `${title}${year ? ` (${year})` : ''}`);
+  return { dir, name: `${title}${year ? ` (${year})` : ''}${quality}${extension}` };
 }
 
-export async function scanOrganizer(settings: OrganizerSettings): Promise<OrganizeBatch> {
-  const importDir = path.resolve(settings.importDir);
-  const libraryDir = path.resolve(settings.libraryDir);
-  if (!within(importDir, path.join(importDir, 'probe'))) throw new Error('导入目录无效');
-  if (!within(libraryDir, path.join(libraryDir, 'probe'))) throw new Error('媒体库目录无效');
-  if (importDir === libraryDir) throw new Error('导入目录不能与媒体库目录相同');
-  await fs.access(importDir).catch(() => { throw new Error(`导入目录不存在：${importDir}`); });
-  await fs.mkdir(libraryDir, { recursive: true });
+async function existingFor(client: StorageClient, dir: string, mediaType: 'movie' | 'tv', season: number, episode: number): Promise<StorageEntry[]> {
+  const entries = await listDir(client, dir).catch(() => [] as StorageEntry[]);
+  const videos = entries.filter((entry) => !entry.isDir && VIDEO_EXTENSIONS.has(path.extname(entry.name).toLowerCase()));
+  if (mediaType === 'tv') {
+    const pattern = new RegExp(`S0?${season}E0?${episode}`, 'i');
+    return videos.filter((entry) => pattern.test(entry.name));
+  }
+  return videos;
+}
+
+export async function scanCloudOrganizer(settings: OrganizerSettings, client: StorageClient): Promise<OrganizeBatch> {
+  if (!settings.sourceId) throw new Error('请先选择来源账号');
   if (!settings.tmdbApiKey.trim()) throw new Error('请先填写 TMDb API Key');
-
-  const files = await listVideoFiles(importDir);
+  if (!client.mkdir || !client.move || !client.rename || !client.remove) {
+    throw new Error('当前来源不支持网盘整理，请使用 115 或 123 原生账号');
+  }
+  const sourcePath = normalizeSourcePath(settings.sourcePath || '/');
+  const libraryPath = normalizeSourcePath(settings.libraryPath || '/Media');
+  if (sourcePath === libraryPath) throw new Error('待整理目录不能与媒体库目录相同');
+  const files = await scanCloud(client, sourcePath);
   const items: OrganizeItem[] = [];
-  const tmdbCache = new Map<string, TmdbInfo | null>();
+  const cache = new Map<string, TmdbInfo | null>();
 
-  for (const file of files) {
-    const parsed = parseName(path.basename(file));
-    const relative = path.relative(importDir, file);
+  for (const { path: filePath, entry } of files) {
+    const parsed = parseName(entry.name);
     const base: OrganizeItem = {
       id: makeId('org'),
-      sourcePath: file,
-      relativePath: relative,
+      sourcePath: filePath,
+      relativePath: path.relative(sourcePath, filePath).replace(/\\/g, '/'),
       mediaType: parsed.mediaType,
       title: parsed.title,
       year: parsed.year,
@@ -192,107 +195,87 @@ export async function scanOrganizer(settings: OrganizerSettings): Promise<Organi
       episode: parsed.episode,
       tmdbId: null,
       category: '其他',
+      destinationDir: '',
+      destinationName: '',
       destination: '',
-      quality: qualityOf(path.basename(file)),
-      existingPath: null,
+      quality: qualityOf(entry.name),
+      existingPaths: [],
       existingQuality: '',
       action: 'error',
       reason: '',
     };
     try {
-      const cacheKey = `${parsed.mediaType}:${parsed.title.toLowerCase()}:${parsed.year}`;
-      let info = tmdbCache.get(cacheKey);
+      const key = `${parsed.mediaType}:${parsed.title.toLowerCase()}:${parsed.year}`;
+      let info = cache.get(key);
       if (info === undefined) {
-        info = await searchTmdb({ ...parsed, apiKey: settings.tmdbApiKey, language: settings.tmdbLanguage });
-        tmdbCache.set(cacheKey, info);
+        info = await searchTmdb({ mediaType: parsed.mediaType, title: parsed.title, year: parsed.year, apiKey: settings.tmdbApiKey, language: settings.tmdbLanguage });
+        cache.set(key, info);
       }
       if (!info) throw new Error('TMDb 未找到匹配条目');
-      const category = categoryFor(info, settings.categories, path.basename(file));
-      const destination = destinationFor(settings, info, parsed, category, path.basename(file));
-      const existingPath = await findExisting(destination, parsed.mediaType, parsed.season, parsed.episode);
-      const existingQuality = existingPath ? qualityOf(path.basename(existingPath)) : '';
+      const category = categoryFor(info, settings.categories, entry.name);
+      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase());
+      const existing = await existingFor(client, target.dir, parsed.mediaType, parsed.season, parsed.episode);
+      const best = existing.sort((a, b) => {
+        const left = qualityScore(a.name), right = qualityScore(b.name);
+        for (let i = 0; i < left.length; i += 1) if (left[i] !== right[i]) return right[i] - left[i];
+        return 0;
+      })[0];
       let action: OrganizeItem['action'] = 'create';
       let reason = '新增入库';
-      if (existingPath) {
+      if (best) {
         if (settings.upgradeStrategy === 'off') {
-          action = 'skip';
-          reason = '已存在，洗版关闭';
+          action = 'skip'; reason = '目标已存在，洗版关闭';
         } else if (settings.upgradeStrategy === 'always') {
-          action = 'upgrade';
-          reason = '策略：总是替换';
-        } else if (betterQuality(path.basename(file), path.basename(existingPath))) {
-          action = 'upgrade';
-          reason = '新版本画质更好';
+          action = 'upgrade'; reason = '策略：总是替换';
+        } else if (betterQuality(entry.name, best.name)) {
+          action = 'upgrade'; reason = '新版本画质更好';
         } else {
-          action = 'skip';
-          reason = '已有版本更好或相同';
+          action = 'skip'; reason = '目标已有更好或相同版本';
         }
       }
-      items.push({ ...base, tmdbId: info.id, title: info.title, year: info.year || parsed.year, category, destination, existingPath, existingQuality, action, reason });
+      items.push({
+        ...base,
+        tmdbId: info.id,
+        title: info.title,
+        year: info.year || parsed.year,
+        category,
+        destinationDir: target.dir,
+        destinationName: target.name,
+        destination: cloudJoin(target.dir, target.name),
+        existingPaths: existing.map((item) => cloudJoin(target.dir, item.name)),
+        existingQuality: best ? qualityOf(best.name) : '',
+        action,
+        reason,
+      });
     } catch (error) {
       items.push({ ...base, action: 'error', reason: error instanceof Error ? error.message : String(error) });
     }
   }
 
-  const batch: OrganizeBatch = { id: makeId('batch'), createdAt: new Date().toISOString(), items };
+  const batch: OrganizeBatch = { id: makeId('batch'), sourceId: settings.sourceId, createdAt: new Date().toISOString(), items };
   batches.set(batch.id, batch);
   setTimeout(() => batches.delete(batch.id), 30 * 60_000).unref?.();
   return batch;
 }
 
-async function moveFile(source: string, destination: string): Promise<void> {
-  try {
-    await fs.rename(source, destination);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== 'EXDEV') throw error;
-    await fs.copyFile(source, destination);
-    await fs.unlink(source);
-  }
-}
-
-async function writeNfo(destination: string, item: OrganizeItem): Promise<void> {
-  const folder = path.dirname(destination);
-  const nfo = item.mediaType === 'movie'
-    ? path.join(folder, 'movie.nfo')
-    : path.join(folder, '..', 'tvshow.nfo');
-  const exists = await fs.access(nfo).then(() => true).catch(() => false);
-  if (exists) return;
-  const body = item.mediaType === 'movie'
-    ? `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<movie>\n  <title>${item.title}</title>\n  <year>${item.year}</year>\n  <tmdbid>${item.tmdbId}</tmdbid>\n</movie>\n`
-    : `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<tvshow>\n  <title>${item.title}</title>\n  <year>${item.year}</year>\n  <tmdbid>${item.tmdbId}</tmdbid>\n</tvshow>\n`;
-  await fs.writeFile(nfo, body, 'utf8');
-}
-
-export async function executeOrganizerBatch(batchId: string, settings: OrganizerSettings): Promise<{ executed: number; failed: number; skipped: number; results: string[] }> {
+export async function executeCloudOrganizerBatch(batchId: string, client: StorageClient): Promise<{ executed: number; failed: number; skipped: number; results: string[] }> {
   const batch = batches.get(batchId);
   if (!batch) throw new Error('整理预览已过期，请重新扫描');
+  if (!client.mkdir || !client.move || !client.rename || !client.remove) throw new Error('当前来源不支持整理');
   const results: string[] = [];
-  let executed = 0;
-  let failed = 0;
-  let skipped = 0;
-  const trashRoot = path.join(settings.libraryDir, '.trash');
-
+  let executed = 0, failed = 0, skipped = 0;
   for (const item of batch.items) {
-    if (item.action === 'skip' || item.action === 'error') {
-      skipped += 1;
-      continue;
-    }
+    if (item.action === 'skip' || item.action === 'error') { skipped += 1; continue; }
     try {
-      if (!within(settings.importDir, item.sourcePath)) throw new Error('源文件不在导入目录内');
-      if (!within(settings.libraryDir, item.destination)) throw new Error('目标文件不在媒体库目录内');
-      await fs.access(item.sourcePath);
-      await fs.mkdir(path.dirname(item.destination), { recursive: true });
-      if (item.existingPath && item.action === 'upgrade') {
-        await fs.mkdir(trashRoot, { recursive: true });
-        const trashName = `${Date.now()}-${path.basename(item.existingPath)}`;
-        await moveFile(item.existingPath, path.join(trashRoot, trashName)).catch(() => undefined);
+      await ensureDir(client, item.destinationDir);
+      if (item.action === 'upgrade') {
+        for (const oldPath of item.existingPaths) await client.remove(oldPath);
       }
-      if (settings.mode === 'hardlink') await fs.link(item.sourcePath, item.destination);
-      else if (settings.mode === 'copy') await fs.copyFile(item.sourcePath, item.destination);
-      else await moveFile(item.sourcePath, item.destination);
-      await writeNfo(item.destination, item).catch(() => undefined);
+      await client.rename(item.sourcePath, item.destinationName);
+      const renamedPath = cloudJoin(path.posix.dirname(item.sourcePath), item.destinationName);
+      await client.move(renamedPath, item.destinationDir);
       executed += 1;
-      results.push(`✓ ${item.relativePath} → ${path.relative(settings.libraryDir, item.destination)}`);
+      results.push(`✓ ${item.relativePath} → ${item.destination}`);
     } catch (error) {
       failed += 1;
       results.push(`✗ ${item.relativePath}: ${error instanceof Error ? error.message : String(error)}`);

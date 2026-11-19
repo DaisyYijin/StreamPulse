@@ -163,7 +163,75 @@ export class P123Client implements StorageClient {
       isDir: item.Type === 1,
       size: Number(item.Size || 0),
       modified: item.UpdateAt || '',
+      id: String(item.FileId),
+      parentId: id,
     }));
+  }
+
+  private async findItem(filePath: string, signal?: AbortSignal): Promise<P123File> {
+    const normalized = `/${filePath.replace(/^\/+|\/+$/g, '')}`;
+    const parent = normalized.slice(0, normalized.lastIndexOf('/')) || '/';
+    const name = normalized.slice(normalized.lastIndexOf('/') + 1);
+    const parentId = await this.dirId(parent, signal);
+    const item = (await this.listDir(parentId, signal)).find((entry) => entry.FileName === name);
+    if (!item) throw new P123Error(`123 云盘路径不存在：${normalized}`, 404);
+    return item;
+  }
+
+  async mkdir(dirPath: string, signal?: AbortSignal): Promise<void> {
+    const normalized = `/${dirPath.replace(/^\/+|\/+$/g, '')}`;
+    let current = '0';
+    let prefix = '';
+    for (const segment of normalized.split('/').filter(Boolean)) {
+      const existed = (await this.listDir(current, signal)).find((item) => item.Type === 1 && item.FileName === segment);
+      if (existed) {
+        current = String(existed.FileId);
+        prefix += `/${segment}`;
+        this.dirIds.set(prefix, current);
+        continue;
+      }
+      await this.request(`${API}/file/upload_request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          driveId: 0, etag: '', fileName: segment, parentFileId: current,
+          size: 0, type: 1,
+        }),
+      }, signal);
+      this.dirIds.delete(prefix);
+      const created = await this.dirId(`${prefix}/${segment}`, signal);
+      current = created;
+      prefix += `/${segment}`;
+      this.dirIds.set(prefix, current);
+    }
+  }
+
+  async move(sourcePath: string, destinationDir: string, signal?: AbortSignal): Promise<void> {
+    const item = await this.findItem(sourcePath, signal);
+    const parentId = await this.dirId(destinationDir, signal);
+    await this.request(`${API}/file/mod_pid`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fileIdList: [{ FileId: item.FileId }], parentFileId: parentId }),
+    }, signal);
+  }
+
+  async rename(sourcePath: string, newName: string, signal?: AbortSignal): Promise<void> {
+    const item = await this.findItem(sourcePath, signal);
+    await this.request(`${API}/file/rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ driveId: 0, fileId: item.FileId, fileName: newName }),
+    }, signal);
+  }
+
+  async remove(sourcePath: string, signal?: AbortSignal): Promise<void> {
+    const item = await this.findItem(sourcePath, signal);
+    await this.request(`${API}/file/trash`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ driveId: 0, operation: true, fileTrashInfoList: [item] }),
+    }, signal);
   }
 
   async getRawUrl(path: string, signal?: AbortSignal): Promise<string | null> {

@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.10.0] - 2026-11-19
+
+### Changed
+
+- Organizer now works **inside 115 / 123 cloud drives**, not on a local
+  `/import` directory.
+- Fields: source account, cloud inbox path, cloud library path.
+- 115/123 clients now support cloud mkdir, move, rename and recycle-bin delete.
+- Upgrade replaces the old cloud file by moving it to the provider recycle bin.
+- Removed the local `./import` and `./media` Docker volumes.
+
 ## [1.9.0] - 2026-11-19
 
 ### Added

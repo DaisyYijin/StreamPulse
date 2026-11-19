@@ -14,10 +14,10 @@ RUN npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim AS runtime
-ARG STREAMPULSE_VERSION=1.9.0
+ARG STREAMPULSE_VERSION=1.10.0
 
 LABEL org.opencontainers.image.title="StreamPulse" \
-      org.opencontainers.image.description="Turn OpenList cloud media into STRM libraries for Emby and Jellyfin." \
+      org.opencontainers.image.description="StreamPulse: 115 / 123 / OpenList STRM libraries for Emby and Jellyfin." \
       org.opencontainers.image.source="https://github.com/DaisyYijin/StreamPulse" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.version="${STREAMPULSE_VERSION}"
@@ -33,8 +33,6 @@ ENV NODE_ENV=production \
     CONFIG_DIR=/config \
     STATE_DIR=/data \
     OUTPUT_DIR=/strm \
-    IMPORT_DIR=/import \
-    MEDIA_DIR=/media \
     LOG_DIR=/logs \
     WEB_DIST=/app/dist/web \
     STREAMPULSE_VERSION=${STREAMPULSE_VERSION}
@@ -45,10 +43,10 @@ COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
-    && mkdir -p /config /data /strm /logs /import /media \
-    && chown -R node:node /config /data /strm /logs /import /media /app
+    && mkdir -p /config /data /strm /logs \
+    && chown -R node:node /config /data /strm /logs /app
 
-VOLUME ["/config", "/data", "/strm", "/logs", "/import", "/media"]
+VOLUME ["/config", "/data", "/strm", "/logs"]
 EXPOSE 1024 2048
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \

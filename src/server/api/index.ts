@@ -11,7 +11,7 @@ import type {
 import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
-import { executeOrganizerBatch, isTmdbError, scanOrganizer } from '../organizer.js';
+import { executeCloudOrganizerBatch, isTmdbError, scanCloudOrganizer } from '../organizer.js';
 import { pollQrLogin, startQrLogin, takeQrSession } from '../qr.js';
 import { PathSafetyError, normalizeExtensions, normalizeSourcePath, normalizeTargetPath, strmRelativePath } from '../core/paths.js';
 import { renderUrlTemplate, TemplateError, validateUrlTemplate } from '../core/template.js';
@@ -741,8 +741,14 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
   });
 
   router.post('/organize/scan', async (_req, res) => {
+    const organizer = store.snapshot.settings.organizer;
+    const source = store.source(organizer.sourceId);
+    if (!source) throw new HttpError(400, '请选择用于整理的 115/123 来源账号');
+    if (source.type !== '115' && source.type !== '123') {
+      throw new HttpError(400, '网盘整理仅支持 115 或 123 原生账号');
+    }
     try {
-      const batch = await scanOrganizer(store.snapshot.settings.organizer);
+      const batch = await scanCloudOrganizer(organizer, clientForSource(source));
       res.json(batch);
     } catch (error) {
       if (isTmdbError(error)) throw new HttpError(error.status === 401 ? 400 : error.status, error.message);
@@ -752,8 +758,11 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/organize/execute', async (req, res) => {
     const body = parseBody(organizeExecuteSchema, req.body);
+    const organizer = store.snapshot.settings.organizer;
+    const source = store.source(organizer.sourceId);
+    if (!source) throw new HttpError(400, '整理来源账号不存在');
     try {
-      const result = await executeOrganizerBatch(body.batchId, store.snapshot.settings.organizer);
+      const result = await executeCloudOrganizerBatch(body.batchId, clientForSource(source));
       res.json(result);
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : String(error));

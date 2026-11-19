@@ -75,7 +75,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 115 / 
 | **实时同步** | 每个媒体库可按 1/5/15/30/60 分钟轮询，也可继续使用 Cron。 |
 | **精准过滤** | 视频扩展名、最小文件大小、glob 排除规则，自动忽略隐藏目录与回收站。 |
 | **定时脉冲** | 每个媒体库独立的 5 段 Cron 表达式，按指定时区自动同步。 |
-| **TMDb 整理** | 本地下载目录按 TMDb 识别，支持自定义二级分类、洗版策略、移动/复制/硬链接。 |
+| **TMDb 网盘整理** | 115/123 网盘目录按 TMDb 识别，支持自定义二级分类、洗版策略、网盘内移动。 |
 | **失效清理** | 可选删除源文件已消失、且由 StreamPulse 记录的 `.strm`，不碰用户自己的文件。 |
 | **实时运行台** | SSE 实时日志、取消任务、统计扫描 / 生成 / 跳过 / 失败数量，历史记录可回看。 |
 | **手机适配** | 响应式布局、底部六栏导航、移动端任务卡片、全屏表单，支持添加到手机主屏幕。 |
@@ -87,7 +87,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 115 / 
 ### 1. 使用 Docker 运行
 
 ```bash
-mkdir -p streampulse/{config,data,strm,logs,import,media}
+mkdir -p streampulse/{config,data,strm,logs}
 cd streampulse
 
 docker run -d \
@@ -97,8 +97,6 @@ docker run -d \
   -p 2048:2048 \
   -v "$(pwd)/config:/config" \
   -v "$(pwd)/data:/data" \
-  -v "$(pwd)/import:/import" \
-  -v "$(pwd)/media:/media" \
   -v "$(pwd)/strm:/strm" \
   -v "$(pwd)/logs:/logs" \
   -e TZ=Asia/Shanghai \
@@ -131,8 +129,6 @@ docker compose logs -f
 ```text
 ./config → /config 设置、管理员账号、来源账号、媒体库定义
 ./data   → /data   运行历史、增量清单
-./import → /import 待整理的本地下载
-./media  → /media  整理后的本地媒体库
 ./strm   → /strm   STRM 文件
 ./logs   → /logs   应用日志
 ```
@@ -249,43 +245,37 @@ volumes:
 大型媒体库建议用 Cron（例如每天凌晨）而不是 1 分钟轮询，避免频繁调用 OpenList API。
 实时轮询和 Cron 可以同时开启，但同一个媒体库不会并发运行，后触发的任务会跳过。
 
-## 整理（TMDb / 二级分类 / 洗版）
+## 网盘整理（TMDb / 二级分类 / 洗版）
 
-**整理** 页面把本地下载目录整理到本地媒体库：
+**整理** 页面直接在 115 / 123 网盘内工作：
 
 ```text
-/import → TMDb 识别 → 二级分类 → 洗版 → /media
+网盘待整理目录 → TMDb 识别 → 二级分类 → 洗版 → 网盘媒体库目录
 ```
 
-需要额外挂载：
-
-```yaml
-volumes:
-  - ./import:/import
-  - ./media:/media
-```
+不需要本地 `/import` 或 `/media`。
 
 设置：
 
-- **TMDb API Key**：用于识别电影/剧集
-- **导入目录**：`/import`
-- **媒体库目录**：`/media`
-- **入库方式**：移动 / 复制 / 硬链接
-- **洗版策略**：
-  - 关闭：已存在就跳过
-  - 仅当新版本画质更好
-  - 总是替换
+- **来源账号**：选择一个 115 / 123 原生账号
+- **待整理目录**：例如 `/Inbox`
+- **媒体库根目录**：例如 `/Media`
+- **TMDb API Key**
 - **二级分类**：按 TMDb 类型、国家、语言、文件名关键词匹配
+- **洗版策略**：关闭 / 仅更好画质 / 总是替换
 
 整理结果：
 
 ```text
-/media/Movies/动作/电影名 (年份)/电影名 (年份) [2160p remux].mkv
-/media/TV/国产剧/剧名 (年份)/Season 01/剧名 - S01E01.mkv
+/Media/Movies/动作/电影名 (年份)/电影名 (年份).mkv
+/Media/TV/国产剧/剧名 (年份)/Season 01/剧名 - S01E01.mkv
 ```
 
-先点 **扫描预览**，确认 TMDb 匹配、分类和洗版动作，再执行。被洗版替换的旧文件会移到
-`/media/.trash/`，不会直接删除。
+先点 **扫描预览**，确认 TMDb 匹配、分类和洗版动作，再执行。替换旧版本时，旧文件会进入
+115/123 的回收站，不会直接永久删除。
+
+> 网盘整理只支持 115 和 123 原生账号；OpenList 来源仅用于 STRM 媒体库。
+
 
 ## 管理员账号
 
@@ -398,8 +388,6 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 | `HOST` | `0.0.0.0` | 监听地址。 |
 | `CONFIG_DIR` | `/config` | 设置、管理员账号、来源账号、媒体库定义。旧版 `DATA_DIR` 仍兼容。 |
 | `STATE_DIR` | `/data` | 运行历史、增量清单等运行状态。 |
-| `IMPORT_DIR` | `/import` | 整理功能的本地下载目录。 |
-| `MEDIA_DIR` | `/media` | 整理后的本地媒体库目录。 |
 | `OUTPUT_DIR` | `/strm` | STRM 输出根目录；也可在界面设置中修改（需绝对路径且可写）。 |
 | `LOG_DIR` | `/logs` | 应用日志目录，按天写入 `streampulse-YYYY-MM-DD.log`。 |
 | `LOG_RETENTION_DAYS` | `14` | 自动清理超过天数的旧日志。 |
@@ -409,14 +397,12 @@ Emby ◄───────┘  直接向网盘发起 Range 请求
 | `TRUST_PROXY` | `false` | 置于 HTTPS 反向代理后时设为 `true`，以正确签发 Secure Cookie。 |
 | `STREAMPULSE_VERSION` | 构建版本 | 覆盖界面展示的版本号，一般无需设置。 |
 
-六个目录的职责：
+四个目录的职责：
 
 | 宿主机 | 容器内 | 内容 |
 | --- | --- | --- |
 | `./config` | `/config` | `settings.json`、`accounts/`、`sources/`、`libraries/` |
 | `./data` | `/data` | `runs/`、`manifests/` |
-| `./import` | `/import` | 待整理的本地视频 |
-| `./media` | `/media` | 整理后的本地媒体库 |
 | `./strm` | `/strm` | 生成的 `.strm` 文件 |
 | `./logs` | `/logs` | 每日应用日志 |
 
@@ -556,7 +542,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.9.0
+ghcr.io/daisyyijin/streampulse:1.10.0
 ```
 
 ### 首次发布后设为公开

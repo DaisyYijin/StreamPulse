@@ -153,9 +153,10 @@ const organizeCategorySchema = z.object({
 });
 
 const organizerSchema = z.object({
-  importDir: z.string().trim().min(1).max(2000),
-  libraryDir: z.string().trim().min(1).max(2000),
-  mode: z.enum(['move', 'copy', 'hardlink']),
+  sourceId: z.string().trim().min(1, '请选择来源账号'),
+  sourcePath: z.string().trim().min(1).max(2000),
+  libraryPath: z.string().trim().min(1).max(2000),
+  mode: z.literal('move'),
   upgradeStrategy: z.enum(['off', 'better', 'always']),
   tmdbApiKey: z.string().trim().max(500),
   tmdbLanguage: z.string().trim().min(2).max(20),

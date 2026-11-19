@@ -196,7 +196,85 @@ export class P115Client implements StorageClient {
       isDir: !item.fid,
       size: Number(item.s || 0) || 0,
       modified: item.t || '',
+      id: item.fid || String(item.cid || ''),
+      parentId: String(item.pid || cid),
     })).filter((item) => item.name);
+  }
+
+  private async findItem(filePath: string, signal?: AbortSignal): Promise<P115Item> {
+    const normalized = `/${filePath.replace(/^\/+|\/+$/g, '')}`;
+    const parent = normalized.slice(0, normalized.lastIndexOf('/')) || '/';
+    const name = normalized.slice(normalized.lastIndexOf('/') + 1);
+    const parentId = await this.dirId(parent, signal);
+    const item = (await this.listDir(parentId, signal)).find((entry) => entry.n === name);
+    if (!item) throw new P115Error(`115 路径不存在：${normalized}`, 404);
+    return item;
+  }
+
+  private async entryId(item: P115Item): Promise<string> {
+    return String(item.fid || item.cid || '');
+  }
+
+  async mkdir(dirPath: string, signal?: AbortSignal): Promise<void> {
+    const normalized = `/${dirPath.replace(/^\/+|\/+$/g, '')}`;
+    let current = '0';
+    let prefix = '';
+    for (const segment of normalized.split('/').filter(Boolean)) {
+      const existed = (await this.listDir(current, signal)).find((item) => !item.fid && item.n === segment);
+      if (existed?.cid) {
+        current = String(existed.cid);
+        prefix += `/${segment}`;
+        this.dirIds.set(prefix, current);
+        continue;
+      }
+      const payload = await this.request(`${API}/files/add`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ pid: current, cname: segment }).toString(),
+      }, signal);
+      const cid = String(payload?.cid || payload?.data?.cid || '');
+      if (!cid) throw new P115Error('115 创建目录失败');
+      current = cid;
+      prefix += `/${segment}`;
+      this.dirIds.set(prefix, current);
+    }
+  }
+
+  async move(sourcePath: string, destinationDir: string, signal?: AbortSignal): Promise<void> {
+    const item = await this.findItem(sourcePath, signal);
+    const id = await this.entryId(item);
+    const parentId = await this.dirId(destinationDir, signal);
+    const form = new URLSearchParams({ pid: parentId, 'fid[0]': id });
+    await this.request(`${API}/files/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    }, signal);
+  }
+
+  async rename(sourcePath: string, newName: string, signal?: AbortSignal): Promise<void> {
+    const item = await this.findItem(sourcePath, signal);
+    const id = await this.entryId(item);
+    const form = new URLSearchParams({
+      fid: id,
+      file_name: newName,
+      [`files_new_name[${id}]`]: newName,
+    });
+    await this.request(`${API}/files/batch_rename`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    }, signal);
+  }
+
+  async remove(sourcePath: string, signal?: AbortSignal): Promise<void> {
+    const item = await this.findItem(sourcePath, signal);
+    const id = await this.entryId(item);
+    await this.request(`${API}/rb/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ 'fid[0]': id }).toString(),
+    }, signal);
   }
 
   async getRawUrl(path: string, signal?: AbortSignal): Promise<string | null> {
