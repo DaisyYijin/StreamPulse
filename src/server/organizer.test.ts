@@ -12,7 +12,10 @@ afterEach(() => {
 const config: OrganizerSettings = {
   sourceId: 'src_test',
   sourcePath: '/Inbox',
+  failedPath: '/Failed',
+  redundantPath: '/Redundant',
   libraryPath: '/Media',
+  libraryId: '',
   mode: 'move',
   upgradeStrategy: 'better',
   tmdbApiKey: 'test-key',
@@ -66,7 +69,7 @@ describe('cloud organizer', () => {
     expect(batch.items[0].category).toBe('动作');
     expect(batch.items[0].destination).toContain('/Media/Movies/动作/Inception (2010)');
 
-    const result = await executeCloudOrganizerBatch(batch.id, client);
+    const result = await executeCloudOrganizerBatch(batch.id, client, config);
     expect(result.executed).toBe(1);
     expect(client.renames[0]).toContain('Inception (2010)');
     expect(client.moves[0]).toContain('/Media/Movies/动作/Inception (2010)');

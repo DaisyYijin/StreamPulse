@@ -501,8 +501,11 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     const body = parseBody(libraryCreateSchema, req.body);
     if (!store.source(body.sourceId)) throw new HttpError(400, '选择的来源不存在');
     const validated = validateLibraryInput(body);
+    const explicitStreamBase = body.streamBaseUrl
+      ? normalizeStreamBaseUrl(body.streamBaseUrl)
+      : '';
     const deriveStreamBase =
-      !store.snapshot.settings.streamBaseUrl && body.urlTemplate.includes('{streamBase}')
+      !explicitStreamBase && !store.snapshot.settings.streamBaseUrl && body.urlTemplate.includes('{streamBase}')
         ? requestStreamBase(req)
         : '';
     const now = nowIso();
@@ -512,6 +515,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       sourceId: body.sourceId,
       ...validated,
       urlTemplate: body.urlTemplate,
+      streamBaseUrl: explicitStreamBase || deriveStreamBase,
       excludePatterns: body.excludePatterns ?? [],
       minSizeMB: body.minSizeMB ?? 0,
       enabled: body.enabled ?? true,
@@ -551,6 +555,12 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       sourcePath: body.sourcePath ?? library.sourcePath,
       targetPath: body.targetPath ?? library.targetPath,
       urlTemplate: body.urlTemplate ?? library.urlTemplate,
+      streamBaseUrl:
+        body.streamBaseUrl !== undefined
+          ? body.streamBaseUrl
+            ? normalizeStreamBaseUrl(body.streamBaseUrl)
+            : ''
+          : library.streamBaseUrl,
       extensions: body.extensions ?? library.extensions,
       excludePatterns: body.excludePatterns ?? library.excludePatterns,
       minSizeMB: body.minSizeMB ?? library.minSizeMB,
@@ -613,7 +623,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     if (!source) throw new HttpError(400, '媒体库关联的来源已被删除');
     try {
       validateUrlTemplate(library.urlTemplate);
-      const streamBase = store.snapshot.settings.streamBaseUrl || requestStreamBase(req);
+      const streamBase = library.streamBaseUrl || store.snapshot.settings.streamBaseUrl || requestStreamBase(req);
       const scan = await scanLibrary(clientForSource(source), library, {
         signal: AbortSignal.timeout(60_000),
       });
@@ -770,8 +780,18 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     const source = store.source(organizer.sourceId);
     if (!source) throw new HttpError(400, '整理来源账号不存在');
     try {
-      const result = await executeCloudOrganizerBatch(body.batchId, clientForSource(source));
-      res.json(result);
+      const result = await executeCloudOrganizerBatch(body.batchId, clientForSource(source), organizer);
+      let runId: string | null = null;
+      let syncError = '';
+      if (organizer.libraryId) {
+        try {
+          const run = await runner.start(organizer.libraryId, 'manual');
+          runId = run.id;
+        } catch (error) {
+          syncError = error instanceof Error ? error.message : String(error);
+        }
+      }
+      res.json({ ...result, runId, syncError });
     } catch (error) {
       throw new HttpError(400, error instanceof Error ? error.message : String(error));
     }

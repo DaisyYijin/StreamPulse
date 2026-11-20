@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_URL_TEMPLATE, type Settings } from '../shared/types.js';
+import { DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_URL_TEMPLATE, type Settings } from '../shared/types.js';
 import { config } from './config.js';
 import {
   makeStreamKey,
@@ -45,13 +45,16 @@ function createDefaultDatabase(): Database {
       runRetention: config.runRetentionDefault,
       organizer: {
         sourceId: '',
-        sourcePath: '/',
+        sourcePath: '/Inbox',
+        failedPath: '/Failed',
+        redundantPath: '/Redundant',
         libraryPath: '/Media',
+        libraryId: '',
         mode: 'move',
         upgradeStrategy: 'better',
         tmdbApiKey: '',
         tmdbLanguage: 'zh-CN',
-        categories: [],
+        categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       },
     },
     createdAt: now,
@@ -89,6 +92,7 @@ function normalizeDatabase(raw: unknown): Database {
     libraries: (Array.isArray(input.libraries) ? input.libraries.filter(Boolean) : []).map(
       (library) => ({
         ...library,
+        streamBaseUrl: (library as LibraryRecord).streamBaseUrl || '',
         watchInterval:
           typeof (library as LibraryRecord).watchInterval === 'number'
             ? (library as LibraryRecord).watchInterval
@@ -104,7 +108,7 @@ function normalizeDatabase(raw: unknown): Database {
       organizer: {
         ...base.settings.organizer,
         ...(input.settings?.organizer ?? {}),
-        categories: Array.isArray(input.settings?.organizer?.categories)
+        categories: Array.isArray(input.settings?.organizer?.categories) && input.settings.organizer.categories.length
           ? input.settings.organizer.categories
           : base.settings.organizer.categories,
       },
@@ -227,7 +231,7 @@ export class Store {
       ),
     ))
       .filter((library): library is LibraryRecord => Boolean(library?.id))
-      .map((library) => ({ ...library, watchInterval: library.watchInterval ?? 0 }));
+      .map((library) => ({ ...library, streamBaseUrl: library.streamBaseUrl ?? '', watchInterval: library.watchInterval ?? 0 }));
     const runs = (await Promise.all(
       (await listJson(this.runsDir)).map((file) =>
         readJson<Database['runs'][number]>(path.join(this.runsDir, file)),
@@ -252,7 +256,7 @@ export class Store {
         organizer: {
           ...base.settings.organizer,
           ...(settings.settings?.organizer ?? {}),
-          categories: Array.isArray(settings.settings?.organizer?.categories)
+          categories: Array.isArray(settings.settings?.organizer?.categories) && settings.settings.organizer.categories.length
             ? settings.settings.organizer.categories
             : base.settings.organizer.categories,
         },

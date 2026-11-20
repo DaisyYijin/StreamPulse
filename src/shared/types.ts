@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.13.0';
+export const APP_VERSION = '1.14.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -83,6 +83,7 @@ export interface Library {
   sourcePath: string;
   targetPath: string;
   urlTemplate: string;
+  streamBaseUrl: string;
   extensions: string[];
   excludePatterns: string[];
   minSizeMB: number;
@@ -160,13 +161,30 @@ export interface OrganizeCategory {
 export interface OrganizerSettings {
   sourceId: string;
   sourcePath: string;
+  failedPath: string;
+  redundantPath: string;
   libraryPath: string;
+  libraryId: string;
   mode: 'move';
   upgradeStrategy: UpgradeStrategy;
   tmdbApiKey: string;
   tmdbLanguage: string;
   categories: OrganizeCategory[];
 }
+
+export const DEFAULT_ORGANIZE_CATEGORIES: OrganizeCategory[] = [
+  { id: 'default_action', name: '动作', mediaType: 'movie', genres: ['Action', 'Adventure'], countries: [], languages: [], keywords: [] },
+  { id: 'default_scifi', name: '科幻', mediaType: 'movie', genres: ['Science Fiction'], countries: [], languages: [], keywords: [] },
+  { id: 'default_animation', name: '动画', mediaType: 'movie', genres: ['Animation'], countries: [], languages: [], keywords: [] },
+  { id: 'default_drama', name: '剧情', mediaType: 'movie', genres: ['Drama'], countries: [], languages: [], keywords: [] },
+  { id: 'default_comedy', name: '喜剧', mediaType: 'movie', genres: ['Comedy'], countries: [], languages: [], keywords: [] },
+  { id: 'default_documentary', name: '纪录片', mediaType: 'movie', genres: ['Documentary'], countries: [], languages: [], keywords: [] },
+  { id: 'default_cn_tv', name: '国产剧', mediaType: 'tv', genres: [], countries: ['CN'], languages: [], keywords: [] },
+  { id: 'default_us_tv', name: '美剧', mediaType: 'tv', genres: [], countries: ['US'], languages: [], keywords: [] },
+  { id: 'default_jp_tv', name: '日剧', mediaType: 'tv', genres: [], countries: ['JP'], languages: [], keywords: [] },
+  { id: 'default_kr_tv', name: '韩剧', mediaType: 'tv', genres: [], countries: ['KR'], languages: [], keywords: [] },
+  { id: 'default_anime_tv', name: '动漫', mediaType: 'tv', genres: ['Animation', 'Sci-Fi & Fantasy'], countries: [], languages: [], keywords: [] },
+];
 
 export interface Settings {
   outputDir: string;
@@ -276,6 +294,7 @@ export interface LibraryInput {
   sourcePath: string;
   targetPath: string;
   urlTemplate: string;
+  streamBaseUrl: string;
   extensions: string[];
   excludePatterns: string[];
   minSizeMB: number;

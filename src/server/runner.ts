@@ -269,14 +269,14 @@ export class RunManager {
       if (!source) throw new Error('媒体库关联的来源已被删除');
       const settings = this.store.snapshot.settings;
       const outputRoot = settings.outputDir;
-      if (library.urlTemplate.includes('{streamBase}') && !settings.streamBaseUrl) {
+      if (library.urlTemplate.includes('{streamBase}') && !(library.streamBaseUrl || settings.streamBaseUrl)) {
         throw new Error('尚未配置 302 服务地址，请到设置中填写 302 服务公开地址');
       }
       await fs.mkdir(outputRoot, { recursive: true });
 
       this.log(run, 'info', `来源：${source.name} · 路径：${library.sourcePath}`);
       if (library.urlTemplate.includes('{streamToken}')) {
-        this.log(run, 'info', `STRM 模式：302 跳转（通过 ${settings.streamBaseUrl}）`);
+        this.log(run, 'info', `STRM 模式：302 跳转（通过 ${library.streamBaseUrl || settings.streamBaseUrl}）`);
       }
       const client = clientForSource(source);
       run.message = '正在扫描文件';
@@ -327,7 +327,7 @@ export class RunManager {
             path: file.path,
             file: file.name,
             ext: file.extension,
-            streamBase: settings.streamBaseUrl,
+            streamBase: library.streamBaseUrl || settings.streamBaseUrl,
             streamToken: source.streamKey,
           });
           strmFile = strmRelativePath(library.targetPath, file.relative);

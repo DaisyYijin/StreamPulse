@@ -368,6 +368,7 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
         library={editing}
         sources={sources}
         defaultUrlTemplate={settings?.defaultUrlTemplate ?? DEFAULT_URL_TEMPLATE}
+        defaultStreamBaseUrl={settings?.streamBaseUrl ?? ''}
         outputDir={settings?.outputDir ?? '/strm'}
         onClose={() => setModalOpen(false)}
         onSaved={(saved) => {

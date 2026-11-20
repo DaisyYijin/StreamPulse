@@ -258,14 +258,40 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
   return batch;
 }
 
-export async function executeCloudOrganizerBatch(batchId: string, client: StorageClient): Promise<{ executed: number; failed: number; skipped: number; results: string[] }> {
+export async function executeCloudOrganizerBatch(batchId: string, client: StorageClient, settings: OrganizerSettings): Promise<{ executed: number; failed: number; skipped: number; results: string[] }> {
   const batch = batches.get(batchId);
   if (!batch) throw new Error('整理预览已过期，请重新扫描');
   if (!client.mkdir || !client.move || !client.rename || !client.remove) throw new Error('当前来源不支持整理');
   const results: string[] = [];
   let executed = 0, failed = 0, skipped = 0;
   for (const item of batch.items) {
-    if (item.action === 'skip' || item.action === 'error') { skipped += 1; continue; }
+    if (item.action === 'error') {
+      try {
+        if (!settings.failedPath) throw new Error('未配置识别失败目录');
+        await ensureDir(client, settings.failedPath);
+        await client.move(item.sourcePath, settings.failedPath);
+        failed += 1;
+        results.push(`! ${item.relativePath} → 识别失败目录：${item.reason}`);
+      } catch (error) {
+        failed += 1;
+        results.push(`✗ ${item.relativePath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      continue;
+    }
+    if (item.action === 'skip') {
+      try {
+        if (settings.redundantPath) {
+          await ensureDir(client, settings.redundantPath);
+          await client.move(item.sourcePath, settings.redundantPath);
+        }
+        skipped += 1;
+        results.push(`- ${item.relativePath} → 冗余文件目录`);
+      } catch (error) {
+        failed += 1;
+        results.push(`✗ ${item.relativePath}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+      continue;
+    }
     try {
       await ensureDir(client, item.destinationDir);
       if (item.action === 'upgrade') {

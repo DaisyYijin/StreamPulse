@@ -1,9 +1,9 @@
-import { ArrowRight, FileCode2, FolderInput, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
+import { ArrowRight, FileCode2, FolderInput, HelpCircle, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import type { OrganizeCategory, OrganizerSettings, Settings, Source } from '../../shared/types';
+import { DEFAULT_ORGANIZE_CATEGORIES, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source } from '../../shared/types';
 import { api } from '../api';
-import { Button, Field, Input, Select, toast } from '../components/ui';
+import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 
 type Tab = 'settings' | 'categories' | 'upgrade' | 'results';
 
@@ -25,12 +25,15 @@ interface Batch { id: string; items: OrganizeItem[] }
 const EMPTY: OrganizerSettings = {
   sourceId: '',
   sourcePath: '/Inbox',
+  failedPath: '/Failed',
+  redundantPath: '/Redundant',
   libraryPath: '/Media',
+  libraryId: '',
   mode: 'move',
   upgradeStrategy: 'better',
   tmdbApiKey: '',
   tmdbLanguage: 'zh-CN',
-  categories: [],
+  categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
 };
 
 const ACTION_LABEL: Record<OrganizeItem['action'], string> = {
@@ -106,11 +109,13 @@ export function OrganizePage() {
   const [tab, setTab] = useState<Tab>('settings');
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
+  const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [batch, setBatch] = useState<Batch | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
   const [upgradeYaml, setUpgradeYaml] = useState(toUpgradeYaml(EMPTY.upgradeStrategy));
   const [categoryError, setCategoryError] = useState('');
@@ -120,12 +125,18 @@ export function OrganizePage() {
     void Promise.all([
       api.get<{ settings: Settings }>('/api/settings'),
       api.get<Source[]>('/api/sources'),
-    ]).then(([data, list]) => {
-      const organizer = { ...EMPTY, ...(data.settings.organizer ?? {}), categories: data.settings.organizer?.categories ?? [] };
+      api.get<Library[]>('/api/libraries'),
+    ]).then(([data, list, libraryList]) => {
+      const organizer = {
+        ...EMPTY,
+        ...(data.settings.organizer ?? {}),
+        categories: data.settings.organizer?.categories?.length ? data.settings.organizer.categories : DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
+      };
       setForm(organizer);
       setCategoryYaml(toCategoryYaml(organizer.categories));
       setUpgradeYaml(toUpgradeYaml(organizer.upgradeStrategy));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
+      setLibraries(libraryList);
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
       .finally(() => setLoading(false));
   }, []);
@@ -194,8 +205,9 @@ export function OrganizePage() {
     if (!batch) return;
     setExecuting(true);
     try {
-      const result = await api.post<{ executed: number; failed: number; skipped: number }>('/api/organize/execute', { batchId: batch.id });
-      toast.success(`整理完成：执行 ${result.executed}，跳过 ${result.skipped}，失败 ${result.failed}`);
+      const result = await api.post<{ executed: number; failed: number; skipped: number; runId: string | null; syncError: string }>('/api/organize/execute', { batchId: batch.id });
+      toast.success(`整理完成：执行 ${result.executed}，跳过 ${result.skipped}，失败 ${result.failed}${result.runId ? '，已触发 STRM 同步' : ''}`);
+      if (result.syncError) toast.error(`整理完成，但同步媒体库失败：${result.syncError}`);
       setBatch(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '整理失败');
@@ -213,6 +225,7 @@ export function OrganizePage() {
           <p>115 / 123 网盘目录 → TMDb 识别 → 二级分类 → 洗版 → 网盘媒体库。</p>
         </div>
         <div className="page-head-actions">
+          <Button variant="ghost" onClick={() => setHelpOpen(true)} icon={<HelpCircle size={16} />}>规则说明</Button>
           <Button variant="ghost" onClick={() => void save().catch(() => undefined)} loading={saving} icon={<WandSparkles size={16} />}>保存设置</Button>
           <Button variant="primary" onClick={() => void scan()} loading={scanning} icon={<ScanLine size={16} />}>扫描预览</Button>
         </div>
@@ -236,7 +249,15 @@ export function OrganizePage() {
               </Select>
             </Field>
             <Field label="网盘待整理目录" hint="例如 /Inbox 或 /下载"><Input value={form.sourcePath} onChange={(event) => update('sourcePath', event.target.value)} placeholder="/Inbox" /></Field>
+            <Field label="识别失败目录" hint="TMDb 识别失败的视频会移到这里"><Input value={form.failedPath} onChange={(event) => update('failedPath', event.target.value)} placeholder="/Failed" /></Field>
+            <Field label="冗余文件目录" hint="目标已有更好版本时，源文件会移到这里"><Input value={form.redundantPath} onChange={(event) => update('redundantPath', event.target.value)} placeholder="/Redundant" /></Field>
             <Field label="网盘媒体库根目录" hint="例如 /Media；分类会建在它下面"><Input value={form.libraryPath} onChange={(event) => update('libraryPath', event.target.value)} placeholder="/Media" /></Field>
+            <Field label="整理后同步媒体库" hint="整理成功后自动触发这个媒体库生成 STRM">
+              <Select value={form.libraryId} onChange={(event) => update('libraryId', event.target.value)}>
+                <option value="">暂不自动同步</option>
+                {libraries.filter((library) => !form.sourceId || library.sourceId === form.sourceId).map((library) => <option key={library.id} value={library.id}>{library.name}</option>)}
+              </Select>
+            </Field>
             <Field label="TMDb API Key" hint="只保存在 /config/settings.json"><Input type="password" value={form.tmdbApiKey} onChange={(event) => update('tmdbApiKey', event.target.value)} placeholder="TMDb API Key" autoComplete="off" /></Field>
             <Field label="TMDb 语言"><Input value={form.tmdbLanguage} onChange={(event) => update('tmdbLanguage', event.target.value)} placeholder="zh-CN" /></Field>
           </div>
@@ -326,6 +347,40 @@ export function OrganizePage() {
           ) : null}
         </div>
       ) : null}
+
+      <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="整理规则说明" description="二级分类、洗版策略和目录规范。" footer={<Button variant="secondary" onClick={() => setHelpOpen(false)}>关闭</Button>}>
+        <div className="rule-help">
+          <section>
+            <h3>目录职责</h3>
+            <ul>
+              <li><strong>待整理目录</strong>：扫描视频的来源，例如 /Inbox。</li>
+              <li><strong>识别失败目录</strong>：TMDb 找不到或解析失败的视频移到这里。</li>
+              <li><strong>冗余文件目录</strong>：目标已有更好版本时，源文件移到这里。</li>
+              <li><strong>媒体库根目录</strong>：分类和媒体目录会建在它下面，例如 /Media。</li>
+            </ul>
+          </section>
+          <section>
+            <h3>二级分类 YAML</h3>
+            <pre>{`categories:
+  - name: 动作
+    mediaType: movie
+    genres: [Action, Adventure]
+  - name: 国产剧
+    mediaType: tv
+    countries: [CN]`}</pre>
+            <p>字段：<code>name</code>、<code>mediaType</code>（movie/tv）、<code>genres</code>、<code>countries</code>、<code>languages</code>、<code>keywords</code>。同一分类内多个条件之间是 AND；数组内多个值之间是 OR。从上到下匹配，第一个符合条件的分类生效。</p>
+          </section>
+          <section>
+            <h3>洗版策略 YAML</h3>
+            <pre>{`strategy: better`}</pre>
+            <p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。画质比较顺序：分辨率 → 片源 → HDR → 编码。</p>
+          </section>
+          <section>
+            <h3>媒体库同步</h3>
+            <p>整理执行成功后，如果选择了“整理后同步媒体库”，会自动触发该媒体库生成/更新 STRM。旧版本文件会进入 115/123 回收站。</p>
+          </section>
+        </div>
+      </Modal>
     </section>
   );
 }

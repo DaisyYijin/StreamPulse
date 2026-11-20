@@ -32,5 +32,5 @@ export const config = {
   runRetentionDefault: 80,
   logRetentionDays: intEnv(process.env.LOG_RETENTION_DAYS, 14),
   scanFileLimit: 250_000,
-  version: process.env.STREAMPULSE_VERSION || '1.13.0',
+  version: process.env.STREAMPULSE_VERSION || '1.14.0',
 };

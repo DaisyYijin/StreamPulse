@@ -26,6 +26,7 @@ export function LibraryModal({
   library,
   sources,
   defaultUrlTemplate,
+  defaultStreamBaseUrl,
   outputDir,
   onClose,
   onSaved,
@@ -35,6 +36,7 @@ export function LibraryModal({
   library: Library | null;
   sources: Source[];
   defaultUrlTemplate: string;
+  defaultStreamBaseUrl: string;
   outputDir: string;
   onClose: () => void;
   onSaved: (library: Library) => void;
@@ -45,6 +47,7 @@ export function LibraryModal({
   const [sourcePath, setSourcePath] = useState('/');
   const [targetPath, setTargetPath] = useState('');
   const [urlTemplate, setUrlTemplate] = useState(defaultUrlTemplate);
+  const [streamBaseUrl, setStreamBaseUrl] = useState(defaultStreamBaseUrl);
   const [extensions, setExtensions] = useState(DEFAULT_EXTENSIONS.join(', '));
   const [excludePatterns, setExcludePatterns] = useState('');
   const [minSizeMB, setMinSizeMB] = useState('0');
@@ -66,6 +69,7 @@ export function LibraryModal({
     setSourcePath(library?.sourcePath ?? '/');
     setTargetPath(library?.targetPath ?? '');
     setUrlTemplate(library?.urlTemplate ?? defaultUrlTemplate);
+    setStreamBaseUrl(library?.streamBaseUrl || defaultStreamBaseUrl);
     setExtensions((library?.extensions ?? DEFAULT_EXTENSIONS).join(', '));
     setExcludePatterns((library?.excludePatterns ?? []).join('\n'));
     setMinSizeMB(String(library?.minSizeMB ?? 0));
@@ -79,7 +83,7 @@ export function LibraryModal({
     setScheduleCustom(Boolean(library?.schedule && !known));
     setError('');
     setPickerOpen(false);
-  }, [open, library, sources, defaultUrlTemplate]);
+  }, [open, library, sources, defaultUrlTemplate, defaultStreamBaseUrl]);
 
   const selectedSource = sources.find((source) => source.id === sourceId);
 
@@ -96,6 +100,10 @@ export function LibraryModal({
     }
     if (!targetPath.trim()) {
       setError('请填写输出目录');
+      return;
+    }
+    if (!/^https?:\/\//.test(streamBaseUrl.trim())) {
+      setError('请填写 STRM 生成地址，例如 http://192.168.1.10:2048');
       return;
     }
     if (!urlTemplate.includes('{encodedPath}') && !urlTemplate.includes('{path}')) {
@@ -123,6 +131,7 @@ export function LibraryModal({
         sourcePath: sourcePath.trim() || '/',
         targetPath: targetPath.trim(),
         urlTemplate: urlTemplate.trim(),
+        streamBaseUrl: streamBaseUrl.trim(),
         extensions: parsedExtensions,
         excludePatterns: excludePatterns
           .split('\n')
@@ -276,6 +285,20 @@ export function LibraryModal({
                 <p>默认使用 302 服务：Emby 请求 2048 端口，再跳转到网盘直链。</p>
               </div>
             </div>
+            <Field
+              label="STRM 生成地址"
+              hint="Emby 实际访问的 302 地址，必须填写，例如 http://192.168.1.10:2048"
+            >
+              <div className="input-with-icon">
+                <Link2 size={16} />
+                <Input
+                  value={streamBaseUrl}
+                  onChange={(event) => setStreamBaseUrl(event.target.value)}
+                  placeholder="http://192.168.1.10:2048"
+                  spellCheck={false}
+                />
+              </div>
+            </Field>
             <Field
               label="URL 模板"
               hint="点击变量可追加到模板末尾。默认走 StreamPulse 的 302 跳转。"

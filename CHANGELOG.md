@@ -2,6 +2,20 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.14.0] - 2026-11-20
+
+### Added
+
+- Per-library **STRM 生成地址** (`streamBaseUrl`), required when creating or
+  editing a library; used in generated STRM and previews.
+- Organizer directories: failed-recognition and redundant-file paths.
+- Failed/redundant files are moved to those cloud directories.
+- After organize, optionally trigger a selected media library immediately to
+  generate/update STRM.
+- Default secondary categories and default `better` upgrade strategy.
+- “规则说明” button documenting YAML schema, matching semantics and directory
+  roles.
+
 ## [1.13.0] - 2026-11-20
 
 ### Added
