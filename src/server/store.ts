@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, type Settings } from '../shared/types.js';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, type Settings, type WashConfig } from '../shared/types.js';
 import { config } from './config.js';
 import {
   makeStreamKey,
@@ -85,6 +85,34 @@ function createDefaultDatabase(): Database {
   };
 }
 
+function normalizeWashing(value: unknown, fallback: WashConfig): WashConfig {
+  const input = (value && typeof value === 'object' ? value : {}) as Partial<WashConfig>;
+  const modes = new Set(['off', 'better', 'always', 'max_size', 'min_size', 'weighted']);
+  const number = (candidate: unknown, base: number, min = 0, max = 10_000) =>
+    typeof candidate === 'number' && Number.isFinite(candidate) ? Math.min(max, Math.max(min, candidate)) : base;
+  const weights = (input.weights && typeof input.weights === 'object' ? input.weights : {}) as Partial<WashConfig['weights']>;
+  return {
+    mode: modes.has(String(input.mode)) ? input.mode as WashConfig['mode'] : fallback.mode,
+    minGap: number(input.minGap, fallback.minGap),
+    minCoverage: number(input.minCoverage, fallback.minCoverage, 0, 1),
+    tie: input.tie === 'replace' ? 'replace' : 'keep',
+    weights: {
+      resolution: number(weights.resolution, fallback.weights.resolution),
+      source: number(weights.source, fallback.weights.source),
+      hdr: number(weights.hdr, fallback.weights.hdr),
+      codec: number(weights.codec, fallback.weights.codec),
+      size: number(weights.size, fallback.weights.size),
+    },
+    must: Array.isArray(input.must) ? input.must.map(String).filter(Boolean) : [],
+    exclude: Array.isArray(input.exclude) ? input.exclude.map(String).filter(Boolean) : [],
+  };
+}
+
+function normalizeCategories(value: unknown, fallback: Settings['organizer']['categories']): Settings['organizer']['categories'] {
+  if (!Array.isArray(value) || value.length === 0) return fallback;
+  return value.filter(Boolean) as Settings['organizer']['categories'];
+}
+
 function normalizeDatabase(raw: unknown): Database {
   const base = createDefaultDatabase();
   if (!raw || typeof raw !== 'object') return base;
@@ -138,9 +166,8 @@ function normalizeDatabase(raw: unknown): Database {
       organizer: {
         ...base.settings.organizer,
         ...(input.settings?.organizer ?? {}),
-        categories: Array.isArray(input.settings?.organizer?.categories) && input.settings.organizer.categories.length
-          ? input.settings.organizer.categories
-          : base.settings.organizer.categories,
+        washing: normalizeWashing(input.settings?.organizer?.washing, base.settings.organizer.washing),
+        categories: normalizeCategories(input.settings?.organizer?.categories, base.settings.organizer.categories),
       },
     },
     createdAt: input.createdAt || base.createdAt,
@@ -291,9 +318,8 @@ export class Store {
         organizer: {
           ...base.settings.organizer,
           ...(settings.settings?.organizer ?? {}),
-          categories: Array.isArray(settings.settings?.organizer?.categories) && settings.settings.organizer.categories.length
-            ? settings.settings.organizer.categories
-            : base.settings.organizer.categories,
+          washing: normalizeWashing(settings.settings?.organizer?.washing, base.settings.organizer.washing),
+          categories: normalizeCategories(settings.settings?.organizer?.categories, base.settings.organizer.categories),
         },
       },
       createdAt: settings.createdAt || base.createdAt,

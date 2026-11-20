@@ -49,3 +49,45 @@
 - 默认白天模式，右上角可切换夜间。
 - 更新镜像后强制刷新浏览器缓存。
 - 如果仍有局部深色，请提交页面名/截图。
+
+
+## 二级分类/洗版策略为什么没有默认值
+
+这两个配置保存在：
+
+```text
+/config/settings.json
+```
+
+的 `settings.organizer` 下：
+
+```json
+{
+  "settings": {
+    "organizer": {
+      "categories": [],
+      "washing": { "mode": "better" }
+    }
+  }
+}
+```
+
+规则：
+
+- 字段缺失或 `categories` 为空时，后端会补默认值。
+- 已有配置会优先恢复你保存的值，不会每次重新填默认。
+- 洗版 `mode: off` 是有效的已保存配置，不会被强制改回默认。
+- 旧版本/空对象可能导致 YAML 空白，1.22.0 起会自动规范化，也可以在编辑器点“恢复默认”。
+
+如果重新部署后完全看不到默认值，检查：
+
+1. `./config:/config` 是否仍然挂载。
+2. 是否在另一个目录执行了 Compose，导致用了新的 `./config`。
+3. 浏览器是否缓存了旧前端，强制刷新。
+4. 镜像是否为 1.22.0 或更高。
+
+查看当前保存值（不输出密钥）：
+
+```bash
+docker compose exec streampulse node -e "const s=require('/config/settings.json'); const o=s.settings.organizer||{}; console.log({categories:o.categories?.length, washing:o.washing?.mode})"
+```

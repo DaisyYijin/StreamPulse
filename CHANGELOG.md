@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.22.0] - 2026-11-20
+
+### Fixed
+
+- Organizer defaults are now normalized when saved settings are missing or
+  contain an empty/partial `washing` object.
+- Added “恢复默认” buttons to the category and wash YAML editors.
+
 ## [1.21.0] - 2026-11-20
 
 ### Added

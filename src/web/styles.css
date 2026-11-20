@@ -5969,3 +5969,19 @@ html[data-theme='light'] .integration-block {
 html[data-theme='light'] .emby-library-panel {
   background: #f8faf6;
 }
+
+.yaml-editor-head .yaml-reset {
+  margin-left: auto;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.yaml-editor-head .yaml-reset:hover {
+  color: var(--lime);
+  border-color: var(--lime-dim);
+}

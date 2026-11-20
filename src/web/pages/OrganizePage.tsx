@@ -201,6 +201,22 @@ export function OrganizePage() {
     }
   };
 
+  const resetCategories = () => {
+    const categories = DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category }));
+    setForm((previous) => ({ ...previous, categories }));
+    setCategoryYaml(toCategoryYaml(categories));
+    setCategoryError('');
+    toast.success('已恢复默认二级分类，保存后生效');
+  };
+
+  const resetWashing = () => {
+    const washing = EMPTY.washing;
+    setForm((previous) => ({ ...previous, washing }));
+    setWashYaml(toWashYaml(washing));
+    setWashError('');
+    toast.success('已恢复默认洗版策略，保存后生效');
+  };
+
   const changeWashYaml = (text: string) => {
     setWashYaml(text);
     try {
@@ -358,7 +374,7 @@ export function OrganizePage() {
           </div>
           <div className="yaml-layout">
             <div className="yaml-editor-wrap">
-              <div className="yaml-editor-head"><FileCode2 size={14} />categories.yaml</div>
+              <div className="yaml-editor-head"><FileCode2 size={14} />categories.yaml <button type="button" className="yaml-reset" onClick={resetCategories}>恢复默认</button></div>
               <textarea className="yaml-editor" value={categoryYaml} onChange={(event) => changeCategoryYaml(event.target.value)} spellCheck={false} />
               {categoryError ? <div className="yaml-error">{categoryError}</div> : <div className="yaml-ok">YAML 有效 · {form.categories.length} 个分类</div>}
             </div>
@@ -390,7 +406,7 @@ export function OrganizePage() {
           <div className="panel-head"><div><h2>洗版策略 YAML</h2><p>支持权重比较；右侧可以输入现有/候选文件名做模拟。</p></div></div>
           <div className="yaml-layout">
             <div className="yaml-editor-wrap">
-              <div className="yaml-editor-head"><FileCode2 size={14} />washing.yaml</div>
+              <div className="yaml-editor-head"><FileCode2 size={14} />washing.yaml <button type="button" className="yaml-reset" onClick={resetWashing}>恢复默认</button></div>
               <textarea className="yaml-editor" value={washYaml} onChange={(event) => changeWashYaml(event.target.value)} spellCheck={false} />
               {washError ? <div className="yaml-error">{washError}</div> : <div className="yaml-ok">YAML 有效</div>}
             </div>
