@@ -20,6 +20,15 @@ and StreamPulse does not call OpenList for native 115/123 accounts.
   special policy notice are retained here by reference:
   https://github.com/SheltonZhu/115driver/blob/master/LICENSE
 
+### p115client
+
+- Project: https://github.com/ChenyangGao/p115client
+- Documentation: https://p115client.readthedocs.io/
+- License: MIT (Copyright (c) 2024 ChenyangGao)
+- Used as a protocol reference for 115 life events, share handling, QR login
+  behavior and optional Open API concepts. No Python package is bundled or
+  executed at runtime.
+
 ### OpenList
 
 - Project: https://github.com/OpenListTeam/OpenList
