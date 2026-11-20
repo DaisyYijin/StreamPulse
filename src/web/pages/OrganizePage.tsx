@@ -1,5 +1,6 @@
-import { ArrowRight, FolderInput, Plus, ScanLine, SlidersHorizontal, Tags, Trash2, WandSparkles } from 'lucide-react';
+import { ArrowRight, FileCode2, FolderInput, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import type { OrganizeCategory, OrganizerSettings, Settings, Source } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Select, toast } from '../components/ui';
@@ -36,6 +37,71 @@ const ACTION_LABEL: Record<OrganizeItem['action'], string> = {
   create: '新增', upgrade: '洗版', skip: '跳过', error: '失败',
 };
 
+function toCategoryYaml(categories: OrganizeCategory[]): string {
+  return stringifyYaml({ categories: categories.map(({ id: _id, ...rest }) => rest) }, { lineWidth: 0 });
+}
+
+function fromCategoryYaml(text: string): OrganizeCategory[] {
+  const document = parseYaml(text) as { categories?: unknown } | null;
+  if (!document || !Array.isArray(document.categories)) throw new Error('YAML 需要 categories 列表');
+  if (document.categories.length === 0) throw new Error('至少需要一个分类');
+  return document.categories.map((raw, index) => {
+    const item = (raw ?? {}) as Record<string, unknown>;
+    const name = String(item.name ?? '').trim();
+    if (!name) throw new Error(`第 ${index + 1} 个分类缺少 name`);
+    const mediaType = item.mediaType === 'tv' ? 'tv' : item.mediaType === 'movie' ? 'movie' : null;
+    if (!mediaType) throw new Error(`分类「${name}」的 mediaType 必须是 movie 或 tv`);
+    const strings = (value: unknown): string[] => Array.isArray(value) ? value.map(String).map((v) => v.trim()).filter(Boolean) : [];
+    return {
+      id: `cat_${index}_${name}`,
+      name,
+      mediaType,
+      genres: strings(item.genres),
+      countries: strings(item.countries),
+      languages: strings(item.languages),
+      keywords: strings(item.keywords),
+    };
+  });
+}
+
+function toUpgradeYaml(strategy: OrganizerSettings['upgradeStrategy']): string {
+  return `strategy: ${strategy}\n`;
+}
+
+function fromUpgradeYaml(text: string): OrganizerSettings['upgradeStrategy'] {
+  const document = parseYaml(text) as { strategy?: unknown } | null;
+  const strategy = String(document?.strategy ?? '').trim();
+  if (strategy !== 'off' && strategy !== 'better' && strategy !== 'always') {
+    throw new Error('strategy 必须是 off、better 或 always');
+  }
+  return strategy;
+}
+
+const CATEGORY_SAMPLE = `categories:
+  - name: 动作
+    mediaType: movie
+    genres: [Action, Adventure]
+  - name: 科幻
+    mediaType: movie
+    genres: [Science Fiction]
+  - name: 国产剧
+    mediaType: tv
+    countries: [CN]
+  - name: 美剧
+    mediaType: tv
+    countries: [US]
+`;
+
+const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
+  off: '关闭：目标已存在就跳过',
+  better: '仅当新版本画质更好',
+  always: '总是替换',
+};
+
+function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
+  return <span className={`category-type ${type}`}>{type === 'movie' ? '电影' : '剧集'}</span>;
+}
+
 export function OrganizePage() {
   const [tab, setTab] = useState<Tab>('settings');
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
@@ -45,13 +111,20 @@ export function OrganizePage() {
   const [scanning, setScanning] = useState(false);
   const [batch, setBatch] = useState<Batch | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
+  const [upgradeYaml, setUpgradeYaml] = useState(toUpgradeYaml(EMPTY.upgradeStrategy));
+  const [categoryError, setCategoryError] = useState('');
+  const [upgradeError, setUpgradeError] = useState('');
 
   useEffect(() => {
     void Promise.all([
       api.get<{ settings: Settings }>('/api/settings'),
       api.get<Source[]>('/api/sources'),
     ]).then(([data, list]) => {
-      setForm({ ...EMPTY, ...(data.settings.organizer ?? {}), categories: data.settings.organizer?.categories ?? [] });
+      const organizer = { ...EMPTY, ...(data.settings.organizer ?? {}), categories: data.settings.organizer?.categories ?? [] };
+      setForm(organizer);
+      setCategoryYaml(toCategoryYaml(organizer.categories));
+      setUpgradeYaml(toUpgradeYaml(organizer.upgradeStrategy));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
       .finally(() => setLoading(false));
@@ -61,23 +134,33 @@ export function OrganizePage() {
     setForm((previous) => ({ ...previous, [key]: value }));
   };
 
-  const updateCategory = (id: string, patch: Partial<OrganizeCategory>) => {
-    update('categories', form.categories.map((item) => item.id === id ? { ...item, ...patch } : item));
+  const changeCategoryYaml = (text: string) => {
+    setCategoryYaml(text);
+    try {
+      const categories = fromCategoryYaml(text);
+      setForm((previous) => ({ ...previous, categories }));
+      setCategoryError('');
+    } catch (error) {
+      setCategoryError(error instanceof Error ? error.message : 'YAML 解析失败');
+    }
   };
 
-  const addCategory = () => {
-    update('categories', [...form.categories, {
-      id: `cat_${Date.now().toString(36)}`,
-      name: '新分类',
-      mediaType: 'movie',
-      genres: [],
-      countries: [],
-      languages: [],
-      keywords: [],
-    }]);
+  const changeUpgradeYaml = (text: string) => {
+    setUpgradeYaml(text);
+    try {
+      const upgradeStrategy = fromUpgradeYaml(text);
+      setForm((previous) => ({ ...previous, upgradeStrategy }));
+      setUpgradeError('');
+    } catch (error) {
+      setUpgradeError(error instanceof Error ? error.message : 'YAML 解析失败');
+    }
   };
 
   const save = async () => {
+    if (categoryError || upgradeError) {
+      toast.error('YAML 有错误，修正后才能保存');
+      throw new Error('YAML 有错误');
+    }
     setSaving(true);
     try {
       await api.patch('/api/settings', { organizer: form });
@@ -163,43 +246,54 @@ export function OrganizePage() {
       {tab === 'categories' ? (
         <div className="panel">
           <div className="panel-head">
-            <div><h2>二级分类</h2><p>按 TMDb 类型、国家、语言或文件名关键词匹配；不匹配进入“其他”。</p></div>
-            <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={addCategory}>添加分类</Button>
+            <div><h2>二级分类 YAML</h2><p>左侧实时解析，右侧预览；不匹配进入“其他”。</p></div>
+            <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => changeCategoryYaml(CATEGORY_SAMPLE)}>插入示例</Button>
           </div>
-          <div className="organize-categories">
-            {form.categories.length === 0 ? <p className="empty-note">还没有分类。例如：电影 / 动作 / Action；剧集 / 国产剧 / CN。</p> : null}
-            {form.categories.map((category) => (
-              <div className="organize-category" key={category.id}>
-                <Select value={category.mediaType} onChange={(event) => updateCategory(category.id, { mediaType: event.target.value as 'movie' | 'tv' })}>
-                  <option value="movie">电影</option><option value="tv">剧集</option>
-                </Select>
-                <Input value={category.name} onChange={(event) => updateCategory(category.id, { name: event.target.value })} placeholder="分类名，如 动作" />
-                <Input value={category.genres.join(',')} onChange={(event) => updateCategory(category.id, { genres: event.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} placeholder="类型：Action,科幻" />
-                <Input value={category.countries.join(',')} onChange={(event) => updateCategory(category.id, { countries: event.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} placeholder="国家：CN,US" />
-                <Input value={category.languages.join(',')} onChange={(event) => updateCategory(category.id, { languages: event.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} placeholder="语言：zh,en" />
-                <Input value={category.keywords.join(',')} onChange={(event) => updateCategory(category.id, { keywords: event.target.value.split(',').map((v) => v.trim()).filter(Boolean) })} placeholder="关键词：剧场版" />
-                <button type="button" className="icon-button danger" onClick={() => update('categories', form.categories.filter((item) => item.id !== category.id))} aria-label="删除分类"><Trash2 size={15} /></button>
-              </div>
-            ))}
+          <div className="yaml-layout">
+            <div className="yaml-editor-wrap">
+              <div className="yaml-editor-head"><FileCode2 size={14} />categories.yaml</div>
+              <textarea className="yaml-editor" value={categoryYaml} onChange={(event) => changeCategoryYaml(event.target.value)} spellCheck={false} />
+              {categoryError ? <div className="yaml-error">{categoryError}</div> : <div className="yaml-ok">YAML 有效 · {form.categories.length} 个分类</div>}
+            </div>
+            <div className="yaml-preview">
+              <div className="yaml-preview-head">可视化分类</div>
+              {form.categories.length === 0 ? <p className="empty-note">暂无分类。</p> : null}
+              {form.categories.map((category) => (
+                <div className="category-preview" key={category.id}>
+                  <div className="category-preview-top">
+                    <strong>{category.name}</strong>
+                    <BadgeCategory type={category.mediaType} />
+                  </div>
+                  <div className="category-chips">
+                    {category.genres.map((value) => <span key={`g-${value}`}>类型 · {value}</span>)}
+                    {category.countries.map((value) => <span key={`c-${value}`}>国家 · {value}</span>)}
+                    {category.languages.map((value) => <span key={`l-${value}`}>语言 · {value}</span>)}
+                    {category.keywords.map((value) => <span key={`k-${value}`}>关键词 · {value}</span>)}
+                    {!category.genres.length && !category.countries.length && !category.languages.length && !category.keywords.length ? <span className="muted">兜底分类</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       ) : null}
 
       {tab === 'upgrade' ? (
         <div className="panel">
-          <div className="panel-head"><div><h2>洗版策略</h2><p>只影响目标分类目录中已存在的同名电影/剧集。</p></div></div>
-          <div className="form-grid">
-            <Field label="洗版模式">
-              <Select value={form.upgradeStrategy} onChange={(event) => update('upgradeStrategy', event.target.value as OrganizerSettings['upgradeStrategy'])}>
-                <option value="off">关闭：目标已存在就跳过</option>
-                <option value="better">仅当新版本画质更好</option>
-                <option value="always">总是替换</option>
-              </Select>
-            </Field>
-          </div>
-          <div className="settings-callout">
-            <strong>画质比较顺序</strong>
-            <p>分辨率 → 片源（REMUX / BluRay / WEB-DL / WEBRip / HDTV）→ HDR → 编码。旧版本会移入 115/123 回收站。</p>
+          <div className="panel-head"><div><h2>洗版策略 YAML</h2><p>只影响目标分类目录中已存在的同名电影/剧集。</p></div></div>
+          <div className="yaml-layout">
+            <div className="yaml-editor-wrap">
+              <div className="yaml-editor-head"><FileCode2 size={14} />upgrade.yaml</div>
+              <textarea className="yaml-editor" value={upgradeYaml} onChange={(event) => changeUpgradeYaml(event.target.value)} spellCheck={false} />
+              {upgradeError ? <div className="yaml-error">{upgradeError}</div> : <div className="yaml-ok">YAML 有效</div>}
+            </div>
+            <div className="yaml-preview">
+              <div className="yaml-preview-head">可视化策略</div>
+              <div className="upgrade-preview">
+                <strong>{UPGRADE_LABEL[form.upgradeStrategy]}</strong>
+                <p>比较顺序：分辨率 → 片源 → HDR → 编码。旧版本会移入 115/123 回收站。</p>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}

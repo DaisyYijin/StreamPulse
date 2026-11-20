@@ -2,15 +2,15 @@
   "id": "/",
   "name": "StreamPulse — STRM 媒体库",
   "short_name": "StreamPulse",
-  "description": "把 OpenList 云盘媒体生成 STRM 媒体库，支持 Emby / Jellyfin 302 直链播放。",
+  "description": "把 115 / 123 / OpenList 云盘媒体生成 STRM 媒体库，支持 Emby / Jellyfin 302 直链播放。",
   "lang": "zh-CN",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#080b0a",
-  "theme_color": "#080b0a",
+  "background_color": "#f3f6f1",
+  "theme_color": "#f3f6f1",
   "categories": ["utilities", "entertainment"],
   "icons": [
     {

@@ -2,6 +2,19 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.13.0] - 2026-11-20
+
+### Added
+
+- YAML editors for secondary categories and upgrade strategy.
+- Live YAML parsing with visual category cards and upgrade summary.
+- YAML errors block saving and keep the last valid preview.
+
+### Fixed
+
+- Additional light-theme overrides for logs, library paths, source URL panels,
+  picker lists, QR panels, dialogs and mobile navigation.
+
 ## [1.12.0] - 2026-11-20
 
 ### Added

@@ -76,6 +76,7 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 115 / 
 | **精准过滤** | 视频扩展名、最小文件大小、glob 排除规则，自动忽略隐藏目录与回收站。 |
 | **定时脉冲** | 每个媒体库独立的 5 段 Cron 表达式，按指定时区自动同步。 |
 | **界面主题** | 默认白天模式，可切换夜间模式；设置、来源、整理页面使用 Tab 分组。 |
+| **YAML 配置** | 二级分类与洗版策略支持 YAML 编辑，实时解析并可视化预览。 |
 | **账号资料** | 扫码或测试后同步头像、昵称、容量、会员状态与到期时间。 |
 | **TMDb 网盘整理** | 115/123 网盘目录按 TMDb 识别，支持自定义二级分类、洗版策略、网盘内移动。 |
 | **失效清理** | 可选删除源文件已消失、且由 StreamPulse 记录的 `.strm`，不碰用户自己的文件。 |
@@ -278,6 +279,37 @@ volumes:
 
 > 网盘整理只支持 115 和 123 原生账号；OpenList 来源仅用于 STRM 媒体库。
 
+### 二级分类 YAML
+
+```yaml
+categories:
+  - name: 动作
+    mediaType: movie
+    genres: [Action, Adventure]
+  - name: 科幻
+    mediaType: movie
+    genres: [Science Fiction]
+  - name: 国产剧
+    mediaType: tv
+    countries: [CN]
+  - name: 美剧
+    mediaType: tv
+    countries: [US]
+```
+
+输入时实时解析，右侧显示分类预览。YAML 错误时不会保存。
+
+### 洗版策略 YAML
+
+```yaml
+strategy: better
+```
+
+```text
+off     关闭：目标已存在就跳过
+better  仅当新版本画质更好
+always  总是替换
+```
 
 ## 界面主题
 
@@ -562,7 +594,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.12.0
+ghcr.io/daisyyijin/streampulse:1.13.0
 ```
 
 ### 首次发布后设为公开
