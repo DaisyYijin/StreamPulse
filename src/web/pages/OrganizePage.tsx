@@ -1,11 +1,11 @@
-import { ArrowRight, FileCode2, FolderInput, HelpCircle, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
+import { ArrowRight, FileCode2, FolderInput, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 
-type Tab = 'settings' | 'categories' | 'upgrade' | 'results';
+type Tab = 'settings' | 'rename' | 'categories' | 'upgrade' | 'results';
 
 interface OrganizeItem {
   id: string;
@@ -116,21 +116,6 @@ function fromWashYaml(text: string): WashConfig {
   };
 }
 
-const CATEGORY_SAMPLE = `categories:
-  - name: 动作
-    mediaType: movie
-    genres: [Action, Adventure]
-  - name: 科幻
-    mediaType: movie
-    genres: [Science Fiction]
-  - name: 国产剧
-    mediaType: tv
-    countries: [CN]
-  - name: 美剧
-    mediaType: tv
-    countries: [US]
-`;
-
 const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
   off: '关闭：目标已存在就跳过',
   better: '仅当新版本画质更好',
@@ -146,6 +131,8 @@ function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
 
 export function OrganizePage() {
   const [tab, setTab] = useState<Tab>('settings');
+  const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
+  const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
   const [libraries, setLibraries] = useState<Library[]>([]);
@@ -215,6 +202,38 @@ export function OrganizePage() {
     setWashYaml(toWashYaml(washing));
     setWashError('');
     toast.success('已恢复默认洗版策略，保存后生效');
+  };
+
+  const updateCategory = (index: number, patch: Partial<OrganizeCategory>) => {
+    const categories = form.categories.map((category, current) => current === index ? { ...category, ...patch } : category);
+    setForm((previous) => ({ ...previous, categories }));
+    setCategoryYaml(toCategoryYaml(categories));
+  };
+
+  const addCategory = () => {
+    const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: '新分类', mediaType: 'movie' as const, genres: [], countries: [], languages: [], keywords: [] }];
+    setForm((previous) => ({ ...previous, categories }));
+    setCategoryYaml(toCategoryYaml(categories));
+  };
+
+  const removeCategory = (index: number) => {
+    if (form.categories.length <= 1) {
+      toast.error('至少保留一个分类');
+      return;
+    }
+    const categories = form.categories.filter((_, current) => current !== index);
+    setForm((previous) => ({ ...previous, categories }));
+    setCategoryYaml(toCategoryYaml(categories));
+  };
+
+  const updateWash = (patch: Partial<WashConfig>) => {
+    const washing = { ...form.washing, ...patch };
+    setForm((previous) => ({ ...previous, washing }));
+    setWashYaml(toWashYaml(washing));
+  };
+
+  const updateWashWeights = (key: keyof WashConfig['weights'], value: number) => {
+    updateWash({ weights: { ...form.washing.weights, [key]: Number.isFinite(value) ? value : 0 } });
   };
 
   const changeWashYaml = (text: string) => {
@@ -322,6 +341,7 @@ export function OrganizePage() {
 
       <div className="settings-tabs" role="tablist" aria-label="整理设置分类">
         <button role="tab" className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}><SlidersHorizontal size={15} />基本设置</button>
+        <button role="tab" className={tab === 'rename' ? 'active' : ''} onClick={() => setTab('rename')}><Pencil size={15} />重命名规则</button>
         <button role="tab" className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}><Tags size={15} />二级分类 <span>{form.categories.length}</span></button>
         <button role="tab" className={tab === 'upgrade' ? 'active' : ''} onClick={() => setTab('upgrade')}><WandSparkles size={15} />洗版策略</button>
         <button role="tab" className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}><ScanLine size={15} />扫描结果 {batch ? <span>{batch.items.length}</span> : null}</button>
@@ -358,10 +378,27 @@ export function OrganizePage() {
                 {recognizeResult ? <span>{recognizeResult.title} ({recognizeResult.year}) · {recognizeResult.mediaType} · TMDb {recognizeResult.tmdbId ?? '未匹配'}</span> : null}
               </div>
             </Field>
-            <Field label="电影文件夹模板" hint="变量：{title} {year} {category} {quality}"><Input value={form.movieFolderTemplate} onChange={(event) => update('movieFolderTemplate', event.target.value)} className="mono-input" /></Field>
-            <Field label="电影文件模板" hint="变量：{title} {year} {quality} {ext}"><Input value={form.movieFileTemplate} onChange={(event) => update('movieFileTemplate', event.target.value)} className="mono-input" /></Field>
-            <Field label="剧集文件夹模板" hint="可用 / 分季，变量：{season}"><Input value={form.tvFolderTemplate} onChange={(event) => update('tvFolderTemplate', event.target.value)} className="mono-input" /></Field>
-            <Field label="剧集文件模板" hint="变量：{title} {season} {episode} {quality}"><Input value={form.tvFileTemplate} onChange={(event) => update('tvFileTemplate', event.target.value)} className="mono-input" /></Field>
+          </div>
+        </div>
+      ) : null}
+
+      {tab === 'rename' ? (
+        <div className="panel">
+          <div className="panel-head">
+            <div><h2>重命名规则</h2><p>先按规则生成文件夹和文件名，再移动到媒体库；文件夹不存在会自动创建。</p></div>
+          </div>
+          <div className="form-grid two-col">
+            <Field label="电影文件夹" hint="支持 / 多级目录；例如 {title} ({year})"><Input value={form.movieFolderTemplate} onChange={(event) => update('movieFolderTemplate', event.target.value)} className="mono-input" /></Field>
+            <Field label="电影文件" hint="不带扩展名时自动补原扩展名"><Input value={form.movieFileTemplate} onChange={(event) => update('movieFileTemplate', event.target.value)} className="mono-input" /></Field>
+            <Field label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}"><Input value={form.tvFolderTemplate} onChange={(event) => update('tvFolderTemplate', event.target.value)} className="mono-input" /></Field>
+            <Field label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}"><Input value={form.tvFileTemplate} onChange={(event) => update('tvFileTemplate', event.target.value)} className="mono-input" /></Field>
+          </div>
+          <div className="rename-preview">
+            <div className="yaml-preview-head">整理后路径预览</div>
+            <code>{form.libraryPath}/Movies/{'{分类}'}/{form.movieFolderTemplate}/{form.movieFileTemplate}</code>
+            <code>{form.libraryPath}/TV/{'{分类}'}/{form.tvFolderTemplate}/{form.tvFileTemplate}</code>
+            <p>变量：{'{title}'} {'{year}'} {'{season}'} {'{episode}'} {'{quality}'} {'{category}'} {'{ext}'}，以及 {'{resource_pix}'} {'{resource_type}'} {'{resource_effect}'} {'{video_encode}'} {'{audio_encode}'} {'{resource_team}'} {'{first_letter}'}。</p>
+            <p>执行顺序：创建目标目录 → 重命名文件 → 移动到媒体库 → 可选自动生成 STRM。</p>
           </div>
         </div>
       ) : null}
@@ -369,41 +406,118 @@ export function OrganizePage() {
       {tab === 'categories' ? (
         <div className="panel">
           <div className="panel-head">
-            <div><h2>二级分类 YAML</h2><p>左侧实时解析，右侧预览；不匹配进入“其他”。</p></div>
-            <Button variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => changeCategoryYaml(CATEGORY_SAMPLE)}>插入示例</Button>
-          </div>
-          <div className="yaml-layout">
-            <div className="yaml-editor-wrap">
-              <div className="yaml-editor-head"><FileCode2 size={14} />categories.yaml <button type="button" className="yaml-reset" onClick={resetCategories}>恢复默认</button></div>
-              <textarea className="yaml-editor" value={categoryYaml} onChange={(event) => changeCategoryYaml(event.target.value)} spellCheck={false} />
-              {categoryError ? <div className="yaml-error">{categoryError}</div> : <div className="yaml-ok">YAML 有效 · {form.categories.length} 个分类</div>}
+            <div><h2>二级分类</h2><p>按类型、国家、语言、关键词匹配；不匹配进入“其他”。</p></div>
+            <div className="editor-switch">
+              <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => setCategoryMode('simple')}>简单表单</button>
+              <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); setCategoryYaml(toCategoryYaml(form.categories)); }}>高级 YAML</button>
             </div>
-            <div className="yaml-preview">
-              <div className="yaml-preview-head">可视化分类</div>
-              {form.categories.length === 0 ? <p className="empty-note">暂无分类。</p> : null}
-              {form.categories.map((category) => (
-                <div className="category-preview" key={category.id}>
-                  <div className="category-preview-top">
-                    <strong>{category.name}</strong>
-                    <BadgeCategory type={category.mediaType} />
+          </div>
+          {categoryMode === 'simple' ? (
+            <div className="simple-category-list">
+              {form.categories.map((category, index) => (
+                <div className="simple-category-row" key={category.id}>
+                  <div className="simple-category-name">
+                    <Input value={category.name} onChange={(event) => updateCategory(index, { name: event.target.value })} placeholder="分类名" />
+                    <Select value={category.mediaType} onChange={(event) => updateCategory(index, { mediaType: event.target.value as 'movie' | 'tv' })}>
+                      <option value="movie">电影</option>
+                      <option value="tv">剧集</option>
+                    </Select>
                   </div>
-                  <div className="category-chips">
-                    {category.genres.map((value) => <span key={`g-${value}`}>类型 · {value}</span>)}
-                    {category.countries.map((value) => <span key={`c-${value}`}>国家 · {value}</span>)}
-                    {category.languages.map((value) => <span key={`l-${value}`}>语言 · {value}</span>)}
-                    {category.keywords.map((value) => <span key={`k-${value}`}>关键词 · {value}</span>)}
-                    {!category.genres.length && !category.countries.length && !category.languages.length && !category.keywords.length ? <span className="muted">兜底分类</span> : null}
-                  </div>
+                  <Input value={category.genres.join(', ')} onChange={(event) => updateCategory(index, { genres: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="类型，如 Action, Adventure" />
+                  <Input value={category.countries.join(', ')} onChange={(event) => updateCategory(index, { countries: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="国家，如 CN, US" />
+                  <Input value={category.languages.join(', ')} onChange={(event) => updateCategory(index, { languages: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="语言，如 zh, en" />
+                  <Input value={category.keywords.join(', ')} onChange={(event) => updateCategory(index, { keywords: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="关键词（可选）" />
+                  <button type="button" className="simple-remove" onClick={() => removeCategory(index)} aria-label="删除分类">×</button>
                 </div>
               ))}
+              <div className="simple-category-footer">
+                <Button type="button" variant="secondary" size="sm" icon={<Plus size={14} />} onClick={addCategory}>添加分类</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={resetCategories}>恢复默认</Button>
+              </div>
+              <p className="settings-hint">同一分类内多个字段是 AND，字段内多个值是 OR；从上到下匹配，最后“其他”兜底。分类目录会自动创建，不需要填写云盘 CID。</p>
             </div>
-          </div>
+          ) : (
+            <div className="yaml-layout">
+              <div className="yaml-editor-wrap">
+                <div className="yaml-editor-head"><FileCode2 size={14} />categories.yaml <button type="button" className="yaml-reset" onClick={resetCategories}>恢复默认</button></div>
+                <textarea className="yaml-editor" value={categoryYaml} onChange={(event) => changeCategoryYaml(event.target.value)} spellCheck={false} />
+                {categoryError ? <div className="yaml-error">{categoryError}</div> : <div className="yaml-ok">YAML 有效 · {form.categories.length} 个分类</div>}
+              </div>
+              <div className="yaml-preview">
+                <div className="yaml-preview-head">可视化分类</div>
+                {form.categories.length === 0 ? <p className="empty-note">暂无分类。</p> : null}
+                {form.categories.map((category) => (
+                  <div className="category-preview" key={category.id}>
+                    <div className="category-preview-top">
+                      <strong>{category.name}</strong>
+                      <BadgeCategory type={category.mediaType} />
+                    </div>
+                    <div className="category-chips">
+                      {category.genres.map((value) => <span key={`g-${value}`}>类型 · {value}</span>)}
+                      {category.countries.map((value) => <span key={`c-${value}`}>国家 · {value}</span>)}
+                      {category.languages.map((value) => <span key={`l-${value}`}>语言 · {value}</span>)}
+                      {category.keywords.map((value) => <span key={`k-${value}`}>关键词 · {value}</span>)}
+                      {!category.genres.length && !category.countries.length && !category.languages.length && !category.keywords.length ? <span className="muted">兜底分类</span> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
 
       {tab === 'upgrade' ? (
         <div className="panel">
-          <div className="panel-head"><div><h2>洗版策略 YAML</h2><p>支持权重比较；右侧可以输入现有/候选文件名做模拟。</p></div></div>
+          <div className="panel-head">
+            <div><h2>洗版策略</h2><p>简单模式直接选规则；高级模式支持权重、分差、覆盖率和排除条件。</p></div>
+            <div className="editor-switch">
+              <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单表单</button>
+              <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => { setWashMode('yaml'); setWashYaml(toWashYaml(form.washing)); }}>高级 YAML</button>
+            </div>
+          </div>
+          {washMode === 'simple' ? (
+            <div className="simple-wash">
+              <div className="form-grid form-grid-2">
+                <Field label="洗版模式" hint="决定已有版本时如何处理">
+                  <Select value={form.washing.mode} onChange={(event) => updateWash({ mode: event.target.value as WashConfig['mode'] })}>
+                    {Object.entries(UPGRADE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                  </Select>
+                </Field>
+                <Field label="同分处理">
+                  <Select value={form.washing.tie} onChange={(event) => updateWash({ tie: event.target.value as 'keep' | 'replace' })}>
+                    <option value="keep">保留现有版本</option>
+                    <option value="replace">替换为候选版本</option>
+                  </Select>
+                </Field>
+                <Field label="最小分差" hint="候选至少高多少分才替换">
+                  <Input type="number" min={0} value={form.washing.minGap} onChange={(event) => updateWash({ minGap: Number(event.target.value) })} />
+                </Field>
+                <Field label="最低覆盖率" hint="0.5 表示至少识别出一半的质量信息">
+                  <Input type="number" min={0} max={1} step={0.05} value={form.washing.minCoverage} onChange={(event) => updateWash({ minCoverage: Number(event.target.value) })} />
+                </Field>
+              </div>
+              <div className="simple-wash-weights">
+                <span className="yaml-preview-head">权重</span>
+                {([
+                  ['resolution', '分辨率'], ['source', '片源'], ['hdr', 'HDR'], ['codec', '编码'], ['size', '体积'],
+                ] as const).map(([key, label]) => (
+                  <Field key={key} label={label}>
+                    <Input type="number" min={0} value={form.washing.weights[key]} onChange={(event) => updateWashWeights(key, Number(event.target.value))} />
+                  </Field>
+                ))}
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="必须包含" hint="逗号分隔，例如 中字, 1080p">
+                  <Input value={form.washing.must.join(', ')} onChange={(event) => updateWash({ must: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} />
+                </Field>
+                <Field label="排除" hint="逗号分隔，例如 DV, CAM">
+                  <Input value={form.washing.exclude.join(', ')} onChange={(event) => updateWash({ exclude: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} />
+                </Field>
+              </div>
+              <p className="settings-hint">画质比较：分辨率 → 片源 → HDR → 编码；体积也按权重参与。权重洗版只在信息足够且分差达到要求时替换。</p>
+            </div>
+          ) : (
           <div className="yaml-layout">
             <div className="yaml-editor-wrap">
               <div className="yaml-editor-head"><FileCode2 size={14} />washing.yaml <button type="button" className="yaml-reset" onClick={resetWashing}>恢复默认</button></div>
@@ -432,6 +546,7 @@ export function OrganizePage() {
               ) : null}
             </div>
           </div>
+          )}
         </div>
       ) : null}
 
@@ -506,7 +621,7 @@ export function OrganizePage() {
 电影文件：{title} ({year}){quality}
 剧集文件夹：{title} ({year})/Season {season}
 剧集文件：{title} - S{season}E{episode}{quality}`}</pre>
-            <p>可用变量：<code>&#123;title&#125;</code> <code>&#123;year&#125;</code> <code>&#123;season&#125;</code> <code>&#123;episode&#125;</code> <code>&#123;quality&#125;</code> <code>&#123;ext&#125;</code> <code>&#123;category&#125;</code>。目录会自动创建，不需要填写云盘 ID。</p>
+            <p>可用变量：<code>&#123;title&#125;</code> <code>&#123;year&#125;</code> <code>&#123;season&#125;</code> <code>&#123;episode&#125;</code> <code>&#123;quality&#125;</code> <code>&#123;ext&#125;</code> <code>&#123;category&#125;</code> <code>&#123;resource_pix&#125;</code> <code>&#123;resource_type&#125;</code> <code>&#123;resource_effect&#125;</code> <code>&#123;video_encode&#125;</code> <code>&#123;audio_encode&#125;</code> <code>&#123;resource_team&#125;</code> <code>&#123;first_letter&#125;</code>。用 <code>&lt;...&gt;</code> 包住的块只在其中变量都非空时输出。目录会自动创建，不需要填写云盘 ID。</p>
           </section>
           <section>
             <h3>媒体库同步</h3>

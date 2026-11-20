@@ -2,6 +2,19 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.23.0] - 2026-11-20
+
+### Added
+
+- Simple forms for secondary categories and wash rules; advanced YAML remains
+  available via a toggle.
+- Dedicated “重命名规则” tab with folder/file templates and a target-path
+  preview.
+- Rename variables for resolution, source, HDR, codec, audio, team, fps and
+  letter, plus conditional `<...>` blocks.
+- Organizer explicitly creates the target folder, renames the file and then
+  moves it into the media library.
+
 ## [1.22.0] - 2026-11-20
 
 ### Fixed

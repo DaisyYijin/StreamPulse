@@ -55,7 +55,9 @@ washing:
 剧集文件：{title} - S{season}E{episode}{quality}
 ```
 
-变量：`{title}` `{year}` `{season}` `{episode}` `{quality}` `{ext}` `{category}`。
+变量：`{title}` `{year}` `{season}` `{episode}` `{quality}` `{ext}` `{category}`，以及 `{resource_pix}` `{resource_type}` `{resource_effect}` `{video_encode}` `{audio_encode}` `{resource_team}` `{first_letter}`。用 `<...>` 包住的块只在其中变量都非空时输出。
+
+整理顺序：创建目标文件夹 → 重命名文件 → 移动到媒体库。目标文件夹本身由文件夹模板生成。
 
 ## 115 分享导入
 

@@ -226,12 +226,52 @@ async function scanCloud(client: StorageClient, sourcePath: string): Promise<Arr
   return files;
 }
 
-function renderTemplate(template: string, variables: Record<string, string>): string {
-  return template.replace(/\{([a-z_]+)\}/gi, (_match, key: string) => variables[key.toLowerCase()] ?? '');
+export function renderTemplate(template: string, variables: Record<string, string>): string {
+  const render = (value: string): string => value.replace(/\{([a-z_]+)\}/gi, (_match, key: string) => variables[key.toLowerCase()] ?? '');
+  return template.replace(/<([^<>]+)>/g, (_match, inner: string) => {
+    const keys = Array.from(inner.matchAll(/\{([a-z_]+)\}/gi)).map((match) => match[1].toLowerCase());
+    return keys.every((key) => Boolean(variables[key])) ? render(inner) : '';
+  }).replace(/\{([a-z_]+)\}/gi, (_match, key: string) => variables[key.toLowerCase()] ?? '');
 }
+
 
 function templateSegments(template: string): string[] {
   return template.split('/').map((segment) => safeComponent(segment)).filter(Boolean);
+}
+
+function qualityTokens(filename: string): Record<string, string> {
+  const lower = filename.toLowerCase();
+  const pix = lower.match(/(2160p|1080p|720p|480p|4k)/)?.[1] || '';
+  const type = lower.includes('remux') ? 'Remux'
+    : lower.includes('bluray') || lower.includes('blu-ray') ? 'BluRay'
+      : lower.includes('web-dl') ? 'WEB-DL'
+        : lower.includes('webrip') ? 'WEBRip'
+          : lower.includes('hdtv') ? 'HDTV'
+            : lower.includes('hdrip') ? 'HDRip' : '';
+  const effect = /dolby vision|\bdv\b/.test(lower) ? 'DV'
+    : /hdr10\+|hdr10/.test(lower) ? 'HDR10'
+      : /\bhdr\b/.test(lower) ? 'HDR' : '';
+  const video = /hevc|h\.?265/.test(lower) ? 'HEVC'
+    : /av1/.test(lower) ? 'AV1'
+      : /avc|h\.?264/.test(lower) ? 'AVC' : '';
+  const audio = /atmos/.test(lower) ? 'Atmos'
+    : /truehd/.test(lower) ? 'TrueHD'
+      : /dts/.test(lower) ? 'DTS'
+        : /ac3|eac3/.test(lower) ? 'AC3'
+          : /aac/.test(lower) ? 'AAC' : '';
+  const team = filename.match(/-([A-Za-z0-9@]+)(?:\.[a-z0-9]{2,4})?$/i)?.[1] || '';
+  const fps = filename.match(/(\d{2,3})\s*fps/i)?.[1] || '';
+  const version = filename.match(/\b(v\d|repack|proper)\b/i)?.[1] || '';
+  return {
+    resource_pix: pix,
+    resource_type: type,
+    resource_effect: effect,
+    video_encode: video,
+    audio_encode: audio,
+    resource_team: team,
+    fps,
+    resource_version: version,
+  };
 }
 
 function targetFor(
@@ -241,6 +281,7 @@ function targetFor(
   category: string,
   extension: string,
   quality: string,
+  filename: string,
 ): { dir: string; name: string } {
   const title = info.title || parsed.title;
   const year = info.year || parsed.year;
@@ -254,6 +295,8 @@ function targetFor(
     quality: quality ? ` [${quality}]` : '',
     ext: extension,
     category,
+    first_letter: (info.title || parsed.title || '?').trim().charAt(0).toUpperCase(),
+    ...qualityTokens(filename),
   };
   if (parsed.mediaType === 'tv') {
     const folder = templateSegments(renderTemplate(settings.tvFolderTemplate, variables));
@@ -325,7 +368,7 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
       }
       if (!info) throw new Error('TMDb 未找到匹配条目');
       const category = categoryFor(info, settings.categories, entry.name);
-      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase(), qualityOf(entry.name));
+      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase(), qualityOf(entry.name), entry.name);
       const existing = await existingFor(client, target.dir, parsed.mediaType, parsed.season, parsed.episode);
       const best = existing.sort((a, b) => {
         const left = qualityScore(a.name), right = qualityScore(b.name);

@@ -5985,3 +5985,128 @@ html[data-theme='light'] .emby-library-panel {
   color: var(--lime);
   border-color: var(--lime-dim);
 }
+
+.editor-switch {
+  display: inline-flex;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.editor-switch button {
+  padding: 5px 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.editor-switch button.active {
+  background: var(--lime);
+  color: #071108;
+}
+
+.simple-category-list {
+  display: grid;
+  gap: 8px;
+}
+
+.simple-category-row {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr 1fr 1fr 1fr auto;
+  gap: 6px;
+  align-items: center;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.simple-category-name {
+  display: grid;
+  grid-template-columns: 1fr 78px;
+  gap: 4px;
+}
+
+.simple-category-row .input,
+.simple-category-row select {
+  min-width: 0;
+  font-size: 10px;
+}
+
+.simple-remove {
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.simple-remove:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.simple-category-footer {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.simple-wash {
+  display: grid;
+  gap: 12px;
+}
+
+.simple-wash-weights {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  align-items: end;
+}
+
+.rename-preview {
+  display: grid;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.rename-preview code {
+  display: block;
+  overflow: hidden;
+  color: var(--lime);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rename-preview p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+@media (max-width: 900px) {
+  .simple-category-row {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .simple-category-name {
+    grid-column: 1 / -1;
+  }
+
+  .simple-wash-weights {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
