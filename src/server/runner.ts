@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { LogLine, LogLevel, Run, RunTrigger } from '../shared/types.js';
 import { config } from './config.js';
+import { refreshEmbyAfterRun } from './emby.js';
+import { notifyRun } from './notify.js';
 import { clientForSource } from './client.js';
 import { emptyManifest, isUnchanged, type Manifest, type ManifestEntry } from './core/manifest.js';
 import { safeJoin, strmRelativePath } from './core/paths.js';
@@ -499,6 +501,21 @@ export class RunManager {
       await this.store.save();
     } catch {
       // A failed persistence write is surfaced on next boot; delivery already happened.
+    }
+    if (run.status === 'success' || run.status === 'partial' || run.status === 'failed') {
+      notifyRun(this.store.snapshot.settings.notifications, {
+        status: run.status,
+        library: run.libraryName,
+        message: run.message,
+        generated: run.stats.generated,
+        skipped: run.stats.skipped,
+        failed: run.stats.failed,
+      });
+      if (run.status === 'success' || run.status === 'partial') {
+        void refreshEmbyAfterRun(this.store.snapshot.settings.embyServers).catch((error) => {
+          console.warn('[emby] refresh failed:', error instanceof Error ? error.message : String(error));
+        });
+      }
     }
   }
 

@@ -60,6 +60,15 @@ function createDefaultDatabase(): Database {
         tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
         categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       },
+      embyServers: [],
+      notifications: {
+        telegramBotToken: '',
+        telegramChatId: '',
+        wecomWebhookUrl: '',
+        notifyOnSuccess: false,
+        notifyOnFailure: true,
+        notifyCookieInvalid: true,
+      },
     },
     createdAt: now,
     updatedAt: now,
@@ -77,6 +86,7 @@ function normalizeDatabase(raw: unknown): Database {
         ...record,
         type: record.type || 'openlist',
         cookie: record.cookie || '',
+        cookies: record.cookies ?? (record.cookie ? [record.cookie] : []),
         profile: record.profile ?? null,
         streamKey:
           typeof record.streamKey === 'string' && record.streamKey.length >= 16
@@ -226,6 +236,7 @@ export class Store {
         ...source,
         type: source.type || 'openlist',
         cookie: source.cookie || '',
+        cookies: source.cookies ?? (source.cookie ? [source.cookie] : []),
         token: source.token || '',
         password: source.password || '',
         username: source.username || '',

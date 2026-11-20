@@ -123,12 +123,26 @@ export class P115Error extends Error {
 export class P115Client implements StorageClient {
   readonly kind = '115' as const;
   readonly origin = 'https://115.com';
-  private readonly cookie: string;
+  private readonly cookies: string[];
+  private active = 0;
   private readonly dirIds = new Map<string, string>([['/', '0']]);
 
-  constructor(cookie: string) {
-    this.cookie = cookie.trim().replace(/\s*\r?\n\s*/g, '; ');
-    if (!this.cookie) throw new P115Error('115 Cookie 不能为空', 401);
+  constructor(cookie: string | string[]) {
+    const input = Array.isArray(cookie) ? cookie : [cookie];
+    this.cookies = input
+      .map((value) => value.trim().replace(/\s*\r?\n\s*/g, '; '))
+      .filter(Boolean);
+    if (this.cookies.length === 0) throw new P115Error('115 Cookie 不能为空', 401);
+  }
+
+  private get cookie(): string {
+    return this.cookies[this.active] || '';
+  }
+
+  private rotateCookie(): boolean {
+    if (this.cookies.length <= 1) return false;
+    this.active = (this.active + 1) % this.cookies.length;
+    return true;
   }
 
   private headers(contentType?: string): Record<string, string> {
@@ -140,20 +154,34 @@ export class P115Client implements StorageClient {
   }
 
   private async request(url: string, init: RequestInit = {}, signal?: AbortSignal): Promise<any> {
-    const timeout = AbortSignal.timeout(25_000);
-    const response = await fetch(url, {
-      ...init,
-      headers: { ...this.headers(), ...(init.headers as Record<string, string> | undefined) },
-      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    });
-    const text = await response.text();
-    let payload: any = {};
-    try { payload = text ? JSON.parse(text) : {}; } catch { throw new P115Error(`115 返回非 JSON（HTTP ${response.status}）`); }
-    if (!response.ok) throw new P115Error(`115 请求失败（HTTP ${response.status}）`, response.status === 401 ? 401 : 502);
-    if (payload?.state === false || (payload?.errno && Number(payload.errno) !== 0)) {
-      throw new P115Error(payload?.error || payload?.message || '115 请求失败', payload?.errno === 401 ? 401 : 502);
+    let lastError: P115Error | null = null;
+    for (let attempt = 0; attempt < this.cookies.length; attempt += 1) {
+      const timeout = AbortSignal.timeout(25_000);
+      const response = await fetch(url, {
+        ...init,
+        headers: { ...this.headers(), ...(init.headers as Record<string, string> | undefined) },
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      });
+      const text = await response.text();
+      let payload: any = {};
+      try { payload = text ? JSON.parse(text) : {}; } catch { throw new P115Error(`115 返回非 JSON（HTTP ${response.status}）`); }
+      const authFailure =
+        response.status === 401 ||
+        response.status === 403 ||
+        (payload?.state === false &&
+          (Number(payload?.errno) === 401 || Number(payload?.errno) === 405 || /登录|Cookie|Token|失效/i.test(String(payload?.error || payload?.message || ''))));
+      if (authFailure) {
+        lastError = new P115Error(payload?.error || payload?.message || `115 登录失效（HTTP ${response.status}）`, 401);
+        if (this.rotateCookie()) continue;
+        throw lastError;
+      }
+      if (!response.ok) throw new P115Error(`115 请求失败（HTTP ${response.status}）`, response.status === 401 ? 401 : 502);
+      if (payload?.state === false || (payload?.errno && Number(payload.errno) !== 0)) {
+        throw new P115Error(payload?.error || payload?.message || '115 请求失败', payload?.errno === 401 ? 401 : 502);
+      }
+      return payload;
     }
-    return payload;
+    throw lastError || new P115Error('115 请求失败', 502);
   }
 
   private async listDir(cid: string, signal?: AbortSignal): Promise<P115Item[]> {

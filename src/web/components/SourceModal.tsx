@@ -183,7 +183,11 @@ export function SourceModal({
       };
       if (token.trim()) payload.token = token.trim();
       if (password) payload.password = password;
-      if (cookie.trim()) payload.cookie = cookie.trim();
+      const cookieList = cookie.split(/\n\s*\n/).map((value) => value.trim()).filter(Boolean);
+      if (cookieList.length) {
+        payload.cookie = cookieList[0];
+        payload.cookies = cookieList;
+      }
       const saved = source
         ? await api.patch<Source>(`/api/sources/${source.id}`, payload)
         : await api.post<Source>('/api/sources', payload);
@@ -320,14 +324,14 @@ export function SourceModal({
         {type === '115' && !qrMode ? (
           <Field
             label={source?.hasCookie ? '115 Cookie（留空保持不变）' : '115 Cookie'}
-            hint="从浏览器登录 115 后复制 Cookie，至少包含 UID、CID、SEID、KID。"
+            hint="从浏览器登录 115 后复制 Cookie；多个备用 Cookie 用空行分隔。至少包含 UID、CID、SEID、KID。"
           >
             <textarea
               className="input source-cookie"
               rows={5}
               value={cookie}
               onChange={(event) => setCookie(event.target.value)}
-              placeholder={source?.hasCookie ? '保持现有 Cookie' : 'UID=...; CID=...; SEID=...; KID=...'}
+              placeholder={source?.hasCookie ? `保持现有 Cookie（已保存 ${source.cookieCount} 个）` : 'UID=...; CID=...; SEID=...; KID=...'}
               autoComplete="off"
             />
           </Field>

@@ -2,6 +2,16 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.17.0] - 2026-11-20
+
+### Added
+
+- Emby integration with multiple servers, API key test and per-server library
+  refresh after successful runs.
+- Telegram and WeCom bot notifications for success, failure and invalid
+  cookies.
+- 115 multi-cookie accounts with automatic failover on login failures.
+
 ## [1.16.0] - 2026-11-20
 
 ### Added

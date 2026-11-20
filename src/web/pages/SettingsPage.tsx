@@ -2,6 +2,9 @@ import {
   CheckCircle2,
   Database,
   FolderCog,
+  Bell,
+  Plus,
+  Send,
   HardDrive,
   KeyRound,
   Link2,
@@ -15,7 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, EmbyServer, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -24,6 +27,7 @@ import {
   Field,
   Input,
   Select,
+  Toggle,
   toast,
 } from '../components/ui';
 import { uptimeLabel } from '../utils';
@@ -41,7 +45,7 @@ const TIMEZONES = [
 ];
 
 export function SettingsPage() {
-  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security'>('runtime');
+  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security' | 'integrations'>('runtime');
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [outputDir, setOutputDir] = useState('');
@@ -59,6 +63,12 @@ export function SettingsPage() {
   const [clearOpen, setClearOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const [error, setError] = useState('');
+  const [embyServers, setEmbyServers] = useState<EmbyServer[]>([]);
+  const [notifications, setNotifications] = useState<NotificationSettings>({
+    telegramBotToken: '', telegramChatId: '', wecomWebhookUrl: '',
+    notifyOnSuccess: false, notifyOnFailure: true, notifyCookieInvalid: true,
+  });
+  const [integrationBusy, setIntegrationBusy] = useState(false);
 
   const load = async () => {
     try {
@@ -75,6 +85,8 @@ export function SettingsPage() {
       setStreamBaseUrl(data.settings.streamBaseUrl);
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
       setRunRetention(data.settings.runRetention);
+      setEmbyServers(data.settings.embyServers ?? []);
+      setNotifications(data.settings.notifications ?? notifications);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -147,6 +159,41 @@ export function SettingsPage() {
     }
   };
 
+  const saveIntegrations = async (event: FormEvent) => {
+    event.preventDefault();
+    setIntegrationBusy(true);
+    try {
+      await api.patch('/api/settings', { embyServers, notifications });
+      toast.success('Emby 与通知设置已保存');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '保存失败');
+    } finally {
+      setIntegrationBusy(false);
+    }
+  };
+
+  const updateEmby = (id: string, patch: Partial<EmbyServer>) => {
+    setEmbyServers((current) => current.map((server) => server.id === id ? { ...server, ...patch } : server));
+  };
+
+  const testEmbyServer = async (server: EmbyServer) => {
+    try {
+      const result = await api.post<{ name: string }>('/api/integrations/emby/test', server);
+      toast.success(`Emby 连接成功：${result.name}`);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : 'Emby 连接失败');
+    }
+  };
+
+  const testNotify = async () => {
+    try {
+      await api.post('/api/integrations/notify/test');
+      toast.success('通知测试已发送');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '通知测试失败');
+    }
+  };
+
   const clearHistory = async () => {
     setClearing(true);
     try {
@@ -178,6 +225,7 @@ export function SettingsPage() {
       <div className="settings-tabs" role="tablist" aria-label="设置分类">
         <button role="tab" className={settingsTab === 'runtime' ? 'active' : ''} onClick={() => setSettingsTab('runtime')}>运行设置</button>
         <button role="tab" className={settingsTab === 'security' ? 'active' : ''} onClick={() => setSettingsTab('security')}>账号与安全</button>
+        <button role="tab" className={settingsTab === 'integrations' ? 'active' : ''} onClick={() => setSettingsTab('integrations')}>Emby 与通知</button>
       </div>
 
       <div className="settings-layout">
@@ -373,6 +421,56 @@ export function SettingsPage() {
           </section>
           </>
           ) : null}
+
+          {settingsTab === 'integrations' ? (
+            <form className="panel settings-panel" onSubmit={saveIntegrations}>
+              <div className="settings-head">
+                <span className="settings-icon"><Server size={18} /></span>
+                <div><h2>Emby 与通知</h2><p>同步完成后刷新 Emby 媒体库，并通过 Telegram / 企业微信发送结果。</p></div>
+              </div>
+              <div className="integration-list">
+                {embyServers.map((server) => (
+                  <div className="integration-block" key={server.id}>
+                    <div className="integration-block-head">
+                      <strong>{server.name || '未命名 Emby'}</strong>
+                      <div className="integration-actions">
+                        <Button type="button" size="sm" variant="ghost" onClick={() => void testEmbyServer(server)}>测试</Button>
+                        <button type="button" className="icon-button danger" onClick={() => setEmbyServers((current) => current.filter((item) => item.id !== server.id))} aria-label="删除 Emby"><Trash2 size={15} /></button>
+                      </div>
+                    </div>
+                    <div className="form-grid form-grid-2">
+                      <Field label="名称"><Input value={server.name} onChange={(event) => updateEmby(server.id, { name: event.target.value })} placeholder="家里 Emby" /></Field>
+                      <Field label="Emby 地址"><Input value={server.url} onChange={(event) => updateEmby(server.id, { url: event.target.value })} placeholder="http://192.168.1.10:8096" /></Field>
+                      <Field label="API Key"><Input type="password" value={server.apiKey} onChange={(event) => updateEmby(server.id, { apiKey: event.target.value })} autoComplete="off" /></Field>
+                      <Field label="媒体库 ID" hint="多个用逗号分隔；在 Emby 媒体库设置中查看"><Input value={server.libraryIds.join(',')} onChange={(event) => updateEmby(server.id, { libraryIds: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="1,2" /></Field>
+                    </div>
+                    <div className="toggle-row">
+                      <div><strong>同步后刷新 Emby</strong><span>任务成功或部分成功时刷新上面填写的媒体库</span></div>
+                      <Toggle checked={server.refreshAfterRun} onChange={(value) => updateEmby(server.id, { refreshAfterRun: value })} label="同步后刷新 Emby" />
+                    </div>
+                  </div>
+                ))}
+                <Button type="button" variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setEmbyServers((current) => [...current, { id: `emby_${Date.now().toString(36)}`, name: 'Emby', url: '', apiKey: '', libraryIds: [], refreshAfterRun: true }])}>添加 Emby 服务端</Button>
+              </div>
+
+              <div className="settings-head compact" style={{ marginTop: 22 }}>
+                <span className="settings-icon"><Bell size={18} /></span>
+                <div><h2>通知</h2><p>留空的渠道不会发送。</p></div>
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="Telegram Bot Token"><Input type="password" value={notifications.telegramBotToken} onChange={(event) => setNotifications((current) => ({ ...current, telegramBotToken: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="Telegram Chat ID"><Input value={notifications.telegramChatId} onChange={(event) => setNotifications((current) => ({ ...current, telegramChatId: event.target.value }))} /></Field>
+                <Field label="企业微信机器人 Webhook"><Input type="password" value={notifications.wecomWebhookUrl} onChange={(event) => setNotifications((current) => ({ ...current, wecomWebhookUrl: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="测试通知"><Button type="button" variant="secondary" icon={<Send size={14} />} onClick={() => void testNotify()}>发送测试消息</Button></Field>
+              </div>
+              <div className="toggle-list">
+                <div className="toggle-row"><div><strong>成功通知</strong><span>任务成功或部分成功时发送</span></div><Toggle checked={notifications.notifyOnSuccess} onChange={(value) => setNotifications((current) => ({ ...current, notifyOnSuccess: value }))} label="成功通知" /></div>
+                <div className="toggle-row"><div><strong>失败通知</strong><span>任务失败时发送</span></div><Toggle checked={notifications.notifyOnFailure} onChange={(value) => setNotifications((current) => ({ ...current, notifyOnFailure: value }))} label="失败通知" /></div>
+                <div className="toggle-row"><div><strong>Cookie 失效通知</strong><span>115/123 连接测试失败时发送</span></div><Toggle checked={notifications.notifyCookieInvalid} onChange={(value) => setNotifications((current) => ({ ...current, notifyCookieInvalid: value }))} label="Cookie 失效通知" /></div>
+              </div>
+              <div className="settings-actions"><Button type="submit" variant="primary" icon={<Send size={16} />} loading={integrationBusy}>保存集成设置</Button></div>
+            </form>
+          ) : null}
         </div>
 
         <aside className="settings-side">
@@ -499,7 +597,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.16.0'}</span>
+            <span>v{system?.version ?? '1.17.0'}</span>
           </section>
         </aside>
       </div>

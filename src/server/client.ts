@@ -5,7 +5,7 @@ import type { StorageClient } from './storage.js';
 import type { SourceRecord } from './types.js';
 
 export function clientForSource(source: SourceRecord): StorageClient {
-  if (source.type === '115') return new P115Client(source.cookie);
+  if (source.type === '115') return new P115Client(source.cookies?.length ? source.cookies : source.cookie);
   if (source.type === '123') {
     return new P123Client({
       username: source.username,

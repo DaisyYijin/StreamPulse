@@ -344,6 +344,19 @@ always  总是替换
 
 账号卡片上会显示头像、容量进度条和会员状态。资料不会实时推送；点 **刷新资料** 或重新测试连接即可更新。
 
+## Emby / 通知 / 多 Cookie
+
+设置页新增 **Emby 与通知** Tab：
+
+- 添加多个 Emby 服务端
+- 填写 Emby 地址、API Key、媒体库 ID
+- 任务成功/部分成功后刷新指定媒体库
+- Telegram Bot Token / Chat ID
+- 企业微信机器人 Webhook
+- 成功、失败、Cookie 失效通知开关
+
+115 来源可以填写多个 Cookie，用空行分隔；当前 Cookie 失效时自动尝试下一个。
+
 ## 更多文档
 
 - [FAQ](docs/faq.md)
@@ -614,7 +627,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.16.0
+ghcr.io/daisyyijin/streampulse:1.17.0
 ```
 
 ### 首次发布后设为公开

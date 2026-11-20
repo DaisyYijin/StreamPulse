@@ -5845,3 +5845,38 @@ html[data-theme='light'] .rule-help pre {
   background: #f8faf6;
   color: var(--text);
 }
+
+.integration-list {
+  display: grid;
+  gap: 10px;
+}
+
+.integration-block {
+  display: grid;
+  gap: 10px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.integration-block-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.integration-block-head strong {
+  font-size: 12px;
+}
+
+.integration-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+html[data-theme='light'] .integration-block {
+  background: #f8faf6;
+}

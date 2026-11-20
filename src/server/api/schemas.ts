@@ -75,6 +75,7 @@ export const sourceCreateSchema = z.object({
   token: z.string().trim().max(4000).optional().default(''),
   password: z.string().max(1000).optional().default(''),
   cookie: z.string().max(20000).optional().default(''),
+  cookies: z.array(z.string().max(20000)).max(10).optional().default([]),
 });
 
 export const sourceUpdateSchema = z.object({
@@ -87,6 +88,7 @@ export const sourceUpdateSchema = z.object({
   token: z.string().trim().max(4000).optional(),
   password: z.string().max(1000).optional(),
   cookie: z.string().max(20000).optional(),
+  cookies: z.array(z.string().max(20000)).max(10).optional(),
 });
 
 export type SourceCreateBody = z.infer<typeof sourceCreateSchema>;
@@ -183,8 +185,28 @@ const organizerSchema = z.object({
   categories: z.array(organizeCategorySchema).max(100),
 });
 
+export const embyServerSchema = z.object({
+  id: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(80),
+  url: z.string().trim().min(1).max(2000),
+  apiKey: z.string().trim().max(1000),
+  libraryIds: z.array(z.string().trim().min(1).max(200)).max(100).default([]),
+  refreshAfterRun: z.boolean().default(false),
+});
+
+const notificationsSchema = z.object({
+  telegramBotToken: z.string().trim().max(500),
+  telegramChatId: z.string().trim().max(200),
+  wecomWebhookUrl: z.string().trim().max(2000),
+  notifyOnSuccess: z.boolean(),
+  notifyOnFailure: z.boolean(),
+  notifyCookieInvalid: z.boolean(),
+});
+
 export const settingsUpdateSchema = z.object({
   organizer: organizerSchema.optional(),
+  embyServers: z.array(embyServerSchema).max(20).optional(),
+  notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),
   defaultUrlTemplate: z.string().trim().min(1).max(1000).optional(),

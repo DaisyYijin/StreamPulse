@@ -12,6 +12,8 @@ import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
 import { generateLibraryCover } from '../covers.js';
+import { testEmby } from '../emby.js';
+import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
 import { executeCloudOrganizerBatch, isTmdbError, scanCloudOrganizer } from '../organizer.js';
 import { pollQrLogin, startQrLogin, takeQrSession } from '../qr.js';
@@ -30,6 +32,7 @@ import {
   libraryCreateSchema,
   libraryUpdateSchema,
   loginSchema,
+  embyServerSchema,
   organizeExecuteSchema,
   qrStartSchema,
   shareReceiveSchema,
@@ -110,10 +113,10 @@ function validateLibraryInput(input: {
 }
 
 function checkSourceCredentials(
-  source: Pick<SourceRecord, 'type' | 'authType' | 'token' | 'username' | 'password' | 'cookie'>,
+  source: Pick<SourceRecord, 'type' | 'authType' | 'token' | 'username' | 'password' | 'cookie' | 'cookies'>,
 ): void {
   if (source.type === '115') {
-    if (!source.cookie) throw new HttpError(400, '115 账号需要填写浏览器 Cookie');
+    if (!source.cookie && !source.cookies?.length) throw new HttpError(400, '115 账号需要填写浏览器 Cookie');
     return;
   }
   if (source.type === '123') {
@@ -334,6 +337,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       token: credentials.token || '',
       password: '',
       cookie: credentials.cookie || '',
+      cookies: credentials.cookie ? [credentials.cookie] : [],
       streamKey: source?.streamKey || makeStreamKey(),
       createdAt: source?.createdAt || now,
       updatedAt: now,
@@ -366,6 +370,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       token: body.token ?? '',
       password: body.password ?? '',
       cookie: body.cookie ?? '',
+      cookies: body.cookies?.length ? body.cookies : (body.cookie ? [body.cookie] : []),
       streamKey: makeStreamKey(),
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -460,6 +465,9 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
         at: nowIso(),
       };
       await store.save().catch(() => undefined);
+      if (source.type === '115' || source.type === '123') {
+        notifyCookieInvalid(store.snapshot.settings.notifications, source.name);
+      }
       mapOpenListError(error);
     }
   });
@@ -600,6 +608,17 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     if (!library) throw new HttpError(404, '媒体库不存在');
     const file = await generateLibraryCover(store, library);
     res.json({ url: `/covers/${library.id}.jpg`, file });
+  });
+
+  router.post('/integrations/emby/test', async (req, res) => {
+    const body = parseBody(embyServerSchema, req.body);
+    const name = await testEmby(body);
+    res.json({ ok: true, name });
+  });
+
+  router.post('/integrations/notify/test', async (_req, res) => {
+    await notify(store.snapshot.settings.notifications, 'StreamPulse 通知测试成功');
+    res.json({ ok: true });
   });
 
   router.delete('/libraries/:id', async (req, res) => {
@@ -873,6 +892,8 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       }
       if (body.runRetention !== undefined) db.settings.runRetention = body.runRetention;
       if (body.organizer !== undefined) db.settings.organizer = body.organizer;
+      if (body.embyServers !== undefined) db.settings.embyServers = body.embyServers;
+      if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();
     await store.save();

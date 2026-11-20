@@ -1,10 +1,11 @@
 import { randomBytes } from 'node:crypto';
 import type { Library, Run, Settings, Source } from '../shared/types.js';
 
-export type SourceRecord = Omit<Source, 'tokenHint' | 'hasToken' | 'hasPassword' | 'hasCookie'> & {
+export type SourceRecord = Omit<Source, 'tokenHint' | 'hasToken' | 'hasPassword' | 'hasCookie' | 'cookieCount'> & {
   token: string;
   password: string;
   cookie: string;
+  cookies: string[];
   streamKey: string;
 };
 

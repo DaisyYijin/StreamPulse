@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.16.0';
+export const APP_VERSION = '1.17.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -69,6 +69,7 @@ export interface Source {
   hasToken: boolean;
   hasPassword: boolean;
   hasCookie: boolean;
+  cookieCount: number;
   createdAt: string;
   updatedAt: string;
   lastCheck: SourceCheck | null;
@@ -198,6 +199,24 @@ export const DEFAULT_ORGANIZE_CATEGORIES: OrganizeCategory[] = [
   { id: 'default_anime_tv', name: '动漫', mediaType: 'tv', genres: ['Animation', 'Sci-Fi & Fantasy'], countries: [], languages: [], keywords: [] },
 ];
 
+export interface EmbyServer {
+  id: string;
+  name: string;
+  url: string;
+  apiKey: string;
+  libraryIds: string[];
+  refreshAfterRun: boolean;
+}
+
+export interface NotificationSettings {
+  telegramBotToken: string;
+  telegramChatId: string;
+  wecomWebhookUrl: string;
+  notifyOnSuccess: boolean;
+  notifyOnFailure: boolean;
+  notifyCookieInvalid: boolean;
+}
+
 export interface Settings {
   outputDir: string;
   timezone: string;
@@ -206,6 +225,8 @@ export interface Settings {
   maxConcurrentRuns: number;
   runRetention: number;
   organizer: OrganizerSettings;
+  embyServers: EmbyServer[];
+  notifications: NotificationSettings;
 }
 
 export interface AuthStatus {
@@ -298,6 +319,7 @@ export interface SourceInput {
   token?: string;
   password?: string;
   cookie?: string;
+  cookies?: string[];
 }
 
 export interface LibraryInput {
