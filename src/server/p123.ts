@@ -1,3 +1,8 @@
+/*
+ * Native 123 client written for StreamPulse.
+ * Protocol reference: OpenList (AGPL-3.0). This is a separate TypeScript
+ * implementation; no OpenList Go source is included.
+ */
 import type { StorageClient, StorageEntry } from './storage.js';
 import type { SourceProfile } from '../shared/types.js';
 

@@ -366,6 +366,10 @@ always  总是替换
 
 115 来源可以填写多个 Cookie，用空行分隔；当前 Cookie 失效时自动尝试下一个。
 
+## 第三方声明
+
+115 / 123 原生客户端是 StreamPulse 自己的 TypeScript 实现；协议实现参考了 115driver（MIT）和 OpenList（AGPL-3.0）。详见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
 ## 更多文档
 
 - [FAQ](docs/faq.md)

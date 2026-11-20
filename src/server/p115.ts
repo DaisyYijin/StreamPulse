@@ -1,3 +1,8 @@
+/*
+ * Native 115 client written for StreamPulse.
+ * Protocol reference: 115driver (MIT, Copyright (c) 2022-2024 SheltonZhu).
+ * The m115 RSA/XOR encoding below is a TypeScript adaptation of that project.
+ */
 import { randomBytes } from 'node:crypto';
 import type { StorageClient, StorageEntry } from './storage.js';
 import type { SourceProfile } from '../shared/types.js';
