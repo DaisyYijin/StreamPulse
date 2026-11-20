@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import type { StorageClient, StorageEntry } from './storage.js';
+import type { SourceProfile } from '../shared/types.js';
 
 const API = 'https://webapi.115.com';
 const STATUS = 'https://my.115.com/?ct=guide&ac=status';
@@ -297,6 +298,44 @@ export class P115Client implements StorageClient {
       if (url) return url;
     }
     return null;
+  }
+
+  async getProfile(signal?: AbortSignal): Promise<SourceProfile | null> {
+    try {
+      const nav = await this.request('https://my.115.com/?ct=ajax&ac=nav&_=' + Date.now(), {}, signal);
+      const user = nav?.data ?? {};
+      const info = await this.request(`${API}/files/index_info`, {}, signal);
+      const space = info?.data?.space_info ?? {};
+      const bytes = (value: any): number => {
+        const raw = value?.size ?? value;
+        if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+        const text = String(raw ?? '');
+        if (/^[0-9]+$/.test(text)) return Number(text);
+        const match = text.match(/^([0-9.]+)\s*(B|KB|MB|GB|TB)?/i);
+        if (!match) return 0;
+        const units: Record<string, number> = { B: 1, KB: 1024, MB: 1024 ** 2, GB: 1024 ** 3, TB: 1024 ** 4 };
+        return Math.round(Number(match[1]) * (units[(match[2] || 'B').toUpperCase()] ?? 1));
+      };
+      const total = bytes(space.all_total);
+      const used = bytes(space.all_use);
+      const remain = bytes(space.all_remain);
+      const vip = Number(user.vip || 0);
+      const forever = Boolean(user.forever);
+      const expire = Number(user.expire || 0);
+      return {
+        nickname: String(user.user_name || user.nick_name || user.user_id || '115 用户'),
+        avatarUrl: String(user.face || user.avatar || ''),
+        totalBytes: total,
+        usedBytes: used,
+        remainingBytes: remain || Math.max(0, total - used),
+        isVip: vip > 0 || forever,
+        vipLabel: forever ? '永久会员' : vip > 0 ? '会员' : '普通账号',
+        vipExpire: forever ? '永久' : expire > 0 ? new Date(expire * 1000).toISOString() : '',
+        capturedAt: new Date().toISOString(),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }> {

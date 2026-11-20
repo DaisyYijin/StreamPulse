@@ -25,7 +25,7 @@ import {
   Skeleton,
   toast,
 } from '../components/ui';
-import { timeAgo } from '../utils';
+import { formatBytes, timeAgo } from '../utils';
 
 export function SourcesPage() {
   const [sources, setSources] = useState<Source[] | null>(null);
@@ -164,38 +164,75 @@ export function SourcesPage() {
               <article className="source-card" key={source.id}>
                 <div className="source-card-head">
                   <span className="source-avatar">
-                    <Cloud size={20} />
+                    {source.profile?.avatarUrl ? (
+                      <img src={source.profile.avatarUrl} alt={source.profile.nickname} referrerPolicy="no-referrer" />
+                    ) : (
+                      <Cloud size={20} />
+                    )}
                   </span>
                   <div className="source-title">
                     <h3>{source.name}</h3>
-                    <span className="source-type">{source.type === '115' ? '115 网盘' : source.type === '123' ? '123 云盘' : 'OpenList / AList'}</span>
+                    <span className="source-type">
+                      {source.type === '115' ? '115 网盘' : source.type === '123' ? '123 云盘' : 'OpenList / AList'}
+                      {source.profile?.nickname ? ` · ${source.profile.nickname}` : ''}
+                    </span>
                   </div>
                   <Badge tone={source.lastCheck?.ok ? 'success' : source.lastCheck ? 'danger' : 'neutral'}>
                     {source.lastCheck ? (source.lastCheck.ok ? '连接正常' : '连接异常') : '未测试'}
                   </Badge>
                 </div>
 
-                <div className="source-urls">
-                  <div>
-                    <span>
-                      <ServerCog size={13} /> API
-                    </span>
-                    <code title={source.baseUrl}>{source.baseUrl}</code>
+                {source.type === 'openlist' ? (
+                  <div className="source-urls">
+                    <div>
+                      <span><ServerCog size={13} /> API</span>
+                      <code title={source.baseUrl}>{source.baseUrl}</code>
+                    </div>
+                    <div>
+                      <span><ExternalLink size={13} /> 公开</span>
+                      <code title={source.publicUrl || source.baseUrl}>
+                        {source.publicUrl || '与 API 地址相同'}
+                      </code>
+                    </div>
                   </div>
-                  <div>
-                    <span>
-                      <ExternalLink size={13} /> 公开
-                    </span>
-                    <code title={source.publicUrl || source.baseUrl}>
-                      {source.publicUrl || '与 API 地址相同'}
-                    </code>
+                ) : (
+                  <div className="source-profile">
+                    <div className="source-profile-top">
+                      <span>
+                        <UserRound size={13} />
+                        {source.profile?.nickname || '尚未同步资料'}
+                      </span>
+                      <Badge tone={source.profile?.isVip ? 'success' : 'neutral'}>
+                        {source.profile?.vipLabel || '普通账号'}
+                      </Badge>
+                    </div>
+                    {source.profile ? (
+                      <>
+                        <div className="source-capacity">
+                          <div className="source-capacity-track">
+                            <span style={{ width: `${Math.min(100, Math.max(0, (source.profile.usedBytes / Math.max(1, source.profile.totalBytes)) * 100))}%` }} />
+                          </div>
+                          <span>{formatBytes(source.profile.usedBytes)} / {formatBytes(source.profile.totalBytes)}</span>
+                        </div>
+                        <div className="source-profile-meta">
+                          <span>剩余 {formatBytes(source.profile.remainingBytes)}</span>
+                          {source.profile.vipExpire ? <span>会员到期 {source.profile.vipExpire.slice(0, 10)}</span> : null}
+                        </div>
+                      </>
+                    ) : (
+                      <span className="source-profile-hint">点“刷新资料”获取头像、容量和会员信息</span>
+                    )}
                   </div>
-                </div>
+                )}
 
                 <div className="source-auth">
                   <span>
-                    {source.authType === 'token' ? <KeyRound size={14} /> : <UserRound size={14} />}
-                    {source.authType === 'token' ? '访问令牌' : `账号 · ${source.username || '未填写'}`}
+                    {source.type === '115' ? <UserRound size={14} /> : source.authType === 'token' ? <KeyRound size={14} /> : <UserRound size={14} />}
+                    {source.type === '115'
+                      ? '115 Cookie / 扫码'
+                      : source.type === '123'
+                        ? source.hasToken ? '123 扫码登录' : `123 账号 · ${source.username || '未填写'}`
+                        : source.authType === 'token' ? '访问令牌' : `账号 · ${source.username || '未填写'}`}
                   </span>
                   <span>{source.tokenHint ?? (source.hasPassword ? '密码已保存' : '未配置凭据')}</span>
                 </div>
@@ -222,7 +259,7 @@ export function SourcesPage() {
                       onClick={() => void testSource(source)}
                       icon={<Wifi size={14} />}
                     >
-                      测试
+                      {source.type === 'openlist' ? '测试' : '刷新资料'}
                     </Button>
                     <IconButton
                       label="编辑来源"

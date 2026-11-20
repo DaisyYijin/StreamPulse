@@ -2,6 +2,15 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.11.0] - 2026-11-20
+
+### Added
+
+- 115 / 123 source profiles: avatar, nickname, total/used/remaining storage,
+  membership label and expiry.
+- Profile is fetched automatically after QR login and on connection test.
+- Source cards show avatar, capacity bar and membership state.
+
 ## [1.10.1] - 2026-11-20
 
 ### Added

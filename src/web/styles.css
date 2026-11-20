@@ -5139,3 +5139,74 @@ code {
     grid-template-columns: 1fr;
   }
 }
+
+.source-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.source-profile {
+  display: grid;
+  gap: 7px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.source-profile-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.source-profile-top > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-capacity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 9px;
+  color: var(--muted);
+}
+
+.source-capacity-track {
+  flex: 1;
+  height: 4px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.source-capacity-track > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--lime);
+}
+
+.source-profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.source-profile-hint {
+  color: var(--dim);
+  font-size: 9.5px;
+}

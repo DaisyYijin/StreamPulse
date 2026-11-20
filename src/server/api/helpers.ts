@@ -27,6 +27,7 @@ export function sourceToPublic(source: SourceRecord): Source {
     createdAt: source.createdAt,
     updatedAt: source.updatedAt,
     lastCheck: source.lastCheck,
+    profile: source.profile ?? null,
   };
 }
 

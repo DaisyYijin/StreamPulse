@@ -1,4 +1,5 @@
 import type { StorageClient, StorageEntry } from './storage.js';
+import type { SourceProfile } from '../shared/types.js';
 
 const LOGIN = 'https://login.123pan.com/api/user/sign_in';
 const API = 'https://yun.123pan.com/b/api';
@@ -271,6 +272,30 @@ export class P123Client implements StorageClient {
       // Return the signed URL; the player can still follow it.
     }
     return url;
+  }
+
+  async getProfile(signal?: AbortSignal): Promise<SourceProfile | null> {
+    try {
+      const payload = await this.request(`${API}/user/info`, { method: 'GET' }, signal);
+      const data = payload?.data ?? {};
+      const total = Number(data.SpacePermanent || 0) + Number(data.SpaceTemp || 0);
+      const used = Number(data.SpaceUsed || 0);
+      const vipInfo = Array.isArray(data.vipInfo) ? data.vipInfo[0] : data.vipInfo;
+      const isVip = Boolean(data.Vip || data.IsVip || vipInfo);
+      return {
+        nickname: String(data.Nickname || data.UserName || data.UID || '123 用户'),
+        avatarUrl: String(data.HeadImage || data.Avatar || ''),
+        totalBytes: total,
+        usedBytes: used,
+        remainingBytes: Math.max(0, total - used),
+        isVip,
+        vipLabel: String(data.vipLabel || vipInfo?.vipLabel || (isVip ? '会员' : '普通账号')),
+        vipExpire: String(vipInfo?.endTime || data.vipExpire || ''),
+        capturedAt: new Date().toISOString(),
+      };
+    } catch {
+      return null;
+    }
   }
 
   async testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }> {

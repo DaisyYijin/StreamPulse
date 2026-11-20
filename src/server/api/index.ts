@@ -335,8 +335,11 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       createdAt: source?.createdAt || now,
       updatedAt: now,
       lastCheck: null,
+      profile: null,
     };
     checkSourceCredentials(draft);
+    const profile = await clientForSource(draft).getProfile?.().catch(() => null);
+    draft.profile = profile ?? null;
     await store.mutate((db) => {
       const index = db.sources.findIndex((item) => item.id === draft.id);
       if (index >= 0) db.sources[index] = draft;
@@ -364,6 +367,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       createdAt: nowIso(),
       updatedAt: nowIso(),
       lastCheck: null,
+      profile: null,
     };
     checkSourceCredentials(draft);
     await store.mutate((db) => {
@@ -399,6 +403,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       cookie: body.cookie !== undefined ? body.cookie : source.cookie,
       updatedAt: nowIso(),
       lastCheck: null,
+      profile: null,
     };
     checkSourceCredentials(next);
     await store.mutate((db) => {
@@ -427,7 +432,10 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     if (!source) throw new HttpError(404, '来源不存在');
     const started = Date.now();
     try {
-      const result = await clientForSource(source).testConnection(AbortSignal.timeout(30_000));
+      const client = clientForSource(source);
+      const result = await client.testConnection(AbortSignal.timeout(30_000));
+      const profile = await client.getProfile?.(AbortSignal.timeout(20_000)).catch(() => null);
+      if (profile) source.profile = profile;
       const latencyMs = Date.now() - started;
       source.lastCheck = {
         ok: true,

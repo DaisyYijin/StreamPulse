@@ -70,6 +70,7 @@ function normalizeDatabase(raw: unknown): Database {
         ...record,
         type: record.type || 'openlist',
         cookie: record.cookie || '',
+        profile: record.profile ?? null,
         streamKey:
           typeof record.streamKey === 'string' && record.streamKey.length >= 16
             ? record.streamKey
@@ -218,6 +219,7 @@ export class Store {
         token: source.token || '',
         password: source.password || '',
         username: source.username || '',
+        profile: source.profile ?? null,
       }));
     const libraries = (await Promise.all(
       (await listJson(this.librariesDir)).map((file) =>

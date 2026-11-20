@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.10.1';
+export const APP_VERSION = '1.11.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -39,6 +39,18 @@ export const SCHEDULE_PRESETS = [
 export type SourceType = 'openlist' | '115' | '123';
 export type SourceAuthType = 'token' | 'password' | 'cookie';
 
+export interface SourceProfile {
+  nickname: string;
+  avatarUrl: string;
+  totalBytes: number;
+  usedBytes: number;
+  remainingBytes: number;
+  isVip: boolean;
+  vipLabel: string;
+  vipExpire: string;
+  capturedAt: string;
+}
+
 export interface SourceCheck {
   ok: boolean;
   message: string;
@@ -60,6 +72,7 @@ export interface Source {
   createdAt: string;
   updatedAt: string;
   lastCheck: SourceCheck | null;
+  profile: SourceProfile | null;
 }
 
 export interface Library {

@@ -1,3 +1,5 @@
+import type { SourceProfile } from '../shared/types.js';
+
 export interface StorageEntry {
   name: string;
   isDir: boolean;
@@ -13,6 +15,7 @@ export interface StorageClient {
   list(path: string, signal?: AbortSignal): Promise<StorageEntry[]>;
   getRawUrl(path: string, signal?: AbortSignal): Promise<string | null>;
   testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }>;
+  getProfile?(signal?: AbortSignal): Promise<SourceProfile | null>;
   fallbackUrl?(path: string): string | null;
   mkdir?(path: string, signal?: AbortSignal): Promise<void>;
   move?(sourcePath: string, destinationDir: string, signal?: AbortSignal): Promise<void>;
