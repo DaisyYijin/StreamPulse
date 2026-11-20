@@ -12,7 +12,7 @@ import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
 import { generateLibraryCover } from '../covers.js';
-import { testEmby } from '../emby.js';
+import { createEmbyLibrary, listEmbyLibraries, testEmby } from '../emby.js';
 import { searchTmdb } from '../tmdb.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
@@ -33,6 +33,7 @@ import {
   libraryCreateSchema,
   libraryUpdateSchema,
   loginSchema,
+  embyLibraryCreateSchema,
   embyServerSchema,
   organizeExecuteSchema,
   qrStartSchema,
@@ -621,6 +622,26 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     const body = parseBody(embyServerSchema, req.body);
     const name = await testEmby(body);
     res.json({ ok: true, name });
+  });
+
+  router.post('/integrations/emby/libraries', async (req, res) => {
+    const server = parseBody(embyServerSchema, req.body);
+    try {
+      const libraries = await listEmbyLibraries(server);
+      res.json({ libraries });
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '读取 Emby 媒体库失败');
+    }
+  });
+
+  router.post('/integrations/emby/libraries/create', async (req, res) => {
+    const body = parseBody(embyLibraryCreateSchema, req.body);
+    try {
+      const library = await createEmbyLibrary(body.server, body);
+      res.json({ library });
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '创建 Emby 媒体库失败');
+    }
   });
 
   router.post('/integrations/notify/test', async (_req, res) => {

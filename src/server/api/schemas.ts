@@ -232,6 +232,13 @@ const notificationsSchema = z.object({
   notifyCookieInvalid: z.boolean(),
 });
 
+export const embyLibraryCreateSchema = z.object({
+  server: embyServerSchema,
+  name: z.string().trim().min(1).max(120),
+  collectionType: z.enum(['movies', 'tvshows', 'music', 'musicvideos', 'homevideos', 'mixed']),
+  paths: z.array(z.string().trim().min(1).max(2000)).min(1).max(20),
+});
+
 export const settingsUpdateSchema = z.object({
   organizer: organizerSchema.optional(),
   embyServers: z.array(embyServerSchema).max(20).optional(),

@@ -2,6 +2,8 @@ import {
   CheckCircle2,
   Database,
   FolderCog,
+  FolderPlus,
+  LibraryBig,
   Bell,
   Plus,
   Send,
@@ -18,7 +20,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, EmbyServer, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, EmbyLibrary, EmbyServer, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -69,6 +71,12 @@ export function SettingsPage() {
     notifyOnSuccess: false, notifyOnFailure: true, notifyCookieInvalid: true,
   });
   const [integrationBusy, setIntegrationBusy] = useState(false);
+  const [embyManageId, setEmbyManageId] = useState('');
+  const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrary[]>([]);
+  const [embyLibraryBusy, setEmbyLibraryBusy] = useState(false);
+  const [embyCreateName, setEmbyCreateName] = useState('');
+  const [embyCreateType, setEmbyCreateType] = useState('movies');
+  const [embyCreatePath, setEmbyCreatePath] = useState('');
 
   const load = async () => {
     try {
@@ -86,6 +94,7 @@ export function SettingsPage() {
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
       setRunRetention(data.settings.runRetention);
       setEmbyServers(data.settings.embyServers ?? []);
+      setEmbyManageId((current) => current || data.settings.embyServers?.[0]?.id || '');
       setNotifications({ ...notifications, ...(data.settings.notifications ?? {}) });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
@@ -183,6 +192,52 @@ export function SettingsPage() {
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : 'Emby 连接失败');
     }
+  };
+
+  const selectedEmbyServer = embyServers.find((server) => server.id === embyManageId) ?? embyServers[0];
+
+  const loadEmbyLibraries = async (server: EmbyServer) => {
+    setEmbyLibraryBusy(true);
+    try {
+      const result = await api.post<{ libraries: EmbyLibrary[] }>('/api/integrations/emby/libraries', server);
+      setEmbyLibraries(result.libraries);
+      toast.success(`读取到 ${result.libraries.length} 个 Emby 媒体库`);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '读取 Emby 媒体库失败');
+    } finally {
+      setEmbyLibraryBusy(false);
+    }
+  };
+
+  const createEmbyLibrary = async () => {
+    if (!selectedEmbyServer) return;
+    if (!embyCreateName.trim() || !embyCreatePath.trim()) {
+      toast.error('请填写媒体库名称和 Emby 可见目录');
+      return;
+    }
+    setEmbyLibraryBusy(true);
+    try {
+      const result = await api.post<{ library: EmbyLibrary }>('/api/integrations/emby/libraries/create', {
+        server: selectedEmbyServer,
+        name: embyCreateName,
+        collectionType: embyCreateType,
+        paths: [embyCreatePath.trim()],
+      });
+      toast.success(`已创建 Emby 媒体库：${result.library.name}`);
+      setEmbyLibraries((current) => [...current.filter((item) => item.id !== result.library.id), result.library]);
+      setEmbyCreateName('');
+      setEmbyCreatePath('');
+      await loadEmbyLibraries(selectedEmbyServer);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '创建 Emby 媒体库失败');
+    } finally {
+      setEmbyLibraryBusy(false);
+    }
+  };
+
+  const addEmbyLibraryToRefresh = (server: EmbyServer, library: EmbyLibrary) => {
+    updateEmby(server.id, { libraryIds: Array.from(new Set([...server.libraryIds, library.id])) });
+    toast.success(`已加入刷新：${library.name}`);
   };
 
   const testNotify = async () => {
@@ -434,7 +489,7 @@ export function SettingsPage() {
                     <div className="integration-block-head">
                       <strong>{server.name || '未命名 Emby'}</strong>
                       <div className="integration-actions">
-                        <Button type="button" size="sm" variant="ghost" onClick={() => void testEmbyServer(server)}>测试</Button>
+                        <Button type="button" size="sm" variant="ghost" onClick={() => void testEmbyServer(server)}>测试连接</Button>
                         <button type="button" className="icon-button danger" onClick={() => setEmbyServers((current) => current.filter((item) => item.id !== server.id))} aria-label="删除 Emby"><Trash2 size={15} /></button>
                       </div>
                     </div>
@@ -452,6 +507,56 @@ export function SettingsPage() {
                 ))}
                 <Button type="button" variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => setEmbyServers((current) => [...current, { id: `emby_${Date.now().toString(36)}`, name: 'Emby', url: '', apiKey: '', libraryIds: [], refreshAfterRun: true }])}>添加 Emby 服务端</Button>
               </div>
+
+              <div className="settings-head compact" style={{ marginTop: 22 }}>
+                <span className="settings-icon"><LibraryBig size={18} /></span>
+                <div><h2>Emby 媒体库</h2><p>读取 Emby 现有媒体库，或按 Emby 可见目录一键创建。</p></div>
+              </div>
+              {embyServers.length === 0 ? <p className="settings-hint">先添加一个 Emby 服务端。</p> : (
+                <div className="emby-library-panel">
+                  <div className="form-grid form-grid-2">
+                    <Field label="Emby 服务端">
+                      <Select value={embyManageId} onChange={(event) => { setEmbyManageId(event.target.value); setEmbyLibraries([]); }}>
+                        {embyServers.map((server) => <option key={server.id} value={server.id}>{server.name}</option>)}
+                      </Select>
+                    </Field>
+                    <Field label="现有媒体库">
+                      <Button type="button" variant="secondary" icon={<RefreshCcw size={14} />} loading={embyLibraryBusy} onClick={() => selectedEmbyServer ? void loadEmbyLibraries(selectedEmbyServer) : undefined}>读取媒体库</Button>
+                    </Field>
+                  </div>
+                  {embyLibraries.length > 0 ? (
+                    <div className="emby-library-list">
+                      {embyLibraries.map((library) => (
+                        <div className="emby-library-row" key={library.id}>
+                          <div>
+                            <strong>{library.name}</strong>
+                            <span>{library.collectionType || 'mixed'} · {library.id}</span>
+                            <code>{library.locations.join(' · ') || '无路径'}</code>
+                          </div>
+                          <Button type="button" size="sm" variant="ghost" onClick={() => selectedEmbyServer ? addEmbyLibraryToRefresh(selectedEmbyServer, library) : undefined}>加入刷新</Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : <p className="settings-hint">点击“读取媒体库”查看 Emby 中已有的库。</p>}
+                  <div className="form-grid form-grid-3">
+                    <Field label="新库名称"><Input value={embyCreateName} onChange={(event) => setEmbyCreateName(event.target.value)} placeholder="电影" /></Field>
+                    <Field label="类型">
+                      <Select value={embyCreateType} onChange={(event) => setEmbyCreateType(event.target.value)}>
+                        <option value="movies">电影</option>
+                        <option value="tvshows">电视剧</option>
+                        <option value="mixed">混合内容</option>
+                        <option value="homevideos">家庭视频</option>
+                        <option value="music">音乐</option>
+                        <option value="musicvideos">MV</option>
+                      </Select>
+                    </Field>
+                    <Field label="Emby 可见目录" hint="填 Emby 容器/宿主机看到的路径，不是 StreamPulse 的输出路径">
+                      <Input value={embyCreatePath} onChange={(event) => setEmbyCreatePath(event.target.value)} placeholder="/mnt/strm/电影" />
+                    </Field>
+                  </div>
+                  <Button type="button" variant="primary" icon={<FolderPlus size={14} />} loading={embyLibraryBusy} onClick={() => void createEmbyLibrary()}>根据目录创建媒体库</Button>
+                </div>
+              )}
 
               <div className="settings-head compact" style={{ marginTop: 22 }}>
                 <span className="settings-icon"><Bell size={18} /></span>
@@ -598,7 +703,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.20.0'}</span>
+            <span>v{system?.version ?? '1.21.0'}</span>
           </section>
         </aside>
       </div>

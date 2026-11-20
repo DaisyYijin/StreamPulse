@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.21.0] - 2026-11-20
+
+### Added
+
+- Emby library management in settings: test connection, list existing virtual
+  folders, add a library to the refresh list, and create a library from a
+  directory with a selected collection type.
+
 ## [1.20.0] - 2026-11-20
 
 ### Added

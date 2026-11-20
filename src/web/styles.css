@@ -5912,3 +5912,60 @@ html[data-theme='light'] .integration-block {
 .simulate-result span {
   color: var(--muted);
 }
+
+.settings-hint {
+  margin: 8px 0;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.emby-library-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.emby-library-list {
+  display: grid;
+  gap: 6px;
+}
+
+.emby-library-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.emby-library-row > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.emby-library-row strong {
+  font-size: 11px;
+}
+
+.emby-library-row span {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.emby-library-row code {
+  overflow: hidden;
+  color: var(--lime);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+html[data-theme='light'] .emby-library-panel {
+  background: #f8faf6;
+}

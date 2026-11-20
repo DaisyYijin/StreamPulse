@@ -77,7 +77,7 @@ washing:
 
 ## Emby 联动
 
-设置 → Emby 与通知：添加 Emby 地址、API Key、媒体库 ID，开启“同步后刷新 Emby”。任务成功后会自动调用 Emby 刷新接口。
+设置 → Emby 与通知：添加 Emby 地址、API Key，先点“测试连接”；可读取 Emby 媒体库并加入刷新，也可以填写 Emby 可见目录后一键创建媒体库。任务成功后会自动调用 Emby 刷新接口。
 
 ## 通知
 

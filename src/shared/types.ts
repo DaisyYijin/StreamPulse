@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.20.0';
+export const APP_VERSION = '1.21.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -226,6 +226,13 @@ export interface EmbyServer {
   apiKey: string;
   libraryIds: string[];
   refreshAfterRun: boolean;
+}
+
+export interface EmbyLibrary {
+  id: string;
+  name: string;
+  collectionType: string;
+  locations: string[];
 }
 
 export interface NotificationSettings {
