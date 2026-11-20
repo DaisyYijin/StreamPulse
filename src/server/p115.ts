@@ -352,6 +352,44 @@ export class P115Client implements StorageClient {
     }
   }
 
+  async receiveShare(shareCode: string, receiveCode: string, targetPath: string, signal?: AbortSignal): Promise<number> {
+    const referer = `https://115cdn.com/s/${shareCode}?password=${encodeURIComponent(receiveCode)}&`;
+    const params = new URLSearchParams({
+      share_code: shareCode,
+      receive_code: receiveCode,
+      cid: '0',
+      limit: '1000',
+      offset: '0',
+      asc: '0',
+      format: 'json',
+    });
+    const snap = await this.request(`https://115cdn.com/webapi/share/snap?${params}`, {
+      headers: { Referer: referer },
+    }, signal);
+    const files = snap?.data?.list ?? [];
+    if (!files.length) throw new P115Error('分享中没有可接收的文件');
+    const ids = files.map((file: any) => String(file?.fid || file?.cid || '')).filter(Boolean);
+    if (!ids.length) throw new P115Error('分享文件没有有效 ID');
+    await this.mkdir(targetPath, signal);
+    const targetId = await this.dirId(targetPath, signal);
+    const form = new URLSearchParams({
+      share_code: shareCode,
+      receive_code: receiveCode,
+      file_id: ids.join(','),
+      cid: targetId,
+    });
+    const result = await this.request('https://webapi.115.com/share/receive', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Referer: referer,
+      },
+      body: form.toString(),
+    }, signal);
+    if (result?.state === false) throw new P115Error(result?.error || result?.message || '分享接收失败');
+    return ids.length;
+  }
+
   async testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }> {
     const status = await this.request(STATUS, {}, signal);
     if (status?.state !== true) throw new P115Error('115 Cookie 无效或已过期', 401);

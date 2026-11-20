@@ -133,6 +133,13 @@ export const libraryUpdateSchema = z.object({
   eventWatch: z.boolean().optional(),
 });
 
+export const shareReceiveSchema = z.object({
+  sourceId: z.string().trim().min(1),
+  url: z.string().trim().min(1).max(2000),
+  receiveCode: z.string().trim().max(20).optional().default(''),
+  targetPath: z.string().trim().min(1).max(1000).default('/Inbox'),
+});
+
 export const organizeExecuteSchema = z.object({
   batchId: z.string().trim().min(1).max(120),
 });

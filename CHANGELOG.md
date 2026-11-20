@@ -2,6 +2,16 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.16.0] - 2026-11-20
+
+### Added
+
+- 115 share import: paste a share link, receive files into a chosen cloud
+  directory, then run the organizer.
+- Media library cover generation from local posters, output as a
+  1200×1800 JPEG under `/data/covers`.
+- Split documentation: `docs/faq.md`, `docs/advanced.md`.
+
 ## [1.15.0] - 2026-11-20
 
 ### Added

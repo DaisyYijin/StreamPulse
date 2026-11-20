@@ -11,6 +11,8 @@ import type {
 import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
+import { generateLibraryCover } from '../covers.js';
+import { P115Client } from '../p115.js';
 import { executeCloudOrganizerBatch, isTmdbError, scanCloudOrganizer } from '../organizer.js';
 import { pollQrLogin, startQrLogin, takeQrSession } from '../qr.js';
 import { PathSafetyError, normalizeExtensions, normalizeSourcePath, normalizeTargetPath, strmRelativePath } from '../core/paths.js';
@@ -30,6 +32,7 @@ import {
   loginSchema,
   organizeExecuteSchema,
   qrStartSchema,
+  shareReceiveSchema,
   runOptionsSchema,
   normalizeBaseUrl,
   normalizePublicUrl,
@@ -592,6 +595,13 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     res.json(libraryToPublic(merged, store, scheduler));
   });
 
+  router.post('/libraries/:id/cover', async (req, res) => {
+    const library = store.library(idOf(req));
+    if (!library) throw new HttpError(404, '媒体库不存在');
+    const file = await generateLibraryCover(store, library);
+    res.json({ url: `/covers/${library.id}.jpg`, file });
+  });
+
   router.delete('/libraries/:id', async (req, res) => {
     const library = store.library(idOf(req));
     if (!library) throw new HttpError(404, '媒体库不存在');
@@ -760,6 +770,24 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.get('/settings', async (_req, res) => {
     res.json({ settings: store.snapshot.settings, system: await systemInfo(store) });
+  });
+
+  router.post('/shares/115', async (req, res) => {
+    const body = parseBody(shareReceiveSchema, req.body);
+    const source = store.source(body.sourceId);
+    if (!source || source.type !== '115') throw new HttpError(400, '请选择 115 来源账号');
+    const match = /(?:\/s\/|share_code=)([A-Za-z0-9]+)/.exec(body.url);
+    if (!match) throw new HttpError(400, '无法识别 115 分享码');
+    const parsedUrl = new URL(body.url);
+    const receiveCode = body.receiveCode || parsedUrl.searchParams.get('password') || '';
+    const client = clientForSource(source);
+    if (!(client instanceof P115Client)) throw new HttpError(400, '当前来源不是 115');
+    try {
+      const count = await client.receiveShare(match[1], receiveCode, body.targetPath);
+      res.json({ ok: true, count, targetPath: body.targetPath });
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '分享接收失败');
+    }
   });
 
   router.post('/organize/scan', async (_req, res) => {

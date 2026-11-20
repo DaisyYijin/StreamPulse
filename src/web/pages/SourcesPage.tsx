@@ -7,6 +7,7 @@ import {
   Pencil,
   Plus,
   ServerCog,
+  Share2,
   Trash2,
   UserRound,
   Wifi,
@@ -21,7 +22,11 @@ import {
   Button,
   ConfirmDialog,
   EmptyState,
+  Field,
   IconButton,
+  Input,
+  Modal,
+  Select,
   Skeleton,
   toast,
 } from '../components/ui';
@@ -32,6 +37,12 @@ export function SourcesPage() {
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [error, setError] = useState('');
   const [sourceFilter, setSourceFilter] = useState<'all' | '115' | '123' | 'openlist'>('all');
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareSourceId, setShareSourceId] = useState('');
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareCode, setShareCode] = useState('');
+  const [sharePath, setSharePath] = useState('/Inbox');
+  const [shareBusy, setShareBusy] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Source | null>(null);
   const [testingId, setTestingId] = useState('');
@@ -102,6 +113,16 @@ export function SourcesPage() {
           <p>统一管理 115、123 和 OpenList 存储账号，每个账号一个文件。</p>
         </div>
         <div className="page-actions">
+          <Button
+            variant="secondary"
+            icon={<Share2 size={16} />}
+            onClick={() => {
+              setShareSourceId(sources?.find((source) => source.type === '115')?.id ?? '');
+              setShareOpen(true);
+            }}
+          >
+            115 分享导入
+          </Button>
           <Button
             variant="primary"
             icon={<Plus size={16} />}
@@ -307,6 +328,63 @@ export function SourcesPage() {
         <CheckCircle2 size={15} />
         令牌与密码只保存在服务端数据卷中，前端仅显示末尾提示，不会收到明文凭据。
       </div>
+
+      <Modal
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        title="115 分享导入"
+        description="把 115 分享文件转存到自己的网盘目录，之后可交给整理流程。"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShareOpen(false)} disabled={shareBusy}>取消</Button>
+            <Button
+              variant="primary"
+              loading={shareBusy}
+              onClick={async () => {
+                setShareBusy(true);
+                try {
+                  const result = await api.post<{ count: number; targetPath: string }>('/api/shares/115', {
+                    sourceId: shareSourceId,
+                    url: shareUrl,
+                    receiveCode: shareCode,
+                    targetPath: sharePath,
+                  });
+                  toast.success(`已转存 ${result.count} 个文件到 ${result.targetPath}`);
+                  setShareOpen(false);
+                  setShareUrl('');
+                  setShareCode('');
+                } catch (error) {
+                  toast.error(error instanceof Error ? error.message : '分享导入失败');
+                } finally {
+                  setShareBusy(false);
+                }
+              }}
+            >
+              开始转存
+            </Button>
+          </>
+        }
+      >
+        <div className="form-grid">
+          <Field label="115 来源账号">
+            <Select value={shareSourceId} onChange={(event) => setShareSourceId(event.target.value)}>
+              <option value="">请选择 115 账号</option>
+              {(sources ?? []).filter((source) => source.type === '115').map((source) => (
+                <option key={source.id} value={source.id}>{source.name}</option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="分享链接" hint="支持 https://115.com/s/xxxx?password=yyyy">
+            <Input value={shareUrl} onChange={(event) => setShareUrl(event.target.value)} placeholder="https://115.com/s/xxxx" />
+          </Field>
+          <Field label="提取码" optional>
+            <Input value={shareCode} onChange={(event) => setShareCode(event.target.value)} placeholder="留空则从链接读取" />
+          </Field>
+          <Field label="转存到目录" hint="例如 /Inbox；目录不存在会自动创建">
+            <Input value={sharePath} onChange={(event) => setSharePath(event.target.value)} placeholder="/Inbox" />
+          </Field>
+        </div>
+      </Modal>
 
       <SourceModal
         open={modalOpen}

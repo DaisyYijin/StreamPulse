@@ -2,6 +2,7 @@ import {
   ArrowRight,
   CalendarClock,
   Eye,
+  Image as ImageIcon,
   FolderTree,
   Layers3,
   LibraryBig,
@@ -50,6 +51,7 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
   const [deleting, setDeleting] = useState<Library | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [runningId, setRunningId] = useState('');
+  const [coverBusy, setCoverBusy] = useState('');
   const [previewTarget, setPreviewTarget] = useState<Library | null>(null);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -135,7 +137,20 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
     } finally {
       setPreviewLoading(false);
     }
-  };
+  }
+
+  const generateCover = async (library: Library) => {
+    setCoverBusy(library.id);
+    try {
+      const result = await api.post<{ url: string }>(`/api/libraries/${library.id}/cover`);
+      window.open(result.url, '_blank', 'noopener');
+      toast.success('封面已生成');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '封面生成失败');
+    } finally {
+      setCoverBusy('');
+    }
+  };;
 
   return (
     <div className="page-stack">
@@ -330,6 +345,15 @@ export function LibrariesPage({ onOpenRun }: { onOpenRun: (runId: string) => voi
                     onClick={() => void openPreview(library)}
                   >
                     预览
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    icon={<ImageIcon size={14} />}
+                    loading={coverBusy === library.id}
+                    onClick={() => void generateCover(library)}
+                  >
+                    封面
                   </Button>
                   <div className="library-actions-right">
                     <IconButton

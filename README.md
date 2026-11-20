@@ -344,6 +344,11 @@ always  总是替换
 
 账号卡片上会显示头像、容量进度条和会员状态。资料不会实时推送；点 **刷新资料** 或重新测试连接即可更新。
 
+## 更多文档
+
+- [FAQ](docs/faq.md)
+- [进阶使用：YAML / 重命名 / 分享 / 封面](docs/advanced.md)
+
 ## 管理员账号
 
 首次访问 `http://NAS_IP:1024` 时会创建管理员账号：
@@ -609,7 +614,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.15.0
+ghcr.io/daisyyijin/streampulse:1.16.0
 ```
 
 ### 首次发布后设为公开

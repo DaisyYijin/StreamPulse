@@ -40,6 +40,7 @@ export function libraryToPublic(
   const timezone = store.snapshot.settings.timezone;
   return {
     ...library,
+    coverUrl: `/covers/${library.id}.jpg`,
     sourceName: source?.name ?? '来源已删除',
     nextRunAt: scheduler.nextFor(library, timezone),
   };

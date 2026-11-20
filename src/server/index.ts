@@ -44,6 +44,7 @@ async function main(): Promise<void> {
     }
     next();
   });
+  app.use('/covers', express.static(path.join(store.stateDir, 'covers'), { maxAge: '1h' }));
   app.use(express.json({ limit: config.maxBodyBytes }));
 
   app.use('/api', auth.middleware);

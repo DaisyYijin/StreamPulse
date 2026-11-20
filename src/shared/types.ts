@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.15.0';
+export const APP_VERSION = '1.16.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -100,6 +100,7 @@ export interface Library {
   lastRunStatus: RunStatus | null;
   lastRunId: string | null;
   nextRunAt: string | null;
+  coverUrl?: string;
   createdAt: string;
   updatedAt: string;
 }
