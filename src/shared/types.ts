@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.26.0';
+export const APP_VERSION = '1.27.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -219,6 +219,27 @@ export const DEFAULT_ORGANIZE_CATEGORIES: OrganizeCategory[] = [
   { id: 'default_anime_tv', name: '动漫', mediaType: 'tv', genres: ['Animation', 'Sci-Fi & Fantasy'], countries: [], languages: [], keywords: [] },
 ];
 
+export interface SubscriptionSettings {
+  doubanUserId: string;
+  doubanCookie: string;
+  doubanRssUrl: string;
+  autoSync: boolean;
+  intervalHours: number;
+}
+
+export interface Subscription {
+  id: string;
+  doubanId: string;
+  title: string;
+  year: string;
+  mediaType: 'movie' | 'tv';
+  tmdbId: number | null;
+  status: 'waiting' | 'searching' | 'pending' | 'downloading' | 'organizing' | 'completed' | 'failed' | 'skipped';
+  message: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface GuanyingSettings {
   baseUrl: string;
   cookie: string;
@@ -267,6 +288,7 @@ export interface Settings {
   embyServers: EmbyServer[];
   hdhive: HdhiveSettings;
   guanying: GuanyingSettings;
+  subscriptions: SubscriptionSettings;
   notifications: NotificationSettings;
 }
 

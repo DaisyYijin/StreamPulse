@@ -222,6 +222,14 @@ export const embyServerSchema = z.object({
   refreshAfterRun: z.boolean().default(false),
 });
 
+const subscriptionSettingsSchema = z.object({
+  doubanUserId: z.string().trim().max(80).default(''),
+  doubanCookie: z.string().trim().max(20000).default(''),
+  doubanRssUrl: z.string().trim().max(2000).default(''),
+  autoSync: z.boolean().default(false),
+  intervalHours: z.number().min(1).max(168).default(6),
+});
+
 const guanyingSchema = z.object({
   baseUrl: z.string().trim().max(2000).default(''),
   cookie: z.string().trim().max(10000).default(''),
@@ -282,6 +290,7 @@ export const settingsUpdateSchema = z.object({
   embyServers: z.array(embyServerSchema).max(20).optional(),
   hdhive: hdhiveSchema.optional(),
   guanying: guanyingSchema.optional(),
+  subscriptions: subscriptionSettingsSchema.optional(),
   notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),

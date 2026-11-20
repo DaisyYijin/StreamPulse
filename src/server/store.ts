@@ -74,6 +74,13 @@ function createDefaultDatabase(): Database {
         baseUrl: '',
         cookie: '',
       },
+      subscriptions: {
+        doubanUserId: '',
+        doubanCookie: '',
+        doubanRssUrl: '',
+        autoSync: false,
+        intervalHours: 6,
+      },
       hdhive: {
         baseUrl: 'https://hdhive.com',
         apiKey: '',
@@ -171,6 +178,10 @@ function normalizeDatabase(raw: unknown): Database {
       guanying: {
         ...base.settings.guanying,
         ...(input.settings?.guanying ?? {}),
+      },
+      subscriptions: {
+        ...base.settings.subscriptions,
+        ...(input.settings?.subscriptions ?? {}),
       },
       hdhive: {
         ...base.settings.hdhive,
@@ -331,6 +342,10 @@ export class Store {
         guanying: {
           ...base.settings.guanying,
           ...(settings.settings?.guanying ?? {}),
+        },
+        subscriptions: {
+          ...base.settings.subscriptions,
+          ...(settings.settings?.subscriptions ?? {}),
         },
         hdhive: {
           ...base.settings.hdhive,

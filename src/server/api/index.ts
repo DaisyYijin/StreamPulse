@@ -18,6 +18,7 @@ import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
 import { submitChallenge } from '../challenge.js';
+import { deleteSubscription, listSubscriptions, syncDoubanSubscriptions } from '../subscriptions.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
 import { evaluateWash, executeCloudOrganizerBatch, isTmdbError, parseName, scanCloudOrganizer } from '../organizer.js';
@@ -653,6 +654,31 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     }
   });
 
+  router.get('/subscriptions', async (_req, res) => {
+    res.json(await listSubscriptions(store.stateDir));
+  });
+
+  router.post('/subscriptions/sync', async (_req, res) => {
+    const organizer = store.snapshot.settings.organizer;
+    try {
+      const result = await syncDoubanSubscriptions(
+        store.stateDir,
+        store.snapshot.settings.subscriptions,
+        organizer.tmdbApiKey,
+        organizer.tmdbLanguage,
+      );
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '豆瓣想看同步失败');
+    }
+  });
+
+  router.delete('/subscriptions/:id', async (req, res) => {
+    const deleted = await deleteSubscription(store.stateDir, idOf(req));
+    if (!deleted) throw new HttpError(404, '订阅不存在');
+    res.json({ ok: true });
+  });
+
   router.post('/search/challenge', async (req, res) => {
     const body = parseBody(challengeSubmitSchema, req.body);
     try {
@@ -1016,6 +1042,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.embyServers !== undefined) db.settings.embyServers = body.embyServers;
       if (body.hdhive !== undefined) db.settings.hdhive = body.hdhive;
       if (body.guanying !== undefined) db.settings.guanying = body.guanying;
+      if (body.subscriptions !== undefined) db.settings.subscriptions = body.subscriptions;
       if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();

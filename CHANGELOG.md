@@ -2,6 +2,18 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.27.0] - 2026-11-20
+
+### Added
+
+- Douban “想看” subscription sync using a public user ID, RSSHub, or a
+  Douban cookie for private lists.
+- Subscription list with TMDb matching and auto-sync interval.
+
+### Not yet included
+
+- Resource search / 影巢 unlock / 115 transfer / auto organize for subscriptions.
+
 ## [1.26.0] - 2026-11-20
 
 ### Added

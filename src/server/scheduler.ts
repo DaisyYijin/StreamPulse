@@ -7,6 +7,7 @@ import type { RunManager } from './runner.js';
 import type { Store } from './store.js';
 import type { LibraryRecord } from './types.js';
 import type { StorageClient, StorageEvent } from './storage.js';
+import { syncDoubanSubscriptions } from './subscriptions.js';
 
 export function isTimezone(value: string): boolean {
   try {
@@ -46,6 +47,7 @@ export class Scheduler {
   private readonly lastEventAt = new Map<string, number>();
   private readonly eventBusy = new Set<string>();
   private readonly dirIndexes = new Map<string, { at: number; index: DirectoryIndex }>();
+  private subscriptionTimer: NodeJS.Timeout | null = null;
 
   constructor(store: Store, runner: RunManager) {
     this.store = store;
@@ -70,6 +72,22 @@ export class Scheduler {
     for (const timer of this.eventTimers.values()) clearInterval(timer);
     this.eventTimers.clear();
     this.dirIndexes.clear();
+    if (this.subscriptionTimer) clearInterval(this.subscriptionTimer);
+    this.subscriptionTimer = null;
+    const subscriptions = this.store.snapshot.settings.subscriptions;
+    if (subscriptions.autoSync && (subscriptions.doubanUserId || subscriptions.doubanRssUrl)) {
+      const hours = Math.max(1, Math.min(168, subscriptions.intervalHours || 6));
+      this.subscriptionTimer = setInterval(() => {
+        void syncDoubanSubscriptions(
+          this.store.stateDir,
+          this.store.snapshot.settings.subscriptions,
+          this.store.snapshot.settings.organizer.tmdbApiKey,
+          this.store.snapshot.settings.organizer.tmdbLanguage,
+        ).catch((error) => {
+          console.warn(`[subscriptions] ${error instanceof Error ? error.message : String(error)}`);
+        });
+      }, hours * 3_600_000);
+    }
     const timezone = this.store.snapshot.settings.timezone;
 
     for (const library of this.store.snapshot.libraries) {
@@ -235,6 +253,8 @@ export class Scheduler {
   }
 
   stop(): void {
+    if (this.subscriptionTimer) clearInterval(this.subscriptionTimer);
+    this.subscriptionTimer = null;
     for (const task of this.tasks.values()) {
       try {
         task.destroy();
