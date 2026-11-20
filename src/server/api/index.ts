@@ -17,6 +17,7 @@ import { searchHdhive, testHdhive } from '../hdhive.js';
 import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
+import { submitChallenge } from '../challenge.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
 import { evaluateWash, executeCloudOrganizerBatch, isTmdbError, parseName, scanCloudOrganizer } from '../organizer.js';
@@ -39,6 +40,7 @@ import {
   embyLibraryCreateSchema,
   embyServerSchema,
   butailingSearchSchema,
+  challengeSubmitSchema,
   guanyingSearchSchema,
   hdhiveConnectSchema,
   hdhiveSearchSchema,
@@ -648,6 +650,16 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       res.json({ library });
     } catch (error) {
       throw new HttpError(502, error instanceof Error ? error.message : '创建 Emby 媒体库失败');
+    }
+  });
+
+  router.post('/search/challenge', async (req, res) => {
+    const body = parseBody(challengeSubmitSchema, req.body);
+    try {
+      const result = await submitChallenge(body.sessionId, body.code);
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : '验证失败');
     }
   });
 

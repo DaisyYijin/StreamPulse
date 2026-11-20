@@ -28,14 +28,19 @@ async function getBrowser(): Promise<Browser> {
   return browserPromise;
 }
 
-export async function withPage<T>(run: (page: Page) => Promise<T>): Promise<T> {
+export async function openPage(): Promise<Page> {
   const browser = await getBrowser();
   const page = await browser.newPage();
+  page.setDefaultTimeout(25_000);
+  page.setDefaultNavigationTimeout(35_000);
+  await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
+  await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
+  return page;
+}
+
+export async function withPage<T>(run: (page: Page) => Promise<T>): Promise<T> {
+  const page = await openPage();
   try {
-    page.setDefaultTimeout(25_000);
-    page.setDefaultNavigationTimeout(35_000);
-    await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36');
-    await page.setExtraHTTPHeaders({ 'Accept-Language': 'zh-CN,zh;q=0.9' });
     return await run(page);
   } finally {
     await page.close().catch(() => undefined);

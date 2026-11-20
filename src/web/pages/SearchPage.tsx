@@ -45,9 +45,16 @@ interface GuanyingResult {
   href: string;
 }
 
+interface ChallengeInfo {
+  sessionId: string;
+  image: string;
+  prompt: string;
+}
+
 interface AlternativeResult {
   results: Array<ButailingResult | GuanyingResult>;
   warnings: string[];
+  challenge?: ChallengeInfo;
 }
 
 export function SearchPage() {
@@ -58,6 +65,8 @@ export function SearchPage() {
   const [source, setSource] = useState<'hdhive' | 'butailing' | 'guanying'>('hdhive');
   const [result, setResult] = useState<SearchResult | null>(null);
   const [alternative, setAlternative] = useState<AlternativeResult | null>(null);
+  const [challengeCode, setChallengeCode] = useState('');
+  const [challengeBusy, setChallengeBusy] = useState(false);
   const [error, setError] = useState('');
 
   const search = async (event?: FormEvent) => {
@@ -87,6 +96,24 @@ export function SearchPage() {
       toast.error(message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const submitChallenge = async () => {
+    if (!alternative?.challenge || !challengeCode.trim()) return;
+    setChallengeBusy(true);
+    try {
+      const result = await api.post<AlternativeResult>('/api/search/challenge', {
+        sessionId: alternative.challenge.sessionId,
+        code: challengeCode.trim(),
+      });
+      setAlternative(result);
+      setChallengeCode('');
+      if (result.results.length === 0) toast.info('验证已提交，但没有解析到结果');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '验证失败');
+    } finally {
+      setChallengeBusy(false);
     }
   };
 
@@ -128,6 +155,18 @@ export function SearchPage() {
           <strong>搜索失败</strong>
           <p>{error}</p>
           <Button variant="secondary" size="sm" icon={<Settings2 size={14} />} onClick={() => { window.location.hash = '#/settings'; }}>去设置</Button>
+        </div>
+      ) : null}
+
+      {alternative?.challenge ? (
+        <div className="panel search-challenge">
+          <div className="yaml-preview-head">需要人工验证</div>
+          <p>{alternative.challenge.prompt}</p>
+          <img src={alternative.challenge.image} alt="验证截图" />
+          <div className="search-bar">
+            <Input value={challengeCode} onChange={(event) => setChallengeCode(event.target.value)} placeholder="填写截图中的验证码" />
+            <Button type="button" variant="primary" loading={challengeBusy} onClick={() => void submitChallenge()}>提交验证</Button>
+          </div>
         </div>
       ) : null}
 

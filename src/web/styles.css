@@ -6312,3 +6312,17 @@ html[data-theme='light'] .emby-library-panel {
   color: var(--lime);
   border-color: var(--lime-dim);
 }
+
+.search-challenge {
+  display: grid;
+  gap: 10px;
+}
+
+.search-challenge img {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}

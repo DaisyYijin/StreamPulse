@@ -260,6 +260,11 @@ export const guanyingSearchSchema = z.object({
   keyword: z.string().trim().min(1).max(200),
 });
 
+export const challengeSubmitSchema = z.object({
+  sessionId: z.string().trim().min(1).max(100),
+  code: z.string().trim().min(1).max(100),
+});
+
 export const hdhiveSearchSchema = z.object({
   keyword: z.string().trim().min(1).max(200),
   mediaType: z.enum(['auto', 'movie', 'tv']).default('auto'),

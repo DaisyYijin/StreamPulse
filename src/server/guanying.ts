@@ -1,10 +1,17 @@
 import type { GuanyingSettings } from '../shared/types.js';
-import { withPage } from './browser.js';
+import { openPage } from './browser.js';
+import { detectChallenge, fillChallengeCode, waitForChallenge, type ChallengeInfo } from './challenge.js';
 
 export interface GuanyingResult {
   title: string;
   year: string;
   href: string;
+}
+
+export interface GuanyingSearchResponse {
+  results: GuanyingResult[];
+  warnings: string[];
+  challenge?: ChallengeInfo;
 }
 
 function normalizeBase(value: string): string {
@@ -13,15 +20,42 @@ function normalizeBase(value: string): string {
   return url.toString().replace(/\/+$/, '');
 }
 
+async function runGuanying(page: any): Promise<{ results: GuanyingResult[]; warnings: string[] }> {
+  await page.waitForSelector('.v5d, .search-result, .result-item', { timeout: 12_000 }).catch(() => undefined);
+  const cards = await page.evaluate(() => {
+    const doc = (globalThis as any).document as any;
+    const nodes = Array.from(doc.querySelectorAll('.v5d, .search-result, .result-item')).slice(0, 20) as any[];
+    return nodes.map((node) => {
+      const titleNode = node.querySelector('.d16, .title, h3, h2, a[title]');
+      const linkNode = node.querySelector('a[href]');
+      return {
+        title: (titleNode?.textContent || node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+        href: linkNode?.href || '',
+      };
+    }).filter((item) => item.title);
+  });
+  const results = cards.map((card: any) => ({
+    title: card.title,
+    year: card.title.match(/\((19|20)\d{2}\)/)?.[0].replace(/[()]/g, '') || '',
+    href: card.href,
+  }));
+  if (results.length === 0) {
+    const body = (await page.evaluate(() => ((globalThis as any).document?.body?.innerText || ''))).slice(0, 200).replace(/\s+/g, ' ');
+    return { results: [], warnings: [`观影搜索没有解析到结果${body ? `：${body}` : ''}`] };
+  }
+  return { results, warnings: [] };
+}
+
 export async function searchGuanying(options: {
   keyword: string;
   settings: GuanyingSettings;
-}): Promise<{ results: GuanyingResult[]; warnings: string[] }> {
+}): Promise<GuanyingSearchResponse> {
   const keyword = options.keyword.trim();
   if (!keyword) throw new Error('请输入搜索关键词');
   if (!options.settings.baseUrl.trim()) throw new Error('请先在设置中填写观影站点地址');
   const baseUrl = normalizeBase(options.settings.baseUrl);
-  return withPage(async (page) => {
+  const page = await openPage();
+  try {
     if (options.settings.cookie.trim()) {
       const domain = new URL(baseUrl).hostname;
       for (const part of options.settings.cookie.split(';')) {
@@ -36,27 +70,18 @@ export async function searchGuanying(options: {
       }
     }
     await page.goto(`${baseUrl}/search?q=${encodeURIComponent(keyword)}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.v5d, .search-result, .result-item', { timeout: 12_000 }).catch(() => undefined);
-    const cards = await page.evaluate(() => {
-      const doc = (globalThis as any).document as any;
-      const nodes = Array.from(doc.querySelectorAll('.v5d, .search-result, .result-item')).slice(0, 20) as any[];
-      return nodes.map((node) => {
-        const titleNode = node.querySelector('.d16, .title, h3, h2, a[title]');
-        const linkNode = node.querySelector('a[href]');
-        return {
-          title: (titleNode?.textContent || node.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 200),
-          href: linkNode?.href || '',
-        };
-      }).filter((item) => item.title);
-    });
-    const results = cards.map((card) => {
-      const year = card.title.match(/\((19|20)\d{2}\)/)?.[0].replace(/[()]/g, '') || '';
-      return { title: card.title, year, href: card.href };
-    });
-    if (results.length === 0) {
-      const body = (await page.evaluate(() => ((globalThis as any).document?.body?.innerText || ''))).slice(0, 200).replace(/\s+/g, ' ');
-      return { results: [], warnings: [`观影搜索没有解析到结果${body ? `：${body}` : ''}`] };
+    if (await waitForChallenge(page, 5000)) {
+      const challenge = await detectChallenge(page, '观影需要验证。请填写截图中的验证码，提交后继续搜索。', async (code) => {
+        await fillChallengeCode(page, code);
+        return runGuanying(page);
+      });
+      return { results: [], warnings: [], challenge };
     }
-    return { results, warnings: [] };
-  });
+    const result = await runGuanying(page);
+    await page.close().catch(() => undefined);
+    return result;
+  } catch (error) {
+    await page.close().catch(() => undefined);
+    throw error;
+  }
 }

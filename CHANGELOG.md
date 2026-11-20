@@ -2,6 +2,15 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.26.0] - 2026-11-20
+
+### Added
+
+- Manual verification sessions for browser-based search. When 不太灵 or 观影
+  shows a captcha, the server keeps the page alive and returns a screenshot;
+  the user enters the code in StreamPulse and the page continues.
+- Challenge screenshots and code submission are available in the search page.
+
 ## [1.25.0] - 2026-11-20
 
 ### Added
