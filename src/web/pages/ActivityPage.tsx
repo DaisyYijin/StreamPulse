@@ -216,7 +216,7 @@ export function ActivityPage({ onOpenRun }: { onOpenRun: (runId: string) => void
                   <span className="run-library-cell">
                     <strong>{run.libraryName}</strong>
                     <small>
-                      {triggerLabel(run.trigger)} · {run.mode === 'full' ? '全量' : '增量'} · {run.message}
+                      {triggerLabel(run.trigger)} · {run.mode === 'full' ? '全量' : '增量'}{run.scope ? ` · ${run.scope}` : ''} · {run.message}
                     </small>
                   </span>
                   <span className="run-time-cell">{formatDateTime(run.startedAt || run.createdAt)}</span>

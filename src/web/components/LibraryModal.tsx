@@ -458,7 +458,7 @@ export function LibraryModal({
                 <div className="toggle-row">
                   <div>
                     <strong>115 生活事件增量</strong>
-                    <span>只在 115 最近记录有变化时触发增量，仍需先完成一次全量同步</span>
+                    <span>解析 115 事件后只扫描受影响目录；需先完成一次全量同步</span>
                   </div>
                   <Toggle checked={eventWatch} onChange={setEventWatch} label="115 生活事件增量" />
                 </div>

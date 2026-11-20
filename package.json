@@ -1,6 +1,6 @@
 {
   "name": "streampulse",
-  "version": "1.18.1",
+  "version": "1.19.0",
   "private": true,
   "description": "Turn cloud media into native Emby / Jellyfin libraries with generated STRM files.",
   "type": "module",

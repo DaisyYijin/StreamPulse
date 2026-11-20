@@ -183,7 +183,7 @@ export function RunDrawer({
                 <span>·</span>
                 <span>{triggerLabel(run.trigger)}触发</span>
                 <span>·</span>
-                <span>{run.mode === 'full' ? '全量' : '增量'}同步</span>
+                <span>{run.mode === 'full' ? '全量' : '增量'}同步{run.scope ? ` · ${run.scope}` : ''}</span>
               </div>
             ) : null}
           </div>

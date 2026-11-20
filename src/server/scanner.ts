@@ -16,6 +16,8 @@ export interface ScanProgress {
 
 export interface ScanOptions {
   signal: AbortSignal;
+  /** Only traverse this source subdirectory, while keeping paths relative to the library root. */
+  scanPath?: string;
   onProgress?: (progress: ScanProgress) => void;
 }
 
@@ -72,7 +74,8 @@ export async function scanLibrary(
   const sidecars: RemoteFile[] = [];
   const extensionCounts: Record<string, number> = {};
   const visited = new Set<string>();
-  const stack: Array<{ path: string; depth: number }> = [{ path: basePath, depth: 0 }];
+  const scanRoot = options.scanPath ? normalizeSourcePath(options.scanPath) : basePath;
+  const stack: Array<{ path: string; depth: number }> = [{ path: scanRoot, depth: 0 }];
   let scanned = 0;
   let directories = 0;
   let lastProgress = 0;
@@ -147,6 +150,6 @@ export async function scanLibrary(
 
   files.sort((left, right) => left.relative.localeCompare(right.relative));
   sidecars.sort((left, right) => left.relative.localeCompare(right.relative));
-  options.onProgress?.({ directories, files: files.length, currentPath: basePath });
+  options.onProgress?.({ directories, files: files.length, currentPath: scanRoot });
   return { files, sidecars, scanned, extensions: extensionCounts };
 }

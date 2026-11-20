@@ -121,6 +121,17 @@ interface P115Item {
   sha?: string;
 }
 
+export interface P115LifeEvent {
+  id: string;
+  fileId: string;
+  parentId: string;
+  name: string;
+  type: number;
+  updateTime: number;
+  size: number;
+  sha1: string;
+}
+
 export class P115Error extends Error {
   constructor(message: string, readonly status = 502) { super(message); this.name = 'P115Error'; }
 }
@@ -373,6 +384,57 @@ export class P115Client implements StorageClient {
     } catch {
       return null;
     }
+  }
+
+  async resolveId(filePath: string, signal?: AbortSignal): Promise<string | null> {
+    try {
+      return await this.dirId(filePath, signal);
+    } catch {
+      return null;
+    }
+  }
+
+  async recentEvents(since: number, signal?: AbortSignal): Promise<P115LifeEvent[]> {
+    const params = new URLSearchParams({ limit: '1000', offset: '0' });
+    const endpoints = [
+      `https://proapi.115.com/android/behavior/detail?${params}`,
+      `https://webapi.115.com/behavior/detail?${params}`,
+    ];
+    let lastError: unknown;
+    for (const endpoint of endpoints) {
+      try {
+        const payload = await this.request(endpoint, { headers: { Referer: 'https://115.com/' } }, signal);
+        const items: any[] = Array.isArray(payload?.data?.list)
+          ? payload.data.list
+          : Array.isArray(payload?.data) ? payload.data : [];
+        const seen = new Set<string>();
+        const events: P115LifeEvent[] = [];
+        for (const item of items) {
+          const id = String(item?.id || `${item?.file_id || ''}:${item?.update_time || ''}`);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const updateTime = Number(item?.update_time || 0);
+          if (since && updateTime <= since) continue;
+          const type = Number(item?.type || 0);
+          // Add, move, receive, folder create/copy/rename, delete, file copy/rename.
+          if (![1, 2, 5, 6, 14, 17, 18, 20, 22, 23, 24].includes(type)) continue;
+          events.push({
+            id,
+            fileId: String(item?.file_id || ''),
+            parentId: String(item?.parent_id ?? item?.cid ?? ''),
+            name: String(item?.file_name ?? item?.name ?? ''),
+            type,
+            updateTime,
+            size: Number(item?.file_size || 0),
+            sha1: String(item?.sha1 || ''),
+          });
+        }
+        return events;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new P115Error('115 事件明细读取失败');
   }
 
   async hasChangesSince(timestamp: number, signal?: AbortSignal): Promise<boolean> {

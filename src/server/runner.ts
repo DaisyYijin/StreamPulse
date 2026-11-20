@@ -7,7 +7,7 @@ import { refreshEmbyAfterRun } from './emby.js';
 import { notifyRun } from './notify.js';
 import { clientForSource } from './client.js';
 import { emptyManifest, isUnchanged, type Manifest, type ManifestEntry } from './core/manifest.js';
-import { safeJoin, strmRelativePath } from './core/paths.js';
+import { relativeSourcePath, safeJoin, strmRelativePath } from './core/paths.js';
 import { renderUrlTemplate } from './core/template.js';
 import { scanLibrary } from './scanner.js';
 import type { Store } from './store.js';
@@ -21,11 +21,13 @@ export type RunEvent =
 interface QueueItem {
   runId: string;
   libraryId: string;
+  scope?: string;
 }
 
 interface ActiveRun {
   runId: string;
   libraryId: string;
+  scope?: string;
   controller: AbortController;
 }
 
@@ -128,7 +130,7 @@ export class RunManager {
   async start(
     libraryId: string,
     trigger: RunTrigger = 'manual',
-    options: { full?: boolean } = {},
+    options: { full?: boolean; scope?: string } = {},
   ): Promise<Run> {
     const library = this.store.library(libraryId);
     if (!library) throw new HttpError(404, '媒体库不存在');
@@ -146,6 +148,7 @@ export class RunManager {
       libraryName: library.name,
       trigger,
       mode: full ? 'full' : 'incremental',
+      scope: options.scope,
       status: 'queued',
       createdAt: now,
       startedAt: null,
@@ -157,7 +160,7 @@ export class RunManager {
     this.store.snapshot.runs.unshift(run);
     this.store.trimRuns();
     await this.store.save();
-    this.queue.push({ runId: run.id, libraryId });
+    this.queue.push({ runId: run.id, libraryId, scope: options.scope });
     this.drain();
     return publicCopy(run);
   }
@@ -226,7 +229,7 @@ export class RunManager {
         if (!run || run.status !== 'queued') continue;
         const controller = new AbortController();
         this.active.set(item.runId, { ...item, controller });
-        void this.execute(item.runId, controller)
+        void this.execute(item.runId, controller, item.scope)
           .catch(async (error) => {
             await this.failRun(run, errorText(error));
           })
@@ -240,7 +243,7 @@ export class RunManager {
     }
   }
 
-  private async execute(runId: string, controller: AbortController): Promise<void> {
+  private async execute(runId: string, controller: AbortController, scope?: string): Promise<void> {
     const run = this.store.run(runId);
     if (!run) return;
     this.live.set(run.id, run);
@@ -276,7 +279,7 @@ export class RunManager {
       }
       await fs.mkdir(outputRoot, { recursive: true });
 
-      this.log(run, 'info', `来源：${source.name} · 路径：${library.sourcePath}`);
+      this.log(run, 'info', `来源：${source.name} · 路径：${library.sourcePath}${scope ? ` · 事件范围：${scope}` : ''}`);
       if (library.urlTemplate.includes('{streamToken}')) {
         this.log(run, 'info', `STRM 模式：302 跳转（通过 ${library.streamBaseUrl || settings.streamBaseUrl}）`);
       }
@@ -291,6 +294,7 @@ export class RunManager {
       let lastScanLog = Date.now();
       const scan = await scanLibrary(client, library, {
         signal: controller.signal,
+        scanPath: scope,
         onProgress: (progress) => {
           run.stats.scanned = progress.files;
           if (Date.now() - lastScanLog > 2500) {
@@ -418,7 +422,9 @@ export class RunManager {
       }
 
       if (!controller.signal.aborted && library.deleteOrphans) {
-        const missing = Object.keys(manifest.entries).filter((key) => !currentKeys.has(key));
+        const scopeRelative = scope ? relativeSourcePath(library.sourcePath, scope) : '';
+        const inScope = (key: string) => !scopeRelative || key === scopeRelative || key.startsWith(`${scopeRelative}/`);
+        const missing = Object.keys(manifest.entries).filter((key) => inScope(key) && !currentKeys.has(key));
         for (const key of missing) {
           const entry = manifest.entries[key];
           if (!entry || !entry.strmFile.endsWith('.strm')) continue;

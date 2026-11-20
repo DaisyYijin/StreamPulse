@@ -2,6 +2,20 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.19.0] - 2026-11-20
+
+### Added
+
+- 115 event-level incremental sync: events are mapped to library directories
+  through a CID index, and only the affected subtree is scanned.
+- Scoped runs preserve manifest entries outside the scanned subtree and only
+  clean orphans inside that subtree.
+
+### Fixed
+
+- Event polling no longer triggers a full scan of every library sharing the
+  same 115 account when the event belongs to another library.
+
 ## [1.18.1] - 2026-11-20
 
 ### Fixed
