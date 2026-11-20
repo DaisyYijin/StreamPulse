@@ -41,6 +41,7 @@ const TIMEZONES = [
 ];
 
 export function SettingsPage() {
+  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security'>('runtime');
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [outputDir, setOutputDir] = useState('');
@@ -174,8 +175,14 @@ export function SettingsPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
+      <div className="settings-tabs" role="tablist" aria-label="设置分类">
+        <button role="tab" className={settingsTab === 'runtime' ? 'active' : ''} onClick={() => setSettingsTab('runtime')}>运行设置</button>
+        <button role="tab" className={settingsTab === 'security' ? 'active' : ''} onClick={() => setSettingsTab('security')}>账号与安全</button>
+      </div>
+
       <div className="settings-layout">
         <div className="settings-main">
+          {settingsTab === 'runtime' ? (
           <form className="panel settings-panel" onSubmit={saveSettings}>
             <div className="settings-head">
               <span className="settings-icon">
@@ -263,7 +270,10 @@ export function SettingsPage() {
               </Button>
             </div>
           </form>
+          ) : null}
 
+          {settingsTab === 'security' ? (
+          <>
           <section className="panel settings-panel">
             <div className="settings-head">
               <span className="settings-icon">
@@ -361,6 +371,8 @@ export function SettingsPage() {
               </Button>
             </div>
           </section>
+          </>
+          ) : null}
         </div>
 
         <aside className="settings-side">
@@ -487,7 +499,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.11.0'}</span>
+            <span>v{system?.version ?? '1.12.0'}</span>
           </section>
         </aside>
       </div>

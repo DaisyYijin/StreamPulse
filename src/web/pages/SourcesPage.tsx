@@ -31,6 +31,7 @@ export function SourcesPage() {
   const [sources, setSources] = useState<Source[] | null>(null);
   const [libraries, setLibraries] = useState<Library[]>([]);
   const [error, setError] = useState('');
+  const [sourceFilter, setSourceFilter] = useState<'all' | '115' | '123' | 'openlist'>('all');
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<Source | null>(null);
   const [testingId, setTestingId] = useState('');
@@ -130,6 +131,20 @@ export function SourcesPage() {
 
       {error ? <div className="error-banner">{error}</div> : null}
 
+      {sources && sources.length > 0 ? (
+        <div className="settings-tabs source-filter-tabs">
+          {(['all', '115', '123', 'openlist'] as const).map((filter) => {
+            const count = filter === 'all' ? sources.length : sources.filter((source) => source.type === filter).length;
+            const label = filter === 'all' ? '全部' : filter === '115' ? '115' : filter === '123' ? '123' : 'OpenList';
+            return (
+              <button key={filter} className={sourceFilter === filter ? 'active' : ''} onClick={() => setSourceFilter(filter)}>
+                {label}<span>{count}</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
+
       {!sources ? (
         <div className="source-grid">
           {[0, 1].map((item) => (
@@ -158,7 +173,10 @@ export function SourcesPage() {
         </div>
       ) : (
         <div className="source-grid">
-          {sources.map((source) => {
+          {sources.filter((source) => sourceFilter === 'all' || source.type === sourceFilter).length === 0 ? (
+            <p className="empty-note" style={{ gridColumn: '1 / -1' }}>该类型下还没有账号。</p>
+          ) : null}
+          {sources.filter((source) => sourceFilter === 'all' || source.type === sourceFilter).map((source) => {
             const used = usageCount(source.id);
             return (
               <article className="source-card" key={source.id}>

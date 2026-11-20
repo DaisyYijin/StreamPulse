@@ -7,9 +7,11 @@ import {
   LogOut,
   RefreshCw,
   Settings,
+  Sun,
+  Moon,
   WandSparkles,
 } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { AuthStatus } from '../../shared/types';
 import { cx } from '../utils';
 import { Logo, LogoMark } from './Logo';
@@ -52,6 +54,22 @@ export function Layout({
   syncing: boolean;
   children: ReactNode;
 }) {
+  const [theme, setTheme] = useState<'light' | 'dark'>(() =>
+    document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light',
+  );
+
+  const toggleTheme = () => {
+    const next = theme === 'light' ? 'dark' : 'light';
+    setTheme(next);
+    document.documentElement.dataset.theme = next;
+    try {
+      localStorage.setItem('sp-theme', next);
+    } catch {
+      // Ignore storage failures.
+    }
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', next === 'dark' ? '#080b0a' : '#f3f6f1');
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -119,6 +137,14 @@ export function Layout({
             </div>
           </div>
           <div className="topbar-right">
+            <button
+              className="theme-toggle"
+              onClick={toggleTheme}
+              aria-label={theme === 'light' ? '切换到夜间模式' : '切换到白天模式'}
+              title={theme === 'light' ? '夜间模式' : '白天模式'}
+            >
+              {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
+            </button>
             <span className="topbar-live">
               <span className="live-dot" />
               引擎在线

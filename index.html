@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#080b0a" />
-    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#f3f6f1" />
+    <meta name="color-scheme" content="light dark" />
     <meta
       name="description"
       content="StreamPulse — 把 OpenList 云盘媒体生成标准 STRM 媒体库，供 Emby 与 Jellyfin 原生播放。"
@@ -20,6 +20,15 @@
     <title>StreamPulse · STRM 媒体库引擎</title>
   </head>
   <body>
+    <script>
+      try {
+        var theme = localStorage.getItem('sp-theme') || 'light';
+        document.documentElement.dataset.theme = theme === 'dark' ? 'dark' : 'light';
+        document.querySelector('meta[name="theme-color"]').setAttribute('content', theme === 'dark' ? '#080b0a' : '#f3f6f1');
+      } catch (error) {
+        document.documentElement.dataset.theme = 'light';
+      }
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/web/main.tsx"></script>
   </body>

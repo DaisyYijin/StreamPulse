@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.12.0] - 2026-11-20
+
+### Added
+
+- Light theme is now the default; persisted light/dark toggle in the top bar.
+- Tabbed settings pages:
+  - Organize: 基本设置 / 二级分类 / 洗版策略 / 扫描结果
+  - Settings: 运行设置 / 账号与安全
+  - Sources: 全部 / 115 / 123 / OpenList
+- Light-theme overrides for cards, panels, forms, modals, auth and navigation.
+
 ## [1.11.0] - 2026-11-20
 
 ### Added
