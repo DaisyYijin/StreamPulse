@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.10.1] - 2026-11-20
+
+### Added
+
+- 115 QR login device options: **微信小程序** and **支付宝小程序**.
+- WeChat mini program is the default 115 QR device.
+
+### Changed
+
+- 115 QR help text now lists all supported device types.
+
 ## [1.10.0] - 2026-11-19
 
 ### Changed

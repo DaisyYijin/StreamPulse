@@ -137,7 +137,7 @@ export const runOptionsSchema = z.object({
 
 export const qrStartSchema = z.object({
   provider: z.enum(['115', '123']),
-  device: z.enum(['web', 'android', 'ios', 'tv']).optional(),
+  device: z.enum(['web', 'android', 'ios', 'tv', 'wechatmini', 'alipaymini']).optional(),
   name: z.string().trim().min(1, '名称不能为空').max(80),
   sourceId: z.string().trim().min(1).optional(),
 });

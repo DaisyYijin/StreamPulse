@@ -4,7 +4,7 @@ import QRCode from 'qrcode';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36';
 
 export type QrProvider = '115' | '123';
-export type QrDevice = 'web' | 'android' | 'ios' | 'tv';
+export type QrDevice = 'web' | 'android' | 'ios' | 'tv' | 'wechatmini' | 'alipaymini';
 export type QrStatus = 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error';
 
 export interface QrCredentials {
@@ -332,7 +332,7 @@ export async function startQrLogin(input: {
   cleanup();
   const session =
     input.provider === '115'
-      ? await start115(input.name, input.device || 'web', input.sourceId)
+      ? await start115(input.name, input.device || 'wechatmini', input.sourceId)
       : await start123(input.name, input.sourceId);
   sessions.set(session.id, session);
   const { uid, sign, time, loginuuid, uniId, cookie, sourceId: _sourceId, ...view } = session;

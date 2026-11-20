@@ -10,7 +10,7 @@ type LoginMode = 'credential' | 'qr';
 interface QrSessionView {
   id: string;
   provider: '115' | '123';
-  device: 'web' | 'android' | 'ios' | 'tv';
+  device: 'web' | 'android' | 'ios' | 'tv' | 'wechatmini' | 'alipaymini';
   status: 'waiting' | 'scanned' | 'confirmed' | 'expired' | 'error';
   message: string;
   qrDataUrl: string;
@@ -44,7 +44,7 @@ export function SourceModal({
   const [password, setPassword] = useState('');
   const [cookie, setCookie] = useState('');
   const [loginMode, setLoginMode] = useState<LoginMode>('credential');
-  const [qrDevice, setQrDevice] = useState<'web' | 'android' | 'ios' | 'tv'>('web');
+  const [qrDevice, setQrDevice] = useState<'web' | 'android' | 'ios' | 'tv' | 'wechatmini' | 'alipaymini'>('wechatmini');
   const [qr, setQr] = useState<QrSessionView | null>(null);
   const [qrBusy, setQrBusy] = useState(false);
   const qrTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -64,7 +64,7 @@ export function SourceModal({
     setPassword('');
     setCookie('');
     setLoginMode('credential');
-    setQrDevice('web');
+    setQrDevice('wechatmini');
     setQr(null);
     clearQrTimer();
     setShowSecret(false);
@@ -294,9 +294,11 @@ export function SourceModal({
                   value={qrDevice}
                   onChange={(event) => setQrDevice(event.target.value as typeof qrDevice)}
                 >
+                  <option value="wechatmini">微信小程序（推荐）</option>
+                  <option value="alipaymini">支付宝小程序</option>
+                  <option value="android">115 Android App</option>
+                  <option value="ios">115 iOS App</option>
                   <option value="web">Web / 网页端</option>
-                  <option value="android">Android App</option>
-                  <option value="ios">iOS App</option>
                   <option value="tv">TV 端</option>
                 </Select>
               </div>
@@ -454,7 +456,7 @@ export function SourceModal({
           <Info size={14} />
           {qrMode
             ? type === '115'
-              ? '扫码后在手机上确认；115 登录设备可选 Web / Android / iOS / TV。二维码约 5 分钟有效。'
+              ? '扫码后在手机上确认；默认微信小程序，也可选支付宝小程序、115 App、Web 或 TV。二维码约 5 分钟有效。'
               : '用 123 App 或微信扫码，确认后自动保存登录令牌。二维码约 5 分钟有效。'
             : type === '115'
               ? '115 使用 Cookie 登录；Cookie 过期后需要重新复制。不会经过 OpenList。'
