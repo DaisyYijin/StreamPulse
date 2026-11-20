@@ -2,6 +2,20 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.25.0] - 2026-11-20
+
+### Added
+
+- Headless Chromium bundled in the image.
+- 不太灵 search through the browser context (returns magnet results).
+- 观影 search through the browser; configurable site URL and optional cookie.
+- Search page source switch: 影巢 / 不太灵 / 观影.
+
+### Notes
+
+- 观影 parsing is best-effort and may require selector updates when the site changes.
+- Captcha prompts still need manual handling.
+
 ## [1.24.0] - 2026-11-20
 
 ### Added

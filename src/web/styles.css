@@ -6279,3 +6279,36 @@ html[data-theme='light'] .emby-library-panel {
     grid-column: 1 / -1;
   }
 }
+
+.search-sources {
+  justify-self: start;
+  margin-bottom: 2px;
+}
+
+.search-result-foot a {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--lime);
+  font-size: 9px;
+  text-decoration: none;
+}
+
+.search-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9px;
+}
+
+.search-copy:hover {
+  color: var(--lime);
+  border-color: var(--lime-dim);
+}

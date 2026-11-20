@@ -222,6 +222,11 @@ export const embyServerSchema = z.object({
   refreshAfterRun: z.boolean().default(false),
 });
 
+const guanyingSchema = z.object({
+  baseUrl: z.string().trim().max(2000).default(''),
+  cookie: z.string().trim().max(10000).default(''),
+});
+
 const hdhiveSchema = z.object({
   baseUrl: z.string().trim().min(1).max(2000),
   apiKey: z.string().trim().max(1000),
@@ -245,6 +250,16 @@ export const embyLibraryCreateSchema = z.object({
   paths: z.array(z.string().trim().min(1).max(2000)).min(1).max(20),
 });
 
+export const butailingSearchSchema = z.object({
+  keyword: z.string().trim().min(1).max(200),
+  mediaType: z.enum(['auto', 'movie', 'tv']).default('auto'),
+  year: z.string().trim().max(4).optional().default(''),
+});
+
+export const guanyingSearchSchema = z.object({
+  keyword: z.string().trim().min(1).max(200),
+});
+
 export const hdhiveSearchSchema = z.object({
   keyword: z.string().trim().min(1).max(200),
   mediaType: z.enum(['auto', 'movie', 'tv']).default('auto'),
@@ -261,6 +276,7 @@ export const settingsUpdateSchema = z.object({
   organizer: organizerSchema.optional(),
   embyServers: z.array(embyServerSchema).max(20).optional(),
   hdhive: hdhiveSchema.optional(),
+  guanying: guanyingSchema.optional(),
   notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),

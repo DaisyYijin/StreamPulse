@@ -8,6 +8,7 @@ import { config } from './config.js';
 import { RunManager } from './runner.js';
 import { Scheduler } from './scheduler.js';
 import { TelegramBot } from './telegram-bot.js';
+import { closeBrowser } from './browser.js';
 import { initLogging } from './logger.js';
 import { createStreamServer } from './stream.js';
 import { Store } from './store.js';
@@ -151,6 +152,7 @@ async function main(): Promise<void> {
     console.log(`[server] ${signal} received, shutting down`);
     scheduler.stop();
     await telegramBot.stop();
+    await closeBrowser();
     await runner.shutdown();
     await Promise.all([
       new Promise<void>((resolve) => webServer.close(() => resolve())),

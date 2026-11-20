@@ -21,7 +21,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, EmbyLibrary, EmbyServer, HdhiveSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -73,6 +73,7 @@ export function SettingsPage() {
   });
   const [integrationBusy, setIntegrationBusy] = useState(false);
   const [hdhive, setHdhive] = useState<HdhiveSettings>({ baseUrl: 'https://hdhive.com', apiKey: '', userToken: '' });
+  const [guanying, setGuanying] = useState<GuanyingSettings>({ baseUrl: '', cookie: '' });
   const [hdhiveBusy, setHdhiveBusy] = useState(false);
   const [embyManageId, setEmbyManageId] = useState('');
   const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrary[]>([]);
@@ -100,6 +101,7 @@ export function SettingsPage() {
       setEmbyManageId((current) => current || data.settings.embyServers?.[0]?.id || '');
       setNotifications({ ...notifications, ...(data.settings.notifications ?? {}) });
       if (data.settings.hdhive) setHdhive(data.settings.hdhive);
+      if (data.settings.guanying) setGuanying(data.settings.guanying);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -176,7 +178,7 @@ export function SettingsPage() {
     event.preventDefault();
     setIntegrationBusy(true);
     try {
-      await api.patch('/api/settings', { embyServers, notifications, hdhive });
+      await api.patch('/api/settings', { embyServers, notifications, hdhive, guanying });
       toast.success('Emby 与通知设置已保存');
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : '保存失败');
@@ -583,6 +585,8 @@ export function SettingsPage() {
                 <Field label="影巢 API Key"><Input type="password" value={hdhive.apiKey} onChange={(event) => setHdhive((current) => ({ ...current, apiKey: event.target.value }))} autoComplete="off" /></Field>
                 <Field label="OpenAPI 用户 Token" hint="业务搜索接口需要 Bearer Token"><Input type="password" value={hdhive.userToken} onChange={(event) => setHdhive((current) => ({ ...current, userToken: event.target.value }))} autoComplete="off" /></Field>
                 <Field label="测试连接"><Button type="button" variant="secondary" icon={<Search size={14} />} loading={hdhiveBusy} onClick={() => void testHdhive()}>测试影巢 API Key</Button></Field>
+                <Field label="观影站点地址" hint="例如 https://www.gying.net；需能访问"><Input value={guanying.baseUrl} onChange={(event) => setGuanying((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://..." /></Field>
+                <Field label="观影 Cookie" hint="需要登录时填写浏览器 Cookie；留空尝试匿名访问"><Input type="password" value={guanying.cookie} onChange={(event) => setGuanying((current) => ({ ...current, cookie: event.target.value }))} autoComplete="off" /></Field>
               </div>
 
               <div className="settings-head compact" style={{ marginTop: 22 }}>
@@ -730,7 +734,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.24.0'}</span>
+            <span>v{system?.version ?? '1.25.0'}</span>
           </section>
         </aside>
       </div>

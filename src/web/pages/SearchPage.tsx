@@ -1,4 +1,4 @@
-import { Search, Settings2, Sparkles } from 'lucide-react';
+import { Copy, ExternalLink, Search, Settings2, Sparkles } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { Button, Input, Select, toast } from '../components/ui';
@@ -31,12 +31,33 @@ interface SearchResult {
   warnings: string[];
 }
 
+interface ButailingResult {
+  title: string;
+  size: string;
+  quality: string;
+  magnet: string;
+  detailUrl: string;
+}
+
+interface GuanyingResult {
+  title: string;
+  year: string;
+  href: string;
+}
+
+interface AlternativeResult {
+  results: Array<ButailingResult | GuanyingResult>;
+  warnings: string[];
+}
+
 export function SearchPage() {
   const [keyword, setKeyword] = useState('');
   const [mediaType, setMediaType] = useState<'auto' | 'movie' | 'tv'>('auto');
   const [year, setYear] = useState('');
   const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState<'hdhive' | 'butailing' | 'guanying'>('hdhive');
   const [result, setResult] = useState<SearchResult | null>(null);
+  const [alternative, setAlternative] = useState<AlternativeResult | null>(null);
   const [error, setError] = useState('');
 
   const search = async (event?: FormEvent) => {
@@ -44,10 +65,22 @@ export function SearchPage() {
     if (!keyword.trim()) return;
     setLoading(true);
     setError('');
+    setResult(null);
+    setAlternative(null);
     try {
-      const data = await api.post<SearchResult>('/api/hdhive/search', { keyword, mediaType, year });
-      setResult(data);
-      if (data.results.length === 0) toast.info('没有找到影巢资源');
+      if (source === 'butailing') {
+        const data = await api.post<AlternativeResult>('/api/butailing/search', { keyword, mediaType, year });
+        setAlternative(data);
+        if (data.results.length === 0) toast.info('没有找到不太灵资源');
+      } else if (source === 'guanying') {
+        const data = await api.post<AlternativeResult>('/api/guanying/search', { keyword });
+        setAlternative(data);
+        if (data.results.length === 0) toast.info('没有找到观影结果');
+      } else {
+        const data = await api.post<SearchResult>('/api/hdhive/search', { keyword, mediaType, year });
+        setResult(data);
+        if (data.results.length === 0) toast.info('没有找到影巢资源');
+      }
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : '影巢搜索失败';
       setError(message);
@@ -62,10 +95,16 @@ export function SearchPage() {
       <header className="page-head">
         <div>
           <span className="eyebrow">HDHIVE SEARCH</span>
-          <h1>影巢搜索</h1>
-          <p>通过 TMDb 解析片名，再查询影巢资源；只搜索，不解锁、不消耗积分。</p>
+          <h1>影视搜索</h1>
+          <p>影巢、不太灵、观影三个来源；只搜索，不自动转存。</p>
         </div>
       </header>
+
+      <div className="search-sources editor-switch">
+        <button type="button" className={source === 'hdhive' ? 'active' : ''} onClick={() => { setSource('hdhive'); setResult(null); setAlternative(null); }}>影巢</button>
+        <button type="button" className={source === 'butailing' ? 'active' : ''} onClick={() => { setSource('butailing'); setResult(null); setAlternative(null); }}>不太灵</button>
+        <button type="button" className={source === 'guanying' ? 'active' : ''} onClick={() => { setSource('guanying'); setResult(null); setAlternative(null); }}>观影</button>
+      </div>
 
       <form className="panel search-panel" onSubmit={(event) => void search(event)}>
         <div className="search-bar">
@@ -81,7 +120,7 @@ export function SearchPage() {
           <Input className="search-year" value={year} onChange={(event) => setYear(event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="年份" />
           <Button type="submit" variant="primary" loading={loading} icon={<Sparkles size={15} />}>搜索</Button>
         </div>
-        <p className="settings-hint">需要在设置 → Emby 与通知 → 影巢搜索中填写 API Key 和 OpenAPI 用户 Token；TMDb Key 使用整理设置里的配置。</p>
+        <p className="settings-hint">{source === 'hdhive' ? '需要在设置 → Emby 与通知 → 影巢搜索中填写 API Key 和 OpenAPI 用户 Token；TMDb Key 使用整理设置里的配置。' : source === 'butailing' ? '通过无头浏览器访问不太灵，返回磁力资源；不会自动转存。' : '需要观影站点地址；如站点要求登录，请在设置中填写 Cookie。'}</p>
       </form>
 
       {error ? (
@@ -89,6 +128,31 @@ export function SearchPage() {
           <strong>搜索失败</strong>
           <p>{error}</p>
           <Button variant="secondary" size="sm" icon={<Settings2 size={14} />} onClick={() => { window.location.hash = '#/settings'; }}>去设置</Button>
+        </div>
+      ) : null}
+
+      {alternative ? (
+        <div className="search-results">
+          {alternative.results.length === 0 ? (
+            <div className="panel search-empty"><strong>没有找到资源</strong><p>换一个片名，或检查设置里的站点地址/Cookie。</p></div>
+          ) : alternative.results.map((item, index) => {
+            const magnet = 'magnet' in item ? item.magnet : '';
+            const href = 'href' in item ? item.href : (item as ButailingResult).detailUrl;
+            return (
+              <article className="panel search-result" key={`${href}-${index}`}>
+                <div className="search-result-head">
+                  <span className="search-index">{String(index + 1).padStart(2, '0')}</span>
+                  <div><h3>{item.title}</h3><p>{source === 'butailing' ? '不太灵' : '观影'} · {'size' in item && item.size ? item.size : '资源'} {'quality' in item && item.quality ? `· ${item.quality}` : ''}</p></div>
+                  <div className="search-badges"><span className="search-badge primary">{source === 'butailing' ? '磁力' : '网页'}</span></div>
+                </div>
+                <div className="search-result-foot">
+                  {href ? <a href={href} target="_blank" rel="noreferrer"><ExternalLink size={12} />打开详情</a> : null}
+                  {magnet ? <button type="button" className="search-copy" onClick={() => { void navigator.clipboard?.writeText(magnet); toast.success('磁力链接已复制'); }}><Copy size={12} />复制磁力</button> : null}
+                </div>
+              </article>
+            );
+          })}
+          {alternative.warnings?.length ? <div className="panel search-warnings">{alternative.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div> : null}
         </div>
       ) : null}
 

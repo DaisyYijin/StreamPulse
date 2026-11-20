@@ -15,6 +15,8 @@ import { generateLibraryCover } from '../covers.js';
 import { createEmbyLibrary, listEmbyLibraries, testEmby } from '../emby.js';
 import { searchHdhive, testHdhive } from '../hdhive.js';
 import { searchTmdb } from '../tmdb.js';
+import { searchButailing } from '../butailing.js';
+import { searchGuanying } from '../guanying.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
 import { evaluateWash, executeCloudOrganizerBatch, isTmdbError, parseName, scanCloudOrganizer } from '../organizer.js';
@@ -36,6 +38,8 @@ import {
   loginSchema,
   embyLibraryCreateSchema,
   embyServerSchema,
+  butailingSearchSchema,
+  guanyingSearchSchema,
   hdhiveConnectSchema,
   hdhiveSearchSchema,
   organizeExecuteSchema,
@@ -647,6 +651,26 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     }
   });
 
+  router.post('/butailing/search', async (req, res) => {
+    const body = parseBody(butailingSearchSchema, req.body);
+    try {
+      const result = await searchButailing({ keyword: body.keyword, mediaType: body.mediaType, year: body.year });
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '不太灵搜索失败');
+    }
+  });
+
+  router.post('/guanying/search', async (req, res) => {
+    const body = parseBody(guanyingSearchSchema, req.body);
+    try {
+      const result = await searchGuanying({ keyword: body.keyword, settings: store.snapshot.settings.guanying });
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '观影搜索失败');
+    }
+  });
+
   router.post('/integrations/hdhive/test', async (req, res) => {
     const settings = parseBody(hdhiveConnectSchema, req.body);
     try {
@@ -979,6 +1003,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.organizer !== undefined) db.settings.organizer = body.organizer;
       if (body.embyServers !== undefined) db.settings.embyServers = body.embyServers;
       if (body.hdhive !== undefined) db.settings.hdhive = body.hdhive;
+      if (body.guanying !== undefined) db.settings.guanying = body.guanying;
       if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();

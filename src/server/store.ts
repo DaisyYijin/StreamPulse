@@ -70,6 +70,10 @@ function createDefaultDatabase(): Database {
         categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       },
       embyServers: [],
+      guanying: {
+        baseUrl: '',
+        cookie: '',
+      },
       hdhive: {
         baseUrl: 'https://hdhive.com',
         apiKey: '',
@@ -164,6 +168,10 @@ function normalizeDatabase(raw: unknown): Database {
       ...(input.settings ?? {}),
       streamBaseUrl:
         typeof input.settings?.streamBaseUrl === 'string' ? input.settings.streamBaseUrl : base.settings.streamBaseUrl,
+      guanying: {
+        ...base.settings.guanying,
+        ...(input.settings?.guanying ?? {}),
+      },
       hdhive: {
         ...base.settings.hdhive,
         ...(input.settings?.hdhive ?? {}),
@@ -320,6 +328,10 @@ export class Store {
       settings: {
         ...base.settings,
         ...(settings.settings ?? {}),
+        guanying: {
+          ...base.settings.guanying,
+          ...(settings.settings?.guanying ?? {}),
+        },
         hdhive: {
           ...base.settings.hdhive,
           ...(settings.settings?.hdhive ?? {}),

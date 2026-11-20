@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.24.0';
+export const APP_VERSION = '1.25.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -219,6 +219,11 @@ export const DEFAULT_ORGANIZE_CATEGORIES: OrganizeCategory[] = [
   { id: 'default_anime_tv', name: '动漫', mediaType: 'tv', genres: ['Animation', 'Sci-Fi & Fantasy'], countries: [], languages: [], keywords: [] },
 ];
 
+export interface GuanyingSettings {
+  baseUrl: string;
+  cookie: string;
+}
+
 export interface HdhiveSettings {
   baseUrl: string;
   apiKey: string;
@@ -261,6 +266,7 @@ export interface Settings {
   organizer: OrganizerSettings;
   embyServers: EmbyServer[];
   hdhive: HdhiveSettings;
+  guanying: GuanyingSettings;
   notifications: NotificationSettings;
 }
 
