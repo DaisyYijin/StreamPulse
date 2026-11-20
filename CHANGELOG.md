@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.28.0] - 2026-11-20
+
+### Added
+
+- SeedHub browser search source, with the same manual challenge flow.
+- 癫影 is shown as requiring site adaptation (invite-only/login).
+
 ## [1.27.0] - 2026-11-20
 
 ### Added

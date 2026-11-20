@@ -62,7 +62,7 @@ export function SearchPage() {
   const [mediaType, setMediaType] = useState<'auto' | 'movie' | 'tv'>('auto');
   const [year, setYear] = useState('');
   const [loading, setLoading] = useState(false);
-  const [source, setSource] = useState<'hdhive' | 'butailing' | 'guanying'>('hdhive');
+  const [source, setSource] = useState<'hdhive' | 'butailing' | 'guanying' | 'seedhub'>('hdhive');
   const [result, setResult] = useState<SearchResult | null>(null);
   const [alternative, setAlternative] = useState<AlternativeResult | null>(null);
   const [challengeCode, setChallengeCode] = useState('');
@@ -85,6 +85,10 @@ export function SearchPage() {
         const data = await api.post<AlternativeResult>('/api/guanying/search', { keyword });
         setAlternative(data);
         if (data.results.length === 0) toast.info('没有找到观影结果');
+      } else if (source === 'seedhub') {
+        const data = await api.post<AlternativeResult>('/api/seedhub/search', { keyword });
+        setAlternative(data);
+        if (data.results.length === 0) toast.info('没有找到 SeedHub 结果');
       } else {
         const data = await api.post<SearchResult>('/api/hdhive/search', { keyword, mediaType, year });
         setResult(data);
@@ -131,6 +135,8 @@ export function SearchPage() {
         <button type="button" className={source === 'hdhive' ? 'active' : ''} onClick={() => { setSource('hdhive'); setResult(null); setAlternative(null); }}>影巢</button>
         <button type="button" className={source === 'butailing' ? 'active' : ''} onClick={() => { setSource('butailing'); setResult(null); setAlternative(null); }}>不太灵</button>
         <button type="button" className={source === 'guanying' ? 'active' : ''} onClick={() => { setSource('guanying'); setResult(null); setAlternative(null); }}>观影</button>
+        <button type="button" className={source === 'seedhub' ? 'active' : ''} onClick={() => { setSource('seedhub'); setResult(null); setAlternative(null); }}>SeedHub</button>
+        <button type="button" disabled title="癫影为邀请制站点，需登录 Cookie 和站点适配">癫影（需适配）</button>
       </div>
 
       <form className="panel search-panel" onSubmit={(event) => void search(event)}>
@@ -147,7 +153,7 @@ export function SearchPage() {
           <Input className="search-year" value={year} onChange={(event) => setYear(event.target.value.replace(/\D/g, '').slice(0, 4))} placeholder="年份" />
           <Button type="submit" variant="primary" loading={loading} icon={<Sparkles size={15} />}>搜索</Button>
         </div>
-        <p className="settings-hint">{source === 'hdhive' ? '需要在设置 → Emby 与通知 → 影巢搜索中填写 API Key 和 OpenAPI 用户 Token；TMDb Key 使用整理设置里的配置。' : source === 'butailing' ? '通过无头浏览器访问不太灵，返回磁力资源；不会自动转存。' : '需要观影站点地址；如站点要求登录，请在设置中填写 Cookie。'}</p>
+        <p className="settings-hint">{source === 'hdhive' ? '需要在设置 → Emby 与通知 → 影巢搜索中填写 API Key 和 OpenAPI 用户 Token；TMDb Key 使用整理设置里的配置。' : source === 'butailing' ? '通过无头浏览器访问不太灵，返回磁力资源；不会自动转存。' : source === 'seedhub' ? '通过无头浏览器搜索 SeedHub，返回详情链接；不会自动转存。' : '需要观影站点地址；如站点要求登录，请在设置中填写 Cookie。'}</p>
       </form>
 
       {error ? (
@@ -181,7 +187,7 @@ export function SearchPage() {
               <article className="panel search-result" key={`${href}-${index}`}>
                 <div className="search-result-head">
                   <span className="search-index">{String(index + 1).padStart(2, '0')}</span>
-                  <div><h3>{item.title}</h3><p>{source === 'butailing' ? '不太灵' : '观影'} · {'size' in item && item.size ? item.size : '资源'} {'quality' in item && item.quality ? `· ${item.quality}` : ''}</p></div>
+                  <div><h3>{item.title}</h3><p>{source === 'butailing' ? '不太灵' : source === 'seedhub' ? 'SeedHub' : '观影'} · {'size' in item && item.size ? item.size : '资源'} {'quality' in item && item.quality ? `· ${item.quality}` : ''}</p></div>
                   <div className="search-badges"><span className="search-badge primary">{source === 'butailing' ? '磁力' : '网页'}</span></div>
                 </div>
                 <div className="search-result-foot">

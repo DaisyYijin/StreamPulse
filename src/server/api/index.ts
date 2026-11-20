@@ -17,6 +17,7 @@ import { searchHdhive, testHdhive } from '../hdhive.js';
 import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
+import { searchSeedhub } from '../seedhub.js';
 import { submitChallenge } from '../challenge.js';
 import { deleteSubscription, listSubscriptions, syncDoubanSubscriptions } from '../subscriptions.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
@@ -42,6 +43,7 @@ import {
   embyServerSchema,
   butailingSearchSchema,
   challengeSubmitSchema,
+  seedhubSearchSchema,
   guanyingSearchSchema,
   hdhiveConnectSchema,
   hdhiveSearchSchema,
@@ -696,6 +698,16 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       res.json(result);
     } catch (error) {
       throw new HttpError(502, error instanceof Error ? error.message : '不太灵搜索失败');
+    }
+  });
+
+  router.post('/seedhub/search', async (req, res) => {
+    const body = parseBody(seedhubSearchSchema, req.body);
+    try {
+      const result = await searchSeedhub(body.keyword);
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : 'SeedHub 搜索失败');
     }
   });
 
