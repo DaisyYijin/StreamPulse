@@ -1,7 +1,7 @@
 import { ArrowRight, FileCode2, FolderInput, HelpCircle, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source } from '../../shared/types';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 
@@ -37,6 +37,7 @@ const EMPTY: OrganizerSettings = {
   movieFileTemplate: DEFAULT_MOVIE_FILE_TEMPLATE,
   tvFolderTemplate: DEFAULT_TV_FOLDER_TEMPLATE,
   tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
+  washing: { mode: 'better', minGap: 0, minCoverage: 0.35, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
 };
 
@@ -71,17 +72,48 @@ function fromCategoryYaml(text: string): OrganizeCategory[] {
   });
 }
 
-function toUpgradeYaml(strategy: OrganizerSettings['upgradeStrategy']): string {
-  return `strategy: ${strategy}\n`;
+function toWashYaml(washing: WashConfig): string {
+  return stringifyYaml({
+    mode: washing.mode,
+    min_gap: washing.minGap,
+    min_coverage: washing.minCoverage,
+    tie: washing.tie,
+    weights: {
+      resolution: washing.weights.resolution,
+      source: washing.weights.source,
+      hdr: washing.weights.hdr,
+      codec: washing.weights.codec,
+      size: washing.weights.size,
+    },
+    must: washing.must,
+    exclude: washing.exclude,
+  }, { lineWidth: 0 });
 }
 
-function fromUpgradeYaml(text: string): OrganizerSettings['upgradeStrategy'] {
-  const document = parseYaml(text) as { strategy?: unknown } | null;
-  const strategy = String(document?.strategy ?? '').trim();
-  if (strategy !== 'off' && strategy !== 'better' && strategy !== 'always' && strategy !== 'max_size' && strategy !== 'min_size') {
-    throw new Error('strategy 必须是 off、better、always、max_size 或 min_size');
+function fromWashYaml(text: string): WashConfig {
+  const document = parseYaml(text) as Record<string, unknown> | null;
+  const mode = String(document?.mode ?? 'better');
+  if (!['off', 'better', 'always', 'max_size', 'min_size', 'weighted'].includes(mode)) {
+    throw new Error('mode 必须是 off、better、always、max_size、min_size 或 weighted');
   }
-  return strategy;
+  const weights = (document?.weights ?? {}) as Record<string, unknown>;
+  const number = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+  const strings = (value: unknown) => Array.isArray(value) ? value.map(String).filter(Boolean) : [];
+  return {
+    mode: mode as WashConfig['mode'],
+    minGap: number(document?.min_gap, 0),
+    minCoverage: Math.min(1, Math.max(0, number(document?.min_coverage, 0.35))),
+    tie: document?.tie === 'replace' ? 'replace' : 'keep',
+    weights: {
+      resolution: number(weights.resolution, 30),
+      source: number(weights.source, 20),
+      hdr: number(weights.hdr, 5),
+      codec: number(weights.codec, 5),
+      size: number(weights.size, 5),
+    },
+    must: strings(document?.must),
+    exclude: strings(document?.exclude),
+  };
 }
 
 const CATEGORY_SAMPLE = `categories:
@@ -105,6 +137,7 @@ const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
   always: '总是替换',
   max_size: '体积更大才替换',
   min_size: '体积更小才替换',
+  weighted: '权重洗版',
 };
 
 function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
@@ -123,9 +156,15 @@ export function OrganizePage() {
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
-  const [upgradeYaml, setUpgradeYaml] = useState(toUpgradeYaml(EMPTY.upgradeStrategy));
   const [categoryError, setCategoryError] = useState('');
-  const [upgradeError, setUpgradeError] = useState('');
+  const [washYaml, setWashYaml] = useState(toWashYaml(EMPTY.washing));
+  const [washError, setWashError] = useState('');
+  const [simExisting, setSimExisting] = useState('Movie.2024.1080p.WEB-DL.mkv');
+  const [simCandidate, setSimCandidate] = useState('Movie.2024.2160p.BluRay.HEVC.mkv');
+  const [recognizeName, setRecognizeName] = useState('Movie.2024.2160p.BluRay.HEVC.mkv');
+  const [recognizeBusy, setRecognizeBusy] = useState(false);
+  const [recognizeResult, setRecognizeResult] = useState<{ title: string; year: string; mediaType: string; tmdbId: number | null } | null>(null);
+  const [simResult, setSimResult] = useState<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number } | null>(null);
 
   useEffect(() => {
     void Promise.all([
@@ -140,7 +179,7 @@ export function OrganizePage() {
       };
       setForm(organizer);
       setCategoryYaml(toCategoryYaml(organizer.categories));
-      setUpgradeYaml(toUpgradeYaml(organizer.upgradeStrategy));
+      setWashYaml(toWashYaml(organizer.washing ?? EMPTY.washing));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
       setLibraries(libraryList);
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
@@ -162,19 +201,47 @@ export function OrganizePage() {
     }
   };
 
-  const changeUpgradeYaml = (text: string) => {
-    setUpgradeYaml(text);
+  const changeWashYaml = (text: string) => {
+    setWashYaml(text);
     try {
-      const upgradeStrategy = fromUpgradeYaml(text);
-      setForm((previous) => ({ ...previous, upgradeStrategy }));
-      setUpgradeError('');
+      const washing = fromWashYaml(text);
+      setForm((previous) => ({ ...previous, washing }));
+      setWashError('');
     } catch (error) {
-      setUpgradeError(error instanceof Error ? error.message : 'YAML 解析失败');
+      setWashError(error instanceof Error ? error.message : '洗版 YAML 解析失败');
+    }
+  };
+
+  const recognize = async () => {
+    setRecognizeBusy(true);
+    try {
+      await save();
+      const result = await api.post<{ parsed: { title: string; year: string; mediaType: string; season: number; episode: number }; tmdb: { id: number } | null }>('/api/organize/recognize', { filename: recognizeName });
+      setRecognizeResult({ title: result.parsed.title, year: result.parsed.year, mediaType: result.parsed.mediaType, tmdbId: result.tmdb?.id ?? null });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '识别测试失败');
+    } finally {
+      setRecognizeBusy(false);
+    }
+  };
+
+  const simulateWash = async () => {
+    try {
+      await save();
+      const result = await api.post<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number }>('/api/organize/simulate', {
+        candidateName: simCandidate,
+        candidateSize: 0,
+        existingName: simExisting,
+        existingSize: 0,
+      });
+      setSimResult(result);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : '模拟失败');
     }
   };
 
   const save = async () => {
-    if (categoryError || upgradeError) {
+    if (categoryError || washError) {
       toast.error('YAML 有错误，修正后才能保存');
       throw new Error('YAML 有错误');
     }
@@ -266,6 +333,15 @@ export function OrganizePage() {
             </Field>
             <Field label="TMDb API Key" hint="只保存在 /config/settings.json"><Input type="password" value={form.tmdbApiKey} onChange={(event) => update('tmdbApiKey', event.target.value)} placeholder="TMDb API Key" autoComplete="off" /></Field>
             <Field label="TMDb 语言"><Input value={form.tmdbLanguage} onChange={(event) => update('tmdbLanguage', event.target.value)} placeholder="zh-CN" /></Field>
+            <Field label="识别测试" hint="输入实际文件名，不移动文件">
+              <div className="input-with-icon">
+                <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
+              </div>
+              <div className="inline-action">
+                <Button type="button" variant="secondary" size="sm" loading={recognizeBusy} onClick={() => void recognize()}>测试识别</Button>
+                {recognizeResult ? <span>{recognizeResult.title} ({recognizeResult.year}) · {recognizeResult.mediaType} · TMDb {recognizeResult.tmdbId ?? '未匹配'}</span> : null}
+              </div>
+            </Field>
             <Field label="电影文件夹模板" hint="变量：{title} {year} {category} {quality}"><Input value={form.movieFolderTemplate} onChange={(event) => update('movieFolderTemplate', event.target.value)} className="mono-input" /></Field>
             <Field label="电影文件模板" hint="变量：{title} {year} {quality} {ext}"><Input value={form.movieFileTemplate} onChange={(event) => update('movieFileTemplate', event.target.value)} className="mono-input" /></Field>
             <Field label="剧集文件夹模板" hint="可用 / 分季，变量：{season}"><Input value={form.tvFolderTemplate} onChange={(event) => update('tvFolderTemplate', event.target.value)} className="mono-input" /></Field>
@@ -311,19 +387,33 @@ export function OrganizePage() {
 
       {tab === 'upgrade' ? (
         <div className="panel">
-          <div className="panel-head"><div><h2>洗版策略 YAML</h2><p>只影响目标分类目录中已存在的同名电影/剧集。</p></div></div>
+          <div className="panel-head"><div><h2>洗版策略 YAML</h2><p>支持权重比较；右侧可以输入现有/候选文件名做模拟。</p></div></div>
           <div className="yaml-layout">
             <div className="yaml-editor-wrap">
-              <div className="yaml-editor-head"><FileCode2 size={14} />upgrade.yaml</div>
-              <textarea className="yaml-editor" value={upgradeYaml} onChange={(event) => changeUpgradeYaml(event.target.value)} spellCheck={false} />
-              {upgradeError ? <div className="yaml-error">{upgradeError}</div> : <div className="yaml-ok">YAML 有效</div>}
+              <div className="yaml-editor-head"><FileCode2 size={14} />washing.yaml</div>
+              <textarea className="yaml-editor" value={washYaml} onChange={(event) => changeWashYaml(event.target.value)} spellCheck={false} />
+              {washError ? <div className="yaml-error">{washError}</div> : <div className="yaml-ok">YAML 有效</div>}
             </div>
             <div className="yaml-preview">
               <div className="yaml-preview-head">可视化策略</div>
               <div className="upgrade-preview">
-                <strong>{UPGRADE_LABEL[form.upgradeStrategy]}</strong>
-                <p>比较顺序：分辨率 → 片源 → HDR → 编码。旧版本会移入 115/123 回收站。</p>
+                <strong>{UPGRADE_LABEL[form.washing.mode]}</strong>
+                <p>最小分差 {form.washing.minGap} · 最低覆盖率 {(form.washing.minCoverage * 100).toFixed(0)}% · 同分{form.washing.tie === 'keep' ? '保留现有' : '替换'}</p>
+                <p>权重：分辨率 {form.washing.weights.resolution} / 片源 {form.washing.weights.source} / HDR {form.washing.weights.hdr} / 编码 {form.washing.weights.codec} / 体积 {form.washing.weights.size}</p>
+                {form.washing.must.length ? <p>必须：{form.washing.must.join(', ')}</p> : null}
+                {form.washing.exclude.length ? <p>排除：{form.washing.exclude.join(', ')}</p> : null}
               </div>
+              <div className="yaml-preview-head">模拟比较</div>
+              <Field label="现有文件名"><Input value={simExisting} onChange={(event) => setSimExisting(event.target.value)} /></Field>
+              <Field label="候选文件名"><Input value={simCandidate} onChange={(event) => setSimCandidate(event.target.value)} /></Field>
+              <Button type="button" variant="secondary" size="sm" onClick={() => void simulateWash()}>模拟比较</Button>
+              {simResult ? (
+                <div className="simulate-result">
+                  <strong>{simResult.action === 'upgrade' ? '候选胜出，允许洗版' : '保留现有版本'}</strong>
+                  <span>{simResult.reason}</span>
+                  <span>候选 {simResult.candidateScore.toFixed(1)} / 现有 {simResult.existingScore.toFixed(1)} · 覆盖率 {(simResult.coverage * 100).toFixed(0)}%</span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
@@ -382,8 +472,17 @@ export function OrganizePage() {
           </section>
           <section>
             <h3>洗版策略 YAML</h3>
-            <pre>{`strategy: better`}</pre>
-            <p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换；<code>max_size</code> / <code>min_size</code> 按体积取舍。画质比较顺序：分辨率 → 片源 → HDR → 编码。</p>
+            <pre>{`washing:
+  mode: weighted
+  min_gap: 5
+  min_coverage: 0.5
+  weights:
+    resolution: 30
+    source: 20
+    hdr: 5
+    codec: 5
+    size: 5`}</pre>
+            <p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换；<code>max_size</code> / <code>min_size</code> 按体积取舍；<code>weighted</code> 按权重和最小分差。画质比较顺序：分辨率 → 片源 → HDR → 编码。</p>
           </section>
           <section>
             <h3>重命名模板</h3>

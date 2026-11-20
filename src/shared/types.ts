@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.17.0';
+export const APP_VERSION = '1.18.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -150,7 +150,25 @@ export interface Run {
 }
 
 export type OrganizeMode = 'move' | 'copy' | 'hardlink';
-export type UpgradeStrategy = 'off' | 'better' | 'always' | 'max_size' | 'min_size';
+export type UpgradeStrategy = 'off' | 'better' | 'always' | 'max_size' | 'min_size' | 'weighted';
+
+export interface WashWeights {
+  resolution: number;
+  source: number;
+  hdr: number;
+  codec: number;
+  size: number;
+}
+
+export interface WashConfig {
+  mode: UpgradeStrategy;
+  minGap: number;
+  minCoverage: number;
+  tie: 'keep' | 'replace';
+  weights: WashWeights;
+  must: string[];
+  exclude: string[];
+}
 
 export interface OrganizeCategory {
   id: string;
@@ -177,6 +195,7 @@ export interface OrganizerSettings {
   movieFileTemplate: string;
   tvFolderTemplate: string;
   tvFileTemplate: string;
+  washing: WashConfig;
   categories: OrganizeCategory[];
 }
 

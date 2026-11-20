@@ -5880,3 +5880,35 @@ html[data-theme='light'] .rule-help pre {
 html[data-theme='light'] .integration-block {
   background: #f8faf6;
 }
+
+.inline-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.inline-action span {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.simulate-result {
+  display: grid;
+  gap: 4px;
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(201, 255, 87, 0.035);
+  font-size: 10px;
+}
+
+.simulate-result strong {
+  color: var(--lime);
+  font-size: 11px;
+}
+
+.simulate-result span {
+  color: var(--muted);
+}

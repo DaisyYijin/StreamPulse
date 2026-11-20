@@ -13,9 +13,10 @@ import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
 import { generateLibraryCover } from '../covers.js';
 import { testEmby } from '../emby.js';
+import { searchTmdb } from '../tmdb.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
-import { executeCloudOrganizerBatch, isTmdbError, scanCloudOrganizer } from '../organizer.js';
+import { evaluateWash, executeCloudOrganizerBatch, isTmdbError, parseName, scanCloudOrganizer } from '../organizer.js';
 import { pollQrLogin, startQrLogin, takeQrSession } from '../qr.js';
 import { PathSafetyError, normalizeExtensions, normalizeSourcePath, normalizeTargetPath, strmRelativePath } from '../core/paths.js';
 import { renderUrlTemplate, TemplateError, validateUrlTemplate } from '../core/template.js';
@@ -35,6 +36,8 @@ import {
   embyServerSchema,
   organizeExecuteSchema,
   qrStartSchema,
+  recognizeSchema,
+  washSimulateSchema,
   shareReceiveSchema,
   runOptionsSchema,
   normalizeBaseUrl,
@@ -807,6 +810,32 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     } catch (error) {
       throw new HttpError(502, error instanceof Error ? error.message : '分享接收失败');
     }
+  });
+
+  router.post('/organize/recognize', async (req, res) => {
+    const body = parseBody(recognizeSchema, req.body);
+    const organizer = store.snapshot.settings.organizer;
+    const parsed = parseName(body.filename);
+    const info = await searchTmdb({
+      mediaType: parsed.mediaType,
+      title: parsed.title,
+      year: parsed.year,
+      apiKey: organizer.tmdbApiKey,
+      language: organizer.tmdbLanguage,
+    });
+    res.json({ parsed, tmdb: info });
+  });
+
+  router.post('/organize/simulate', async (req, res) => {
+    const body = parseBody(washSimulateSchema, req.body);
+    const result = evaluateWash(
+      store.snapshot.settings.organizer.washing,
+      body.candidateName,
+      body.candidateSize,
+      body.existingName,
+      body.existingSize,
+    );
+    res.json(result);
   });
 
   router.post('/organize/scan', async (_req, res) => {

@@ -142,6 +142,17 @@ export const shareReceiveSchema = z.object({
   targetPath: z.string().trim().min(1).max(1000).default('/Inbox'),
 });
 
+export const washSimulateSchema = z.object({
+  candidateName: z.string().trim().min(1).max(1000),
+  candidateSize: z.number().min(0),
+  existingName: z.string().trim().min(1).max(1000),
+  existingSize: z.number().min(0),
+});
+
+export const recognizeSchema = z.object({
+  filename: z.string().trim().min(1).max(1000),
+});
+
 export const organizeExecuteSchema = z.object({
   batchId: z.string().trim().min(1).max(120),
 });
@@ -167,6 +178,22 @@ const organizeCategorySchema = z.object({
   keywords: z.array(z.string().trim().max(80)).max(30).default([]),
 });
 
+const washSchema = z.object({
+  mode: z.enum(['off', 'better', 'always', 'max_size', 'min_size', 'weighted']),
+  minGap: z.number().min(0).max(10_000),
+  minCoverage: z.number().min(0).max(1),
+  tie: z.enum(['keep', 'replace']),
+  weights: z.object({
+    resolution: z.number().min(0).max(10_000),
+    source: z.number().min(0).max(10_000),
+    hdr: z.number().min(0).max(10_000),
+    codec: z.number().min(0).max(10_000),
+    size: z.number().min(0).max(10_000),
+  }),
+  must: z.array(z.string().trim().max(200)).max(50),
+  exclude: z.array(z.string().trim().max(200)).max(50),
+});
+
 const organizerSchema = z.object({
   sourceId: z.string().trim().min(1, '请选择来源账号'),
   sourcePath: z.string().trim().min(1).max(2000),
@@ -182,6 +209,7 @@ const organizerSchema = z.object({
   movieFileTemplate: z.string().trim().min(1).max(500),
   tvFolderTemplate: z.string().trim().min(1).max(500),
   tvFileTemplate: z.string().trim().min(1).max(500),
+  washing: washSchema,
   categories: z.array(organizeCategorySchema).max(100),
 });
 

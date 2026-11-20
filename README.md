@@ -317,7 +317,16 @@ categories:
 ### 洗版策略 YAML
 
 ```yaml
-strategy: better
+washing:
+  mode: weighted
+  min_gap: 5
+  min_coverage: 0.5
+  weights:
+    resolution: 30
+    source: 20
+    hdr: 5
+    codec: 5
+    size: 5
 ```
 
 ```text
@@ -627,7 +636,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.17.0
+ghcr.io/daisyyijin/streampulse:1.18.0
 ```
 
 ### 首次发布后设为公开

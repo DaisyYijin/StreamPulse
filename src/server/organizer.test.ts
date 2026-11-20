@@ -24,6 +24,7 @@ const config: OrganizerSettings = {
   movieFileTemplate: '{title} ({year}){quality}',
   tvFolderTemplate: '{title} ({year})/Season {season}',
   tvFileTemplate: '{title} - S{season}E{episode}{quality}',
+  washing: { mode: 'better', minGap: 0, minCoverage: 0, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categories: [{
     id: 'action', name: '动作', mediaType: 'movie',
     genres: ['Action'], countries: [], languages: [], keywords: [],

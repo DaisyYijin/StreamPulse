@@ -2,6 +2,15 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.18.0] - 2026-11-20
+
+### Added
+
+- Weighted wash rules with weights, minimum score gap, minimum coverage,
+  must/exclude conditions and tie handling.
+- Wash simulator: compare existing/candidate filenames without moving files.
+- Organizer recognition test API/UI.
+
 ## [1.17.0] - 2026-11-20
 
 ### Added

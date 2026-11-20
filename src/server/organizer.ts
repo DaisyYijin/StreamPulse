@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { OrganizeCategory, OrganizerSettings } from '../shared/types.js';
+import type { OrganizeCategory, OrganizerSettings, WashConfig } from '../shared/types.js';
 import { normalizeSourcePath } from './core/paths.js';
 import type { StorageClient, StorageEntry } from './storage.js';
 import { searchTmdb, TmdbError, type TmdbInfo } from './tmdb.js';
@@ -47,7 +47,7 @@ function safeComponent(value: string): string {
   return value.replace(/[\\/:*?"<>|]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120) || '未命名';
 }
 
-function parseName(filename: string): {
+export function parseName(filename: string): {
   mediaType: 'movie' | 'tv';
   title: string;
   year: string;
@@ -94,6 +94,88 @@ function qualityScore(filename: string): number[] {
     /dolby vision|\bdv\b|hdr/.test(lower) ? 1 : 0,
     /hevc|h\.?265|av1/.test(lower) ? 2 : /avc|h\.?264/.test(lower) ? 1 : 0,
   ];
+}
+
+export interface WashDecision {
+  action: 'upgrade' | 'skip';
+  reason: string;
+  candidateScore: number;
+  existingScore: number;
+  coverage: number;
+}
+
+function washFeatures(filename: string): { resolution: number; source: number; hdr: number; codec: number; size: number } {
+  const lower = filename.toLowerCase();
+  return {
+    resolution: lower.includes('2160p') || lower.includes('4k') ? 4 : lower.includes('1080p') ? 3 : lower.includes('720p') ? 2 : 0,
+    source: /remux/.test(lower) ? 5 : /bluray|blu-ray/.test(lower) ? 4 : /web-dl/.test(lower) ? 3 : /webrip/.test(lower) ? 2 : /hdtv/.test(lower) ? 1 : 0,
+    hdr: /dolby vision|\bdv\b|hdr/.test(lower) ? 1 : 0,
+    codec: /hevc|h\.?265|av1/.test(lower) ? 2 : /avc|h\.?264/.test(lower) ? 1 : 0,
+    size: 0,
+  };
+}
+
+export function evaluateWash(
+  washing: WashConfig,
+  candidateName: string,
+  candidateSize: number,
+  existingName: string,
+  existingSize: number,
+): WashDecision {
+  const mode = washing.mode;
+  if (mode === 'off') return { action: 'skip', reason: '洗版关闭', candidateScore: 0, existingScore: 0, coverage: 0 };
+  if (mode === 'always') return { action: 'upgrade', reason: '策略：总是替换', candidateScore: 0, existingScore: 0, coverage: 0 };
+  if (mode === 'max_size') {
+    return candidateSize > existingSize
+      ? { action: 'upgrade', reason: '策略：保留体积更大的版本', candidateScore: candidateSize, existingScore: existingSize, coverage: 1 }
+      : { action: 'skip', reason: '已有版本体积更大或相同', candidateScore: candidateSize, existingScore: existingSize, coverage: 1 };
+  }
+  if (mode === 'min_size') {
+    return candidateSize < existingSize
+      ? { action: 'upgrade', reason: '策略：保留体积更小的版本', candidateScore: candidateSize, existingScore: existingSize, coverage: 1 }
+      : { action: 'skip', reason: '已有版本体积更小或相同', candidateScore: candidateSize, existingScore: existingSize, coverage: 1 };
+  }
+  if (mode !== 'weighted') {
+    const better = betterQuality(candidateName, existingName);
+    return better
+      ? { action: 'upgrade', reason: '新版本画质更好', candidateScore: 0, existingScore: 0, coverage: 1 }
+      : { action: 'skip', reason: '目标已有更好或相同版本', candidateScore: 0, existingScore: 0, coverage: 1 };
+  }
+
+  const lower = candidateName.toLowerCase();
+  if (washing.exclude.some((value) => lower.includes(value.toLowerCase()))) {
+    return { action: 'skip', reason: '命中排除条件', candidateScore: 0, existingScore: 0, coverage: 1 };
+  }
+  if (washing.must.length && !washing.must.every((value) => lower.includes(value.toLowerCase()))) {
+    return { action: 'skip', reason: '不满足必须条件', candidateScore: 0, existingScore: 0, coverage: 1 };
+  }
+  const features = washFeatures(candidateName);
+  const existingFeatures = washFeatures(existingName);
+  const detected = [features.resolution, features.source, features.hdr, features.codec].filter((value) => value > 0).length;
+  const coverage = detected / 4;
+  const sizeWeight = Math.min(1, candidateSize / (50 * 1024 ** 3));
+  const existingSizeWeight = Math.min(1, existingSize / (50 * 1024 ** 3));
+  const score = features.resolution * washing.weights.resolution
+    + features.source * washing.weights.source
+    + features.hdr * washing.weights.hdr
+    + features.codec * washing.weights.codec
+    + sizeWeight * washing.weights.size;
+  const existingScore = existingFeatures.resolution * washing.weights.resolution
+    + existingFeatures.source * washing.weights.source
+    + existingFeatures.hdr * washing.weights.hdr
+    + existingFeatures.codec * washing.weights.codec
+    + existingSizeWeight * washing.weights.size;
+  if (coverage < washing.minCoverage) {
+    return { action: 'skip', reason: `可比信息不足（覆盖率 ${(coverage * 100).toFixed(0)}%）`, candidateScore: score, existingScore, coverage };
+  }
+  const gap = score - existingScore;
+  if (gap >= washing.minGap && gap > 0) {
+    return { action: 'upgrade', reason: `权重得分 ${score.toFixed(1)} > ${existingScore.toFixed(1)}`, candidateScore: score, existingScore, coverage };
+  }
+  if (gap === 0 && washing.tie === 'replace') {
+    return { action: 'upgrade', reason: '同分且策略为替换', candidateScore: score, existingScore, coverage };
+  }
+  return { action: 'skip', reason: `权重得分 ${score.toFixed(1)} 未超过 ${existingScore.toFixed(1)} + ${washing.minGap}`, candidateScore: score, existingScore, coverage };
 }
 
 function betterQuality(next: string, existing: string): boolean {
@@ -253,21 +335,9 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
       let action: OrganizeItem['action'] = 'create';
       let reason = '新增入库';
       if (best) {
-        if (settings.upgradeStrategy === 'off') {
-          action = 'skip'; reason = '目标已存在，洗版关闭';
-        } else if (settings.upgradeStrategy === 'always') {
-          action = 'upgrade'; reason = '策略：总是替换';
-        } else if (settings.upgradeStrategy === 'max_size') {
-          if (entry.size > best.size) { action = 'upgrade'; reason = '策略：保留体积更大的版本'; }
-          else { action = 'skip'; reason = '已有版本体积更大或相同'; }
-        } else if (settings.upgradeStrategy === 'min_size') {
-          if (entry.size < best.size) { action = 'upgrade'; reason = '策略：保留体积更小的版本'; }
-          else { action = 'skip'; reason = '已有版本体积更小或相同'; }
-        } else if (betterQuality(entry.name, best.name)) {
-          action = 'upgrade'; reason = '新版本画质更好';
-        } else {
-          action = 'skip'; reason = '目标已有更好或相同版本';
-        }
+        const decision = evaluateWash(settings.washing, entry.name, entry.size, best.name, best.size);
+        action = decision.action;
+        reason = decision.reason;
       }
       items.push({
         ...base,

@@ -27,18 +27,22 @@ categories:
 ## 洗版 YAML
 
 ```yaml
-strategy: better
+washing:
+  mode: weighted
+  min_gap: 5
+  min_coverage: 0.5
+  tie: keep
+  weights:
+    resolution: 30
+    source: 20
+    hdr: 5
+    codec: 5
+    size: 5
+  must: []
+  exclude: []
 ```
 
-可选：
-
-```text
-off
-better
-always
-max_size
-min_size
-```
+`mode` 可选：`off`、`better`、`always`、`max_size`、`min_size`、`weighted`。
 
 画质比较：分辨率 → 片源 → HDR → 编码。
 
