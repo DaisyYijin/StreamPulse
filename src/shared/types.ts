@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.28.0';
+export const APP_VERSION = '1.29.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -251,6 +251,10 @@ export interface HdhiveSettings {
   userToken: string;
 }
 
+export interface CloudDriveSettings {
+  webhookToken: string;
+}
+
 export interface EmbyServer {
   id: string;
   name: string;
@@ -289,6 +293,7 @@ export interface Settings {
   hdhive: HdhiveSettings;
   guanying: GuanyingSettings;
   subscriptions: SubscriptionSettings;
+  cloudDrive: CloudDriveSettings;
   notifications: NotificationSettings;
 }
 

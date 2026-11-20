@@ -74,6 +74,9 @@ function createDefaultDatabase(): Database {
         baseUrl: '',
         cookie: '',
       },
+      cloudDrive: {
+        webhookToken: '',
+      },
       subscriptions: {
         doubanUserId: '',
         doubanCookie: '',
@@ -182,6 +185,10 @@ function normalizeDatabase(raw: unknown): Database {
       subscriptions: {
         ...base.settings.subscriptions,
         ...(input.settings?.subscriptions ?? {}),
+      },
+      cloudDrive: {
+        ...base.settings.cloudDrive,
+        ...(input.settings?.cloudDrive ?? {}),
       },
       hdhive: {
         ...base.settings.hdhive,
@@ -346,6 +353,10 @@ export class Store {
         subscriptions: {
           ...base.settings.subscriptions,
           ...(settings.settings?.subscriptions ?? {}),
+        },
+        cloudDrive: {
+          ...base.settings.cloudDrive,
+          ...(settings.settings?.cloudDrive ?? {}),
         },
         hdhive: {
           ...base.settings.hdhive,

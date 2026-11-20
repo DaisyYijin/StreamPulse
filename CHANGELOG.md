@@ -2,6 +2,15 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.29.0] - 2026-11-20
+
+### Added
+
+- CloudDrive2 file-change webhook receiver with token auth, scoped to the
+  matching media library and affected directory.
+- 115 WebSocket trigger for event polling, with the existing interval polling
+  retained as fallback.
+
 ## [1.28.0] - 2026-11-20
 
 ### Added

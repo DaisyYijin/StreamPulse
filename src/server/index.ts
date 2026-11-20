@@ -9,6 +9,8 @@ import { RunManager } from './runner.js';
 import { Scheduler } from './scheduler.js';
 import { TelegramBot } from './telegram-bot.js';
 import { closeBrowser } from './browser.js';
+import { handleCloudDriveWebhook } from './clouddrive.js';
+import { P115WebSocketManager } from './p115-websocket.js';
 import { initLogging } from './logger.js';
 import { createStreamServer } from './stream.js';
 import { Store } from './store.js';
@@ -29,6 +31,7 @@ async function main(): Promise<void> {
   await runner.init();
   const scheduler = new Scheduler(store, runner);
   const telegramBot = new TelegramBot(store, runner);
+  const p115WebSocket = new P115WebSocketManager(store, scheduler);
   const streamServer = createStreamServer(store);
 
   const app = express();
@@ -49,6 +52,9 @@ async function main(): Promise<void> {
   });
   app.use('/covers', express.static(path.join(store.stateDir, 'covers'), { maxAge: '1h' }));
   app.use(express.json({ limit: config.maxBodyBytes }));
+  app.post('/api/hooks/clouddrive', (req, res) => {
+    void handleCloudDriveWebhook(req, res, store, runner);
+  });
 
   app.use('/api', auth.middleware);
   app.use('/api', createApiRouter({ store, auth, runner, scheduler }));
@@ -120,6 +126,7 @@ async function main(): Promise<void> {
 
   scheduler.start();
   telegramBot.start();
+  p115WebSocket.start();
 
   const webServer = app.listen(config.port, config.host, () => {
     console.log('');
@@ -152,6 +159,7 @@ async function main(): Promise<void> {
     console.log(`[server] ${signal} received, shutting down`);
     scheduler.stop();
     await telegramBot.stop();
+    p115WebSocket.stop();
     await closeBrowser();
     await runner.shutdown();
     await Promise.all([

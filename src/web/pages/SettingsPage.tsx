@@ -21,7 +21,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, CloudDriveSettings, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -74,6 +74,7 @@ export function SettingsPage() {
   const [integrationBusy, setIntegrationBusy] = useState(false);
   const [hdhive, setHdhive] = useState<HdhiveSettings>({ baseUrl: 'https://hdhive.com', apiKey: '', userToken: '' });
   const [guanying, setGuanying] = useState<GuanyingSettings>({ baseUrl: '', cookie: '' });
+  const [cloudDrive, setCloudDrive] = useState<CloudDriveSettings>({ webhookToken: '' });
   const [hdhiveBusy, setHdhiveBusy] = useState(false);
   const [embyManageId, setEmbyManageId] = useState('');
   const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrary[]>([]);
@@ -102,6 +103,7 @@ export function SettingsPage() {
       setNotifications({ ...notifications, ...(data.settings.notifications ?? {}) });
       if (data.settings.hdhive) setHdhive(data.settings.hdhive);
       if (data.settings.guanying) setGuanying(data.settings.guanying);
+      if (data.settings.cloudDrive) setCloudDrive(data.settings.cloudDrive);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -178,7 +180,7 @@ export function SettingsPage() {
     event.preventDefault();
     setIntegrationBusy(true);
     try {
-      await api.patch('/api/settings', { embyServers, notifications, hdhive, guanying });
+      await api.patch('/api/settings', { embyServers, notifications, hdhive, guanying, cloudDrive });
       toast.success('Emby 与通知设置已保存');
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : '保存失败');
@@ -577,6 +579,20 @@ export function SettingsPage() {
               )}
 
               <div className="settings-head compact" style={{ marginTop: 22 }}>
+                <span className="settings-icon"><Server size={18} /></span>
+                <div><h2>CloudDrive2 实时事件</h2><p>CD2 Webhook 推送文件变化后，只扫描对应媒体库的受影响目录。</p></div>
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="Webhook Token" hint="自己生成一段随机字符串，填到 CD2 Webhook URL 的 token 参数">
+                  <Input type="password" value={cloudDrive.webhookToken} onChange={(event) => setCloudDrive({ webhookToken: event.target.value })} autoComplete="off" />
+                </Field>
+                <Field label="Webhook 地址" hint="复制到 CloudDrive2 的文件变更 Webhook">
+                  <Input readOnly value={`${window.location.origin}/api/hooks/clouddrive?token=${cloudDrive.webhookToken || 'YOUR_TOKEN'}`} />
+                </Field>
+              </div>
+              <p className="settings-hint">媒体库的“来源路径”需要与 CD2 推送的虚拟路径一致，才能匹配到对应库。</p>
+
+              <div className="settings-head compact" style={{ marginTop: 22 }}>
                 <span className="settings-icon"><Search size={18} /></span>
                 <div><h2>影巢搜索</h2><p>使用影巢 OpenAPI 搜索资源；只搜索，不会自动解锁或消耗积分。</p></div>
               </div>
@@ -734,7 +750,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.28.0'}</span>
+            <span>v{system?.version ?? '1.29.0'}</span>
           </section>
         </aside>
       </div>

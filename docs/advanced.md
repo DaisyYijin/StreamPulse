@@ -143,3 +143,18 @@ Chromium 会让镜像变大；如果不需要这两个来源，不影响影巢�
 - Cookie：私密想看才需要。
 
 目前完成“想看 → 订阅列表”；资源搜索、影巢解锁、115 转存、自动整理和 STRM 在后续阶段接入。
+
+
+## CloudDrive2 Webhook
+
+设置 → Emby 与通知 → CloudDrive2 实时事件：
+
+1. 生成一段 Webhook Token。
+2. 把 Webhook 地址填到 CloudDrive2 的文件变更通知。
+3. 媒体库的“来源路径”要和 CD2 推送的虚拟路径一致。
+
+收到事件后，只扫描事件所在目录。
+
+## 115 WebSocket
+
+开启媒体库“115 生活事件增量”后，StreamPulse 会尝试连接 115 WebSocket；收到消息时立即触发一次事件轮询。115 WebSocket 事件类型很少，连接失败时仍使用定时轮询。

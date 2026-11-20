@@ -139,6 +139,14 @@ export class Scheduler {
     }
   }
 
+  async triggerEventPoll(libraryId: string): Promise<void> {
+    const library = this.store.library(libraryId);
+    if (!library) return;
+    const source = this.store.source(library.sourceId);
+    if (!source) return;
+    await this.pollEvents(library, source);
+  }
+
   private async pollEvents(library: LibraryRecord, source: NonNullable<ReturnType<Store['source']>>): Promise<void> {
     if (this.eventBusy.has(library.id)) return;
     this.eventBusy.add(library.id);

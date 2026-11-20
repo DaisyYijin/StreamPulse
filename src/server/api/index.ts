@@ -1055,6 +1055,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.hdhive !== undefined) db.settings.hdhive = body.hdhive;
       if (body.guanying !== undefined) db.settings.guanying = body.guanying;
       if (body.subscriptions !== undefined) db.settings.subscriptions = body.subscriptions;
+      if (body.cloudDrive !== undefined) db.settings.cloudDrive = body.cloudDrive;
       if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();

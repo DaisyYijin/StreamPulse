@@ -80,6 +80,8 @@ StreamPulse 是一个自托管的 **STRM 媒体库生成器**。它通过 115 / 
 | **账号资料** | 扫码或测试后同步头像、昵称、容量、会员状态与到期时间。 |
 | **TMDb 网盘整理** | 115/123 网盘目录按 TMDb 识别，支持自定义二级分类、洗版策略、网盘内移动。 |
 | **附属文件** | 可选下载字幕、NFO、图片到 STRM 旁边，单文件上限 30MB。 |
+| **CloudDrive2 Webhook** | CD2 文件变化实时触发对应媒体库的受影响目录扫描。 |
+| **115 WebSocket** | 115 消息触发事件轮询，失败时回退定时轮询。 |
 | **115 事件级增量** | 解析 115 操作事件，只扫描受影响目录；需先完成一次全量同步。 |
 | **重命名模板** | 电影/剧集文件夹与文件模板，变量和条件块自动替换；先重命名再移入媒体库。 |
 | **失效清理** | 可选删除源文件已消失、且由 StreamPulse 记录的 `.strm`，不碰用户自己的文件。 |
@@ -645,7 +647,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.28.0
+ghcr.io/daisyyijin/streampulse:1.29.0
 ```
 
 ### 首次发布后设为公开

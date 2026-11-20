@@ -222,6 +222,10 @@ export const embyServerSchema = z.object({
   refreshAfterRun: z.boolean().default(false),
 });
 
+const cloudDriveSchema = z.object({
+  webhookToken: z.string().trim().max(200).default(''),
+});
+
 const subscriptionSettingsSchema = z.object({
   doubanUserId: z.string().trim().max(80).default(''),
   doubanCookie: z.string().trim().max(20000).default(''),
@@ -295,6 +299,7 @@ export const settingsUpdateSchema = z.object({
   hdhive: hdhiveSchema.optional(),
   guanying: guanyingSchema.optional(),
   subscriptions: subscriptionSettingsSchema.optional(),
+  cloudDrive: cloudDriveSchema.optional(),
   notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),

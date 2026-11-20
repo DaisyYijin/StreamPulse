@@ -386,6 +386,13 @@ export class P115Client implements StorageClient {
     }
   }
 
+  async websocketHost(signal?: AbortSignal): Promise<any> {
+    const payload = await this.request('https://msg.115.com/?ct=im&ac=get_websocket_host', {
+      headers: { Referer: 'https://115.com/' },
+    }, signal);
+    return payload?.data ?? null;
+  }
+
   async resolveId(filePath: string, signal?: AbortSignal): Promise<string | null> {
     try {
       return await this.dirId(filePath, signal);
