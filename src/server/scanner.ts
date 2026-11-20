@@ -6,6 +6,8 @@ import type { RemoteFile } from './core/manifest.js';
 import type { StorageClient } from './storage.js';
 import type { LibraryRecord } from './types.js';
 
+const SIDECAR_EXTENSIONS = new Set(['srt', 'ass', 'ssa', 'vtt', 'nfo', 'jpg', 'jpeg', 'png', 'webp', 'bif']);
+
 export interface ScanProgress {
   directories: number;
   files: number;
@@ -19,6 +21,7 @@ export interface ScanOptions {
 
 export interface ScanResult {
   files: RemoteFile[];
+  sidecars: RemoteFile[];
   scanned: number;
   extensions: Record<string, number>;
 }
@@ -66,6 +69,7 @@ export async function scanLibrary(
   const minBytes = Math.max(0, library.minSizeMB) * 1024 * 1024;
   const isExcluded = compileExcluder(library.excludePatterns);
   const files: RemoteFile[] = [];
+  const sidecars: RemoteFile[] = [];
   const extensionCounts: Record<string, number> = {};
   const visited = new Set<string>();
   const stack: Array<{ path: string; depth: number }> = [{ path: basePath, depth: 0 }];
@@ -103,6 +107,17 @@ export async function scanLibrary(
 
       scanned += 1;
       const extension = extname(entry.name).replace(/^\./, '').toLowerCase();
+      if (SIDECAR_EXTENSIONS.has(extension)) {
+        sidecars.push({
+          path: fullPath,
+          relative,
+          name: entry.name,
+          extension: `.${extension}`,
+          size: entry.size,
+          modified: entry.modified,
+        });
+        continue;
+      }
       if (!extensions.has(extension)) continue;
       if (minBytes > 0 && entry.size < minBytes) continue;
       files.push({
@@ -131,6 +146,7 @@ export async function scanLibrary(
   }
 
   files.sort((left, right) => left.relative.localeCompare(right.relative));
+  sidecars.sort((left, right) => left.relative.localeCompare(right.relative));
   options.onProgress?.({ directories, files: files.length, currentPath: basePath });
-  return { files, scanned, extensions: extensionCounts };
+  return { files, sidecars, scanned, extensions: extensionCounts };
 }

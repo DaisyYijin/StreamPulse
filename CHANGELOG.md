@@ -2,6 +2,18 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.15.0] - 2026-11-20
+
+### Added
+
+- P0 organizer improvements:
+  - Optional sidecar downloads (subtitles, NFO, images) beside STRM.
+  - 115 life-event change detection to trigger incremental runs when the
+    library's watch interval is enabled.
+  - Movie/TV folder and file rename templates with variables.
+  - `max_size` and `min_size` wash strategies.
+  - Default categories remain auto-created; no cloud directory IDs required.
+
 ## [1.14.0] - 2026-11-20
 
 ### Added

@@ -523,6 +523,8 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       deleteOrphans: body.deleteOrphans ?? false,
       schedule: body.schedule ?? '',
       watchInterval: body.watchInterval ?? 0,
+      downloadSidecars: body.downloadSidecars ?? true,
+      eventWatch: body.eventWatch ?? false,
       fileCount: 0,
       totalRuns: 0,
       lastRunAt: null,
@@ -569,6 +571,8 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       deleteOrphans: body.deleteOrphans ?? library.deleteOrphans,
       schedule: body.schedule ?? library.schedule,
       watchInterval: body.watchInterval ?? library.watchInterval,
+      downloadSidecars: body.downloadSidecars ?? library.downloadSidecars,
+      eventWatch: body.eventWatch ?? library.eventWatch,
       updatedAt: nowIso(),
     };
     const validated = validateLibraryInput(merged);

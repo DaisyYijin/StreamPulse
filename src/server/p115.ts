@@ -338,6 +338,20 @@ export class P115Client implements StorageClient {
     }
   }
 
+  async hasChangesSince(timestamp: number, signal?: AbortSignal): Promise<boolean> {
+    try {
+      const payload = await this.request(
+        `https://life.115.com/api/1.0/web/1.0/life/life_list?start=0&limit=20&type=1&file_behavior_type=0&_=${Date.now()}`,
+        { headers: { Referer: 'https://115.com/' } },
+        signal,
+      );
+      const list = payload?.data?.list ?? [];
+      return list.some((item: any) => Number(item?.update_time || 0) > timestamp);
+    } catch {
+      return false;
+    }
+  }
+
   async testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }> {
     const status = await this.request(STATUS, {}, signal);
     if (status?.state !== true) throw new P115Error('115 Cookie 无效或已过期', 401);

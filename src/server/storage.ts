@@ -16,6 +16,7 @@ export interface StorageClient {
   getRawUrl(path: string, signal?: AbortSignal): Promise<string | null>;
   testConnection(signal?: AbortSignal): Promise<{ message: string; sampleCount: number }>;
   getProfile?(signal?: AbortSignal): Promise<SourceProfile | null>;
+  hasChangesSince?(timestamp: number, signal?: AbortSignal): Promise<boolean>;
   fallbackUrl?(path: string): string | null;
   mkdir?(path: string, signal?: AbortSignal): Promise<void>;
   move?(sourcePath: string, destinationDir: string, signal?: AbortSignal): Promise<void>;

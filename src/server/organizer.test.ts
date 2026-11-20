@@ -20,6 +20,10 @@ const config: OrganizerSettings = {
   upgradeStrategy: 'better',
   tmdbApiKey: 'test-key',
   tmdbLanguage: 'zh-CN',
+  movieFolderTemplate: '{title} ({year})',
+  movieFileTemplate: '{title} ({year}){quality}',
+  tvFolderTemplate: '{title} ({year})/Season {season}',
+  tvFileTemplate: '{title} - S{season}E{episode}{quality}',
   categories: [{
     id: 'action', name: '动作', mediaType: 'movie',
     genres: ['Action'], countries: [], languages: [], keywords: [],

@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_URL_TEMPLATE, type Settings } from '../shared/types.js';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, type Settings } from '../shared/types.js';
 import { config } from './config.js';
 import {
   makeStreamKey,
@@ -54,6 +54,10 @@ function createDefaultDatabase(): Database {
         upgradeStrategy: 'better',
         tmdbApiKey: '',
         tmdbLanguage: 'zh-CN',
+        movieFolderTemplate: DEFAULT_MOVIE_FOLDER_TEMPLATE,
+        movieFileTemplate: DEFAULT_MOVIE_FILE_TEMPLATE,
+        tvFolderTemplate: DEFAULT_TV_FOLDER_TEMPLATE,
+        tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
         categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       },
     },
@@ -93,6 +97,8 @@ function normalizeDatabase(raw: unknown): Database {
       (library) => ({
         ...library,
         streamBaseUrl: (library as LibraryRecord).streamBaseUrl || '',
+        downloadSidecars: (library as LibraryRecord).downloadSidecars ?? true,
+        eventWatch: (library as LibraryRecord).eventWatch ?? false,
         watchInterval:
           typeof (library as LibraryRecord).watchInterval === 'number'
             ? (library as LibraryRecord).watchInterval
@@ -231,7 +237,7 @@ export class Store {
       ),
     ))
       .filter((library): library is LibraryRecord => Boolean(library?.id))
-      .map((library) => ({ ...library, streamBaseUrl: library.streamBaseUrl ?? '', watchInterval: library.watchInterval ?? 0 }));
+      .map((library) => ({ ...library, streamBaseUrl: library.streamBaseUrl ?? '', downloadSidecars: library.downloadSidecars ?? true, eventWatch: library.eventWatch ?? false, watchInterval: library.watchInterval ?? 0 }));
     const runs = (await Promise.all(
       (await listJson(this.runsDir)).map((file) =>
         readJson<Database['runs'][number]>(path.join(this.runsDir, file)),

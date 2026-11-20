@@ -144,19 +144,49 @@ async function scanCloud(client: StorageClient, sourcePath: string): Promise<Arr
   return files;
 }
 
-function targetFor(settings: OrganizerSettings, info: TmdbInfo, parsed: ReturnType<typeof parseName>, category: string, extension: string): { dir: string; name: string } {
-  const title = safeComponent(info.title || parsed.title);
+function renderTemplate(template: string, variables: Record<string, string>): string {
+  return template.replace(/\{([a-z_]+)\}/gi, (_match, key: string) => variables[key.toLowerCase()] ?? '');
+}
+
+function templateSegments(template: string): string[] {
+  return template.split('/').map((segment) => safeComponent(segment)).filter(Boolean);
+}
+
+function targetFor(
+  settings: OrganizerSettings,
+  info: TmdbInfo,
+  parsed: ReturnType<typeof parseName>,
+  category: string,
+  extension: string,
+  quality: string,
+): { dir: string; name: string } {
+  const title = info.title || parsed.title;
   const year = info.year || parsed.year;
-  const quality = '';
+  const season = String(parsed.season || 1).padStart(2, '0');
+  const episode = String(parsed.episode || 1).padStart(2, '0');
+  const variables = {
+    title,
+    year,
+    season,
+    episode,
+    quality: quality ? ` [${quality}]` : '',
+    ext: extension,
+    category,
+  };
   if (parsed.mediaType === 'tv') {
-    const season = parsed.season || 1;
-    const episode = parsed.episode || 1;
-    const dir = cloudJoin(settings.libraryPath, 'TV', category, `${title}${year ? ` (${year})` : ''}`, `Season ${String(season).padStart(2, '0')}`);
-    const name = `${title} - S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}${quality}${extension}`;
-    return { dir, name };
+    const folder = templateSegments(renderTemplate(settings.tvFolderTemplate, variables));
+    const name = renderTemplate(settings.tvFileTemplate, variables);
+    return {
+      dir: cloudJoin(settings.libraryPath, 'TV', category, ...folder),
+      name: name.toLowerCase().endsWith(extension.toLowerCase()) ? name : `${name}${extension}`,
+    };
   }
-  const dir = cloudJoin(settings.libraryPath, 'Movies', category, `${title}${year ? ` (${year})` : ''}`);
-  return { dir, name: `${title}${year ? ` (${year})` : ''}${quality}${extension}` };
+  const folder = templateSegments(renderTemplate(settings.movieFolderTemplate, variables));
+  const name = renderTemplate(settings.movieFileTemplate, variables);
+  return {
+    dir: cloudJoin(settings.libraryPath, 'Movies', category, ...folder),
+    name: name.toLowerCase().endsWith(extension.toLowerCase()) ? name : `${name}${extension}`,
+  };
 }
 
 async function existingFor(client: StorageClient, dir: string, mediaType: 'movie' | 'tv', season: number, episode: number): Promise<StorageEntry[]> {
@@ -213,7 +243,7 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
       }
       if (!info) throw new Error('TMDb 未找到匹配条目');
       const category = categoryFor(info, settings.categories, entry.name);
-      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase());
+      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase(), qualityOf(entry.name));
       const existing = await existingFor(client, target.dir, parsed.mediaType, parsed.season, parsed.episode);
       const best = existing.sort((a, b) => {
         const left = qualityScore(a.name), right = qualityScore(b.name);
@@ -227,6 +257,12 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
           action = 'skip'; reason = '目标已存在，洗版关闭';
         } else if (settings.upgradeStrategy === 'always') {
           action = 'upgrade'; reason = '策略：总是替换';
+        } else if (settings.upgradeStrategy === 'max_size') {
+          if (entry.size > best.size) { action = 'upgrade'; reason = '策略：保留体积更大的版本'; }
+          else { action = 'skip'; reason = '已有版本体积更大或相同'; }
+        } else if (settings.upgradeStrategy === 'min_size') {
+          if (entry.size < best.size) { action = 'upgrade'; reason = '策略：保留体积更小的版本'; }
+          else { action = 'skip'; reason = '已有版本体积更小或相同'; }
         } else if (betterQuality(entry.name, best.name)) {
           action = 'upgrade'; reason = '新版本画质更好';
         } else {

@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.14.0';
+export const APP_VERSION = '1.15.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -92,6 +92,8 @@ export interface Library {
   deleteOrphans: boolean;
   schedule: string;
   watchInterval: number;
+  downloadSidecars: boolean;
+  eventWatch: boolean;
   fileCount: number;
   totalRuns: number;
   lastRunAt: string | null;
@@ -146,7 +148,7 @@ export interface Run {
 }
 
 export type OrganizeMode = 'move' | 'copy' | 'hardlink';
-export type UpgradeStrategy = 'off' | 'better' | 'always';
+export type UpgradeStrategy = 'off' | 'better' | 'always' | 'max_size' | 'min_size';
 
 export interface OrganizeCategory {
   id: string;
@@ -169,8 +171,17 @@ export interface OrganizerSettings {
   upgradeStrategy: UpgradeStrategy;
   tmdbApiKey: string;
   tmdbLanguage: string;
+  movieFolderTemplate: string;
+  movieFileTemplate: string;
+  tvFolderTemplate: string;
+  tvFileTemplate: string;
   categories: OrganizeCategory[];
 }
+
+export const DEFAULT_MOVIE_FOLDER_TEMPLATE = '{title} ({year})';
+export const DEFAULT_MOVIE_FILE_TEMPLATE = '{title} ({year}){quality}';
+export const DEFAULT_TV_FOLDER_TEMPLATE = '{title} ({year})/Season {season}';
+export const DEFAULT_TV_FILE_TEMPLATE = '{title} - S{season}E{episode}{quality}';
 
 export const DEFAULT_ORGANIZE_CATEGORIES: OrganizeCategory[] = [
   { id: 'default_action', name: '动作', mediaType: 'movie', genres: ['Action', 'Adventure'], countries: [], languages: [], keywords: [] },
@@ -303,6 +314,8 @@ export interface LibraryInput {
   deleteOrphans: boolean;
   schedule: string;
   watchInterval: number;
+  downloadSidecars: boolean;
+  eventWatch: boolean;
 }
 
 export interface TestConnectionResult {

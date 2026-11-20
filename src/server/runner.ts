@@ -301,6 +301,33 @@ export class RunManager {
 
       run.stats.scanned = scan.scanned;
       run.stats.matched = scan.files.length;
+      if (library.downloadSidecars && scan.sidecars.length > 0) {
+        run.message = '正在下载字幕 / NFO / 图片';
+        this.log(run, 'info', `发现 ${scan.sidecars.length} 个附属文件`);
+        let downloaded = 0;
+        for (const sidecar of scan.sidecars.slice(0, 500)) {
+          if (controller.signal.aborted) break;
+          try {
+            const relativeStr = strmRelativePath(library.targetPath, sidecar.relative).replace(/\.strm$/, sidecar.extension);
+            const absolute = safeJoin(outputRoot, relativeStr);
+            if (await fileExists(absolute)) continue;
+            const raw = await client.getRawUrl(sidecar.path, AbortSignal.timeout(15_000));
+            if (!raw) continue;
+            const response = await fetch(raw, { signal: AbortSignal.timeout(30_000) });
+            if (!response.ok) continue;
+            const length = Number(response.headers.get('content-length') || 0);
+            if (length > 30 * 1024 * 1024) continue;
+            const buffer = Buffer.from(await response.arrayBuffer());
+            if (buffer.length > 30 * 1024 * 1024) continue;
+            await fs.mkdir(path.dirname(absolute), { recursive: true });
+            await fs.writeFile(absolute, buffer);
+            downloaded += 1;
+          } catch (error) {
+            this.log(run, 'debug', `附属文件 ${sidecar.name} 下载失败：${errorText(error)}`);
+          }
+        }
+        if (downloaded > 0) this.log(run, 'info', `已下载 ${downloaded} 个附属文件`);
+      }
       run.message = `找到 ${scan.files.length} 个视频`;
       this.log(
         run,

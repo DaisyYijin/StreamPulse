@@ -56,6 +56,8 @@ export function LibraryModal({
   const [deleteOrphans, setDeleteOrphans] = useState(false);
   const [schedule, setSchedule] = useState('');
   const [watchInterval, setWatchInterval] = useState(0);
+  const [downloadSidecars, setDownloadSidecars] = useState(true);
+  const [eventWatch, setEventWatch] = useState(false);
   const [customSchedule, setCustomSchedule] = useState('0 3 * * *');
   const [scheduleCustom, setScheduleCustom] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -79,6 +81,8 @@ export function LibraryModal({
     const known = SCHEDULE_PRESETS.some((preset) => preset.value === library?.schedule);
     setSchedule(known || !library?.schedule ? library?.schedule ?? '' : '');
     setWatchInterval(library?.watchInterval ?? 0);
+    setDownloadSidecars(library?.downloadSidecars ?? true);
+    setEventWatch(library?.eventWatch ?? false);
     setCustomSchedule(library?.schedule || '0 3 * * *');
     setScheduleCustom(Boolean(library?.schedule && !known));
     setError('');
@@ -143,6 +147,8 @@ export function LibraryModal({
         deleteOrphans,
         schedule: effectiveSchedule,
         watchInterval,
+        downloadSidecars,
+        eventWatch,
       };
       const saved = library
         ? await api.patch<Library>(`/api/libraries/${library.id}`, payload)
@@ -447,6 +453,22 @@ export function LibraryModal({
                   <span>文件大小、修改时间与链接未变化时跳过写入</span>
                 </div>
                 <Toggle checked={incremental} onChange={setIncremental} label="增量同步" />
+              </div>
+              {selectedSource?.type === '115' ? (
+                <div className="toggle-row">
+                  <div>
+                    <strong>115 生活事件增量</strong>
+                    <span>只在 115 最近记录有变化时触发增量，仍需先完成一次全量同步</span>
+                  </div>
+                  <Toggle checked={eventWatch} onChange={setEventWatch} label="115 生活事件增量" />
+                </div>
+              ) : null}
+              <div className="toggle-row">
+                <div>
+                  <strong>下载附属文件</strong>
+                  <span>把同目录字幕、NFO、图片下载到 STRM 旁边（单文件最大 30MB）</span>
+                </div>
+                <Toggle checked={downloadSidecars} onChange={setDownloadSidecars} label="下载附属文件" />
               </div>
               <div className="toggle-row">
                 <div>

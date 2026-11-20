@@ -107,6 +107,8 @@ const libraryFields = {
   deleteOrphans: z.boolean().optional().default(false),
   schedule: z.string().trim().max(120).optional().default(''),
   watchInterval: z.number().int().min(0).max(60).optional().default(0),
+  downloadSidecars: z.boolean().optional().default(true),
+  eventWatch: z.boolean().optional().default(false),
 };
 
 export const libraryCreateSchema = z.object(libraryFields);
@@ -127,6 +129,8 @@ export const libraryUpdateSchema = z.object({
   deleteOrphans: z.boolean().optional(),
   schedule: z.string().trim().max(120).optional(),
   watchInterval: z.number().int().min(0).max(60).optional(),
+  downloadSidecars: z.boolean().optional(),
+  eventWatch: z.boolean().optional(),
 });
 
 export const organizeExecuteSchema = z.object({
@@ -162,9 +166,13 @@ const organizerSchema = z.object({
   libraryPath: z.string().trim().min(1).max(2000),
   libraryId: z.string().trim().max(120).optional().default(''),
   mode: z.literal('move'),
-  upgradeStrategy: z.enum(['off', 'better', 'always']),
+  upgradeStrategy: z.enum(['off', 'better', 'always', 'max_size', 'min_size']),
   tmdbApiKey: z.string().trim().max(500),
   tmdbLanguage: z.string().trim().min(2).max(20),
+  movieFolderTemplate: z.string().trim().min(1).max(500),
+  movieFileTemplate: z.string().trim().min(1).max(500),
+  tvFolderTemplate: z.string().trim().min(1).max(500),
+  tvFileTemplate: z.string().trim().min(1).max(500),
   categories: z.array(organizeCategorySchema).max(100),
 });
 

@@ -1,7 +1,7 @@
 import { ArrowRight, FileCode2, FolderInput, HelpCircle, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { DEFAULT_ORGANIZE_CATEGORIES, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source } from '../../shared/types';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 
@@ -33,6 +33,10 @@ const EMPTY: OrganizerSettings = {
   upgradeStrategy: 'better',
   tmdbApiKey: '',
   tmdbLanguage: 'zh-CN',
+  movieFolderTemplate: DEFAULT_MOVIE_FOLDER_TEMPLATE,
+  movieFileTemplate: DEFAULT_MOVIE_FILE_TEMPLATE,
+  tvFolderTemplate: DEFAULT_TV_FOLDER_TEMPLATE,
+  tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
 };
 
@@ -74,8 +78,8 @@ function toUpgradeYaml(strategy: OrganizerSettings['upgradeStrategy']): string {
 function fromUpgradeYaml(text: string): OrganizerSettings['upgradeStrategy'] {
   const document = parseYaml(text) as { strategy?: unknown } | null;
   const strategy = String(document?.strategy ?? '').trim();
-  if (strategy !== 'off' && strategy !== 'better' && strategy !== 'always') {
-    throw new Error('strategy 必须是 off、better 或 always');
+  if (strategy !== 'off' && strategy !== 'better' && strategy !== 'always' && strategy !== 'max_size' && strategy !== 'min_size') {
+    throw new Error('strategy 必须是 off、better、always、max_size 或 min_size');
   }
   return strategy;
 }
@@ -99,6 +103,8 @@ const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
   off: '关闭：目标已存在就跳过',
   better: '仅当新版本画质更好',
   always: '总是替换',
+  max_size: '体积更大才替换',
+  min_size: '体积更小才替换',
 };
 
 function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
@@ -260,6 +266,10 @@ export function OrganizePage() {
             </Field>
             <Field label="TMDb API Key" hint="只保存在 /config/settings.json"><Input type="password" value={form.tmdbApiKey} onChange={(event) => update('tmdbApiKey', event.target.value)} placeholder="TMDb API Key" autoComplete="off" /></Field>
             <Field label="TMDb 语言"><Input value={form.tmdbLanguage} onChange={(event) => update('tmdbLanguage', event.target.value)} placeholder="zh-CN" /></Field>
+            <Field label="电影文件夹模板" hint="变量：{title} {year} {category} {quality}"><Input value={form.movieFolderTemplate} onChange={(event) => update('movieFolderTemplate', event.target.value)} className="mono-input" /></Field>
+            <Field label="电影文件模板" hint="变量：{title} {year} {quality} {ext}"><Input value={form.movieFileTemplate} onChange={(event) => update('movieFileTemplate', event.target.value)} className="mono-input" /></Field>
+            <Field label="剧集文件夹模板" hint="可用 / 分季，变量：{season}"><Input value={form.tvFolderTemplate} onChange={(event) => update('tvFolderTemplate', event.target.value)} className="mono-input" /></Field>
+            <Field label="剧集文件模板" hint="变量：{title} {season} {episode} {quality}"><Input value={form.tvFileTemplate} onChange={(event) => update('tvFileTemplate', event.target.value)} className="mono-input" /></Field>
           </div>
         </div>
       ) : null}
@@ -373,7 +383,15 @@ export function OrganizePage() {
           <section>
             <h3>洗版策略 YAML</h3>
             <pre>{`strategy: better`}</pre>
-            <p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。画质比较顺序：分辨率 → 片源 → HDR → 编码。</p>
+            <p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换；<code>max_size</code> / <code>min_size</code> 按体积取舍。画质比较顺序：分辨率 → 片源 → HDR → 编码。</p>
+          </section>
+          <section>
+            <h3>重命名模板</h3>
+            <pre>{`电影文件夹：{title} ({year})
+电影文件：{title} ({year}){quality}
+剧集文件夹：{title} ({year})/Season {season}
+剧集文件：{title} - S{season}E{episode}{quality}`}</pre>
+            <p>可用变量：<code>&#123;title&#125;</code> <code>&#123;year&#125;</code> <code>&#123;season&#125;</code> <code>&#123;episode&#125;</code> <code>&#123;quality&#125;</code> <code>&#123;ext&#125;</code> <code>&#123;category&#125;</code>。目录会自动创建，不需要填写云盘 ID。</p>
           </section>
           <section>
             <h3>媒体库同步</h3>
