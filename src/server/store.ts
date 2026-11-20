@@ -73,6 +73,7 @@ function createDefaultDatabase(): Database {
       notifications: {
         telegramBotToken: '',
         telegramChatId: '',
+        telegramCommands: false,
         wecomWebhookUrl: '',
         notifyOnSuccess: false,
         notifyOnFailure: true,
@@ -130,6 +131,10 @@ function normalizeDatabase(raw: unknown): Database {
       ...(input.settings ?? {}),
       streamBaseUrl:
         typeof input.settings?.streamBaseUrl === 'string' ? input.settings.streamBaseUrl : base.settings.streamBaseUrl,
+      notifications: {
+        ...base.settings.notifications,
+        ...(input.settings?.notifications ?? {}),
+      },
       organizer: {
         ...base.settings.organizer,
         ...(input.settings?.organizer ?? {}),
@@ -279,6 +284,10 @@ export class Store {
       settings: {
         ...base.settings,
         ...(settings.settings ?? {}),
+        notifications: {
+          ...base.settings.notifications,
+          ...(settings.settings?.notifications ?? {}),
+        },
         organizer: {
           ...base.settings.organizer,
           ...(settings.settings?.organizer ?? {}),

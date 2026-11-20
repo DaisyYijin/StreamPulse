@@ -86,3 +86,23 @@ washing:
 ## 115 多 Cookie
 
 来源编辑页的 Cookie 输入框支持多个 Cookie，用空行分隔。当前 Cookie 登录失效时会自动尝试下一个。
+
+
+## Telegram 命令机器人
+
+在设置 → Emby 与通知中填写 Bot Token、Chat ID 并开启“Telegram 命令机器人”。
+
+可用命令：
+
+```text
+/status                  运行状态
+/libraries               媒体库列表
+/run <名称或ID>          增量同步
+/full <名称或ID>         全量同步
+/runs                    最近任务
+/cancel <任务ID或库名>   取消任务
+/login <来源名称>        扫码更新 115/123
+/help                    帮助
+```
+
+机器人只响应配置的 Chat ID；企业微信目前只支持通知，不支持命令回调。

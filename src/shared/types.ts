@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.19.0';
+export const APP_VERSION = '1.20.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -231,6 +231,7 @@ export interface EmbyServer {
 export interface NotificationSettings {
   telegramBotToken: string;
   telegramChatId: string;
+  telegramCommands: boolean;
   wecomWebhookUrl: string;
   notifyOnSuccess: boolean;
   notifyOnFailure: boolean;

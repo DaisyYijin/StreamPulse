@@ -225,6 +225,7 @@ export const embyServerSchema = z.object({
 const notificationsSchema = z.object({
   telegramBotToken: z.string().trim().max(500),
   telegramChatId: z.string().trim().max(200),
+  telegramCommands: z.boolean().default(false),
   wecomWebhookUrl: z.string().trim().max(2000),
   notifyOnSuccess: z.boolean(),
   notifyOnFailure: z.boolean(),

@@ -363,6 +363,7 @@ always  总是替换
 - Telegram Bot Token / Chat ID
 - 企业微信机器人 Webhook
 - 成功、失败、Cookie 失效通知开关
+- Telegram 命令机器人（/status、/libraries、/run、/full、/runs、/cancel、/login）
 
 115 来源可以填写多个 Cookie，用空行分隔；当前 Cookie 失效时自动尝试下一个。
 
@@ -640,7 +641,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.19.0
+ghcr.io/daisyyijin/streampulse:1.20.0
 ```
 
 ### 首次发布后设为公开

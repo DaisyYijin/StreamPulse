@@ -7,6 +7,7 @@ import { Auth } from './auth.js';
 import { config } from './config.js';
 import { RunManager } from './runner.js';
 import { Scheduler } from './scheduler.js';
+import { TelegramBot } from './telegram-bot.js';
 import { initLogging } from './logger.js';
 import { createStreamServer } from './stream.js';
 import { Store } from './store.js';
@@ -26,6 +27,7 @@ async function main(): Promise<void> {
   const runner = new RunManager(store);
   await runner.init();
   const scheduler = new Scheduler(store, runner);
+  const telegramBot = new TelegramBot(store, runner);
   const streamServer = createStreamServer(store);
 
   const app = express();
@@ -116,6 +118,7 @@ async function main(): Promise<void> {
   app.use(errorHandler);
 
   scheduler.start();
+  telegramBot.start();
 
   const webServer = app.listen(config.port, config.host, () => {
     console.log('');
@@ -147,6 +150,7 @@ async function main(): Promise<void> {
     shuttingDown = true;
     console.log(`[server] ${signal} received, shutting down`);
     scheduler.stop();
+    await telegramBot.stop();
     await runner.shutdown();
     await Promise.all([
       new Promise<void>((resolve) => webServer.close(() => resolve())),

@@ -65,7 +65,7 @@ export function SettingsPage() {
   const [error, setError] = useState('');
   const [embyServers, setEmbyServers] = useState<EmbyServer[]>([]);
   const [notifications, setNotifications] = useState<NotificationSettings>({
-    telegramBotToken: '', telegramChatId: '', wecomWebhookUrl: '',
+    telegramBotToken: '', telegramChatId: '', telegramCommands: false, wecomWebhookUrl: '',
     notifyOnSuccess: false, notifyOnFailure: true, notifyCookieInvalid: true,
   });
   const [integrationBusy, setIntegrationBusy] = useState(false);
@@ -86,7 +86,7 @@ export function SettingsPage() {
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
       setRunRetention(data.settings.runRetention);
       setEmbyServers(data.settings.embyServers ?? []);
-      setNotifications(data.settings.notifications ?? notifications);
+      setNotifications({ ...notifications, ...(data.settings.notifications ?? {}) });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -467,6 +467,7 @@ export function SettingsPage() {
                 <div className="toggle-row"><div><strong>成功通知</strong><span>任务成功或部分成功时发送</span></div><Toggle checked={notifications.notifyOnSuccess} onChange={(value) => setNotifications((current) => ({ ...current, notifyOnSuccess: value }))} label="成功通知" /></div>
                 <div className="toggle-row"><div><strong>失败通知</strong><span>任务失败时发送</span></div><Toggle checked={notifications.notifyOnFailure} onChange={(value) => setNotifications((current) => ({ ...current, notifyOnFailure: value }))} label="失败通知" /></div>
                 <div className="toggle-row"><div><strong>Cookie 失效通知</strong><span>115/123 连接测试失败时发送</span></div><Toggle checked={notifications.notifyCookieInvalid} onChange={(value) => setNotifications((current) => ({ ...current, notifyCookieInvalid: value }))} label="Cookie 失效通知" /></div>
+                <div className="toggle-row"><div><strong>Telegram 命令机器人</strong><span>允许配置的 Chat ID 发送 /status /libraries /run /full /runs /cancel /login /help</span></div><Toggle checked={notifications.telegramCommands} onChange={(value) => setNotifications((current) => ({ ...current, telegramCommands: value }))} label="Telegram 命令机器人" /></div>
               </div>
               <div className="settings-actions"><Button type="submit" variant="primary" icon={<Send size={16} />} loading={integrationBusy}>保存集成设置</Button></div>
             </form>
@@ -597,7 +598,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.19.0'}</span>
+            <span>v{system?.version ?? '1.20.0'}</span>
           </section>
         </aside>
       </div>

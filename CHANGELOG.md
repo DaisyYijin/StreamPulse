@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.20.0] - 2026-11-20
+
+### Added
+
+- Telegram command bot: `/status`, `/libraries`, `/run`, `/full`, `/runs`,
+  `/cancel`, `/login`, `/help`.
+- `/login` sends a 115/123 QR image to Telegram and writes the credentials back
+  to the source after confirmation.
+- Telegram command access is restricted to the configured Chat ID and is
+  disabled by default.
+
 ## [1.19.0] - 2026-11-20
 
 ### Added
