@@ -443,7 +443,11 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     if (!source) throw new HttpError(404, '来源不存在');
     const started = Date.now();
     try {
-      const client = clientForSource(source);
+      const client = clientForSource(source, (cookie) => {
+        source.cookie = cookie;
+        source.cookies = [cookie, ...(source.cookies ?? []).filter((item) => item !== cookie)];
+        void store.save();
+      });
       const result = await client.testConnection(AbortSignal.timeout(30_000));
       const profile = await client.getProfile?.(AbortSignal.timeout(20_000)).catch(() => null);
       if (profile) source.profile = profile;

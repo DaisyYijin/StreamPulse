@@ -132,7 +132,10 @@ export class P115Client implements StorageClient {
   private active = 0;
   private readonly dirIds = new Map<string, string>([['/', '0']]);
 
-  constructor(cookie: string | string[]) {
+  private readonly onCookieChange?: (cookie: string) => void;
+
+  constructor(cookie: string | string[], onCookieChange?: (cookie: string) => void) {
+    this.onCookieChange = onCookieChange;
     const input = Array.isArray(cookie) ? cookie : [cookie];
     this.cookies = input
       .map((value) => value.trim().replace(/\s*\r?\n\s*/g, '; '))
@@ -147,6 +150,7 @@ export class P115Client implements StorageClient {
   private rotateCookie(): boolean {
     if (this.cookies.length <= 1) return false;
     this.active = (this.active + 1) % this.cookies.length;
+    this.onCookieChange?.(this.cookie);
     return true;
   }
 

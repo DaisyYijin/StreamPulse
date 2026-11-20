@@ -280,7 +280,11 @@ export class RunManager {
       if (library.urlTemplate.includes('{streamToken}')) {
         this.log(run, 'info', `STRM 模式：302 跳转（通过 ${library.streamBaseUrl || settings.streamBaseUrl}）`);
       }
-      const client = clientForSource(source);
+      const client = clientForSource(source, (cookie) => {
+        source.cookie = cookie;
+        source.cookies = [cookie, ...(source.cookies ?? []).filter((item) => item !== cookie)];
+        void this.store.save();
+      });
       run.message = '正在扫描文件';
       emitProgress(true);
 

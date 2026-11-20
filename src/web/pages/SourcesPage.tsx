@@ -8,6 +8,7 @@ import {
   Plus,
   ServerCog,
   Share2,
+  QrCode,
   Trash2,
   UserRound,
   Wifi,
@@ -291,6 +292,19 @@ export function SourcesPage() {
                     {used} 个媒体库正在使用
                   </span>
                   <div className="source-actions">
+                    {source.type === '115' && source.lastCheck && !source.lastCheck.ok ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<QrCode size={14} />}
+                        onClick={() => {
+                          setEditing(source);
+                          setModalOpen(true);
+                        }}
+                      >
+                        重新登录
+                      </Button>
+                    ) : null}
                     <Button
                       size="sm"
                       variant="secondary"

@@ -47,7 +47,11 @@ export function createStreamServer(store: Store): http.Server {
     const key = `${source.id}:${source.updatedAt}`;
     const existing = clients.get(key);
     if (existing) return existing;
-    const client = clientForSource(source);
+    const client = clientForSource(source, (cookie) => {
+      source.cookie = cookie;
+      source.cookies = [cookie, ...(source.cookies ?? []).filter((item) => item !== cookie)];
+      void store.save();
+    });
     if (clients.size > 80) clients.clear();
     clients.set(key, client);
     return client;

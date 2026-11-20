@@ -4,8 +4,13 @@ import { P123Client } from './p123.js';
 import type { StorageClient } from './storage.js';
 import type { SourceRecord } from './types.js';
 
-export function clientForSource(source: SourceRecord): StorageClient {
-  if (source.type === '115') return new P115Client(source.cookies?.length ? source.cookies : source.cookie);
+export function clientForSource(
+  source: SourceRecord,
+  onCookieChange?: (cookie: string) => void,
+): StorageClient {
+  if (source.type === '115') {
+    return new P115Client(source.cookies?.length ? source.cookies : source.cookie, onCookieChange);
+  }
   if (source.type === '123') {
     return new P123Client({
       username: source.username,

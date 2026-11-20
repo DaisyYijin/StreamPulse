@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.18.1] - 2026-11-20
+
+### Fixed
+
+- 115 cookie failover now writes the active cookie back to the per-source file.
+- Added a source-card “重新登录” entry for 115 accounts whose last check failed.
+
 ## [1.18.0] - 2026-11-20
 
 ### Added
