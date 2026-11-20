@@ -6,6 +6,7 @@ import {
   LibraryBig,
   LogOut,
   RefreshCw,
+  Search,
   Settings,
   Sun,
   Moon,
@@ -17,13 +18,14 @@ import { cx } from '../utils';
 import { Logo, LogoMark } from './Logo';
 import { Button, ToastViewport } from './ui';
 
-export type Route = 'dashboard' | 'libraries' | 'sources' | 'organize' | 'activity' | 'settings';
+export type Route = 'dashboard' | 'libraries' | 'sources' | 'organize' | 'search' | 'activity' | 'settings';
 
 const NAV_ITEMS: Array<{ id: Route; label: string; icon: ReactNode; eyebrow: string }> = [
   { id: 'dashboard', label: '控制台', icon: <LayoutDashboard size={18} />, eyebrow: 'Overview' },
   { id: 'libraries', label: '媒体库', icon: <LibraryBig size={18} />, eyebrow: 'Libraries' },
   { id: 'sources', label: '来源', icon: <Cloud size={18} />, eyebrow: 'Sources' },
   { id: 'organize', label: '整理', icon: <WandSparkles size={18} />, eyebrow: 'Organize' },
+  { id: 'search', label: '影巢搜索', icon: <Search size={18} />, eyebrow: 'Search' },
   { id: 'activity', label: '运行记录', icon: <Activity size={18} />, eyebrow: 'Activity' },
   { id: 'settings', label: '设置', icon: <Settings size={18} />, eyebrow: 'Settings' },
 ];
@@ -33,6 +35,7 @@ const PAGE_TITLE: Record<Route, string> = {
   libraries: '媒体库',
   sources: '来源',
   organize: '整理',
+  search: '影巢搜索',
   activity: '运行记录',
   settings: '设置',
 };

@@ -24,6 +24,14 @@ export interface TmdbInfo {
   overview: string;
 }
 
+export interface TmdbCandidate {
+  id: number;
+  mediaType: 'movie' | 'tv';
+  title: string;
+  year: string;
+  popularity: number;
+}
+
 export class TmdbError extends Error {
   constructor(message: string, readonly status = 502) { super(message); this.name = 'TmdbError'; }
 }
@@ -39,6 +47,42 @@ async function request(path: string, params: Record<string, string>, key: string
     throw new TmdbError(payload?.status_message || `TMDb 请求失败（HTTP ${response.status}）`, response.status === 401 ? 401 : 502);
   }
   return payload;
+}
+
+export async function searchTmdbCandidates(options: {
+  keyword: string;
+  mediaType: 'movie' | 'tv' | 'auto';
+  year?: string;
+  apiKey: string;
+  language: string;
+  limit?: number;
+}): Promise<TmdbCandidate[]> {
+  const types: Array<'movie' | 'tv'> = options.mediaType === 'auto' ? ['movie', 'tv'] : [options.mediaType];
+  const limit = Math.max(1, Math.min(20, options.limit ?? 10));
+  const candidates: TmdbCandidate[] = [];
+  for (const type of types) {
+    const params: Record<string, string> = {
+      query: options.keyword,
+      language: options.language,
+      include_adult: 'false',
+    };
+    if (options.year) params[type === 'movie' ? 'year' : 'first_air_date_year'] = options.year;
+    const payload = await request(`/search/${type}`, params, options.apiKey);
+    for (const item of payload?.results ?? []) {
+      const year = String(item.release_date || item.first_air_date || '').slice(0, 4);
+      candidates.push({
+        id: Number(item.id),
+        mediaType: type,
+        title: String(item.title || item.name || ''),
+        year,
+        popularity: Number(item.popularity || 0),
+      });
+    }
+  }
+  return candidates
+    .filter((item) => item.id && item.title)
+    .sort((left, right) => right.popularity - left.popularity)
+    .slice(0, limit);
 }
 
 export async function searchTmdb(options: {

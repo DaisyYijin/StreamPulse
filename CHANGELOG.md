@@ -2,6 +2,16 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.24.0] - 2026-11-20
+
+### Added
+
+- HDHive (影巢) search page using TMDb title resolution and the HDHive
+  OpenAPI resource endpoint.
+- HDHive API key / OpenAPI user token settings with connection test.
+- Results show pan type, size, resolution, source, points, unlock state and
+  validity; search never unlocks or spends points.
+
 ## [1.23.0] - 2026-11-20
 
 ### Added

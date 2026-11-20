@@ -222,6 +222,12 @@ export const embyServerSchema = z.object({
   refreshAfterRun: z.boolean().default(false),
 });
 
+const hdhiveSchema = z.object({
+  baseUrl: z.string().trim().min(1).max(2000),
+  apiKey: z.string().trim().max(1000),
+  userToken: z.string().trim().max(4000),
+});
+
 const notificationsSchema = z.object({
   telegramBotToken: z.string().trim().max(500),
   telegramChatId: z.string().trim().max(200),
@@ -239,9 +245,22 @@ export const embyLibraryCreateSchema = z.object({
   paths: z.array(z.string().trim().min(1).max(2000)).min(1).max(20),
 });
 
+export const hdhiveSearchSchema = z.object({
+  keyword: z.string().trim().min(1).max(200),
+  mediaType: z.enum(['auto', 'movie', 'tv']).default('auto'),
+  year: z.string().trim().max(4).optional().default(''),
+});
+
+export const hdhiveConnectSchema = z.object({
+  baseUrl: z.string().trim().min(1).max(2000),
+  apiKey: z.string().trim().max(1000),
+  userToken: z.string().trim().max(4000),
+});
+
 export const settingsUpdateSchema = z.object({
   organizer: organizerSchema.optional(),
   embyServers: z.array(embyServerSchema).max(20).optional(),
+  hdhive: hdhiveSchema.optional(),
   notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),

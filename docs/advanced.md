@@ -108,3 +108,18 @@ washing:
 ```
 
 机器人只响应配置的 Chat ID；企业微信目前只支持通知，不支持命令回调。
+
+
+## 影巢搜索
+
+设置 → Emby 与通知 → 影巢搜索：
+
+```text
+影巢地址：https://hdhive.com
+影巢 API Key（X-API-Key）
+OpenAPI 用户 Token（Bearer Token）
+```
+
+TMDb Key 使用整理设置里的配置。侧边栏“影巢搜索”输入片名后，会先解析 TMDb 条目，再查询影巢资源。
+
+只做搜索，不会自动解锁、不会消耗积分。

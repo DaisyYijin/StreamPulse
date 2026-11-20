@@ -70,6 +70,11 @@ function createDefaultDatabase(): Database {
         categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       },
       embyServers: [],
+      hdhive: {
+        baseUrl: 'https://hdhive.com',
+        apiKey: '',
+        userToken: '',
+      },
       notifications: {
         telegramBotToken: '',
         telegramChatId: '',
@@ -159,6 +164,10 @@ function normalizeDatabase(raw: unknown): Database {
       ...(input.settings ?? {}),
       streamBaseUrl:
         typeof input.settings?.streamBaseUrl === 'string' ? input.settings.streamBaseUrl : base.settings.streamBaseUrl,
+      hdhive: {
+        ...base.settings.hdhive,
+        ...(input.settings?.hdhive ?? {}),
+      },
       notifications: {
         ...base.settings.notifications,
         ...(input.settings?.notifications ?? {}),
@@ -311,6 +320,10 @@ export class Store {
       settings: {
         ...base.settings,
         ...(settings.settings ?? {}),
+        hdhive: {
+          ...base.settings.hdhive,
+          ...(settings.settings?.hdhive ?? {}),
+        },
         notifications: {
           ...base.settings.notifications,
           ...(settings.settings?.notifications ?? {}),

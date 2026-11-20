@@ -13,6 +13,7 @@ import {
   Lock,
   RefreshCcw,
   Save,
+  Search,
   Server,
   ShieldCheck,
   SlidersHorizontal,
@@ -20,7 +21,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, EmbyLibrary, EmbyServer, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, EmbyLibrary, EmbyServer, HdhiveSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -71,6 +72,8 @@ export function SettingsPage() {
     notifyOnSuccess: false, notifyOnFailure: true, notifyCookieInvalid: true,
   });
   const [integrationBusy, setIntegrationBusy] = useState(false);
+  const [hdhive, setHdhive] = useState<HdhiveSettings>({ baseUrl: 'https://hdhive.com', apiKey: '', userToken: '' });
+  const [hdhiveBusy, setHdhiveBusy] = useState(false);
   const [embyManageId, setEmbyManageId] = useState('');
   const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrary[]>([]);
   const [embyLibraryBusy, setEmbyLibraryBusy] = useState(false);
@@ -96,6 +99,7 @@ export function SettingsPage() {
       setEmbyServers(data.settings.embyServers ?? []);
       setEmbyManageId((current) => current || data.settings.embyServers?.[0]?.id || '');
       setNotifications({ ...notifications, ...(data.settings.notifications ?? {}) });
+      if (data.settings.hdhive) setHdhive(data.settings.hdhive);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -172,7 +176,7 @@ export function SettingsPage() {
     event.preventDefault();
     setIntegrationBusy(true);
     try {
-      await api.patch('/api/settings', { embyServers, notifications });
+      await api.patch('/api/settings', { embyServers, notifications, hdhive });
       toast.success('Emby 与通知设置已保存');
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : '保存失败');
@@ -238,6 +242,18 @@ export function SettingsPage() {
   const addEmbyLibraryToRefresh = (server: EmbyServer, library: EmbyLibrary) => {
     updateEmby(server.id, { libraryIds: Array.from(new Set([...server.libraryIds, library.id])) });
     toast.success(`已加入刷新：${library.name}`);
+  };
+
+  const testHdhive = async () => {
+    setHdhiveBusy(true);
+    try {
+      const result = await api.post<{ message: string }>('/api/integrations/hdhive/test', hdhive);
+      toast.success(result.message || '影巢 API Key 有效');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '影巢连接失败');
+    } finally {
+      setHdhiveBusy(false);
+    }
   };
 
   const testNotify = async () => {
@@ -559,6 +575,17 @@ export function SettingsPage() {
               )}
 
               <div className="settings-head compact" style={{ marginTop: 22 }}>
+                <span className="settings-icon"><Search size={18} /></span>
+                <div><h2>影巢搜索</h2><p>使用影巢 OpenAPI 搜索资源；只搜索，不会自动解锁或消耗积分。</p></div>
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="影巢地址"><Input value={hdhive.baseUrl} onChange={(event) => setHdhive((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="https://hdhive.com" /></Field>
+                <Field label="影巢 API Key"><Input type="password" value={hdhive.apiKey} onChange={(event) => setHdhive((current) => ({ ...current, apiKey: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="OpenAPI 用户 Token" hint="业务搜索接口需要 Bearer Token"><Input type="password" value={hdhive.userToken} onChange={(event) => setHdhive((current) => ({ ...current, userToken: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="测试连接"><Button type="button" variant="secondary" icon={<Search size={14} />} loading={hdhiveBusy} onClick={() => void testHdhive()}>测试影巢 API Key</Button></Field>
+              </div>
+
+              <div className="settings-head compact" style={{ marginTop: 22 }}>
                 <span className="settings-icon"><Bell size={18} /></span>
                 <div><h2>通知</h2><p>留空的渠道不会发送。</p></div>
               </div>
@@ -703,7 +730,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.23.0'}</span>
+            <span>v{system?.version ?? '1.24.0'}</span>
           </section>
         </aside>
       </div>

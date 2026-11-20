@@ -13,6 +13,7 @@ import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
 import { generateLibraryCover } from '../covers.js';
 import { createEmbyLibrary, listEmbyLibraries, testEmby } from '../emby.js';
+import { searchHdhive, testHdhive } from '../hdhive.js';
 import { searchTmdb } from '../tmdb.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
@@ -35,6 +36,8 @@ import {
   loginSchema,
   embyLibraryCreateSchema,
   embyServerSchema,
+  hdhiveConnectSchema,
+  hdhiveSearchSchema,
   organizeExecuteSchema,
   qrStartSchema,
   recognizeSchema,
@@ -644,6 +647,34 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     }
   });
 
+  router.post('/integrations/hdhive/test', async (req, res) => {
+    const settings = parseBody(hdhiveConnectSchema, req.body);
+    try {
+      const result = await testHdhive(settings);
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '影巢连接失败');
+    }
+  });
+
+  router.post('/hdhive/search', async (req, res) => {
+    const body = parseBody(hdhiveSearchSchema, req.body);
+    const organizer = store.snapshot.settings.organizer;
+    try {
+      const result = await searchHdhive({
+        keyword: body.keyword,
+        mediaType: body.mediaType,
+        year: body.year,
+        settings: store.snapshot.settings.hdhive,
+        tmdbApiKey: organizer.tmdbApiKey,
+        tmdbLanguage: organizer.tmdbLanguage,
+      });
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : '影巢搜索失败');
+    }
+  });
+
   router.post('/integrations/notify/test', async (_req, res) => {
     await notify(store.snapshot.settings.notifications, 'StreamPulse 通知测试成功');
     res.json({ ok: true });
@@ -947,6 +978,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.runRetention !== undefined) db.settings.runRetention = body.runRetention;
       if (body.organizer !== undefined) db.settings.organizer = body.organizer;
       if (body.embyServers !== undefined) db.settings.embyServers = body.embyServers;
+      if (body.hdhive !== undefined) db.settings.hdhive = body.hdhive;
       if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();

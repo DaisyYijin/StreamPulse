@@ -11,10 +11,11 @@ import { AuthPage } from './pages/AuthPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { LibrariesPage } from './pages/LibrariesPage';
 import { OrganizePage } from './pages/OrganizePage';
+import { SearchPage } from './pages/SearchPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SourcesPage } from './pages/SourcesPage';
 
-const ROUTES: Route[] = ['dashboard', 'libraries', 'sources', 'organize', 'activity', 'settings'];
+const ROUTES: Route[] = ['dashboard', 'libraries', 'sources', 'organize', 'search', 'activity', 'settings'];
 
 function currentRoute(): Route {
   const raw = window.location.hash.replace(/^#\/?/, '').split('?')[0];
@@ -155,6 +156,8 @@ export default function App() {
           <SourcesPage />
         ) : route === 'organize' ? (
           <OrganizePage />
+        ) : route === 'search' ? (
+          <SearchPage />
         ) : route === 'activity' ? (
           <ActivityPage onOpenRun={openRun} />
         ) : (
