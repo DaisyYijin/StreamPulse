@@ -7,11 +7,40 @@ import { refreshEmbyAfterRun } from './emby.js';
 import { notifyRun } from './notify.js';
 import { clientForSource } from './client.js';
 import { emptyManifest, isUnchanged, type Manifest, type ManifestEntry } from './core/manifest.js';
-import { relativeSourcePath, safeJoin, strmRelativePath } from './core/paths.js';
+import { normalizeTargetPath, relativeSourcePath, safeJoin, strmRelativePath } from './core/paths.js';
 import { renderUrlTemplate } from './core/template.js';
 import { scanLibrary } from './scanner.js';
 import type { Store } from './store.js';
 import { HttpError, makeId, nowIso, type LibraryRecord } from './types.js';
+
+async function removeEmptyDirectories(root: string, start: string): Promise<number> {
+  const rootPath = path.resolve(root);
+  const startPath = path.resolve(start);
+  if (startPath !== rootPath && !startPath.startsWith(`${rootPath}${path.sep}`)) return 0;
+  let removed = 0;
+  const walk = async (dir: string): Promise<void> => {
+    const entries = await fs.readdir(dir, { withFileTypes: true }).catch(() => []);
+    for (const entry of entries) {
+      if (entry.isDirectory()) await walk(path.join(dir, entry.name));
+    }
+    if (dir === rootPath) return;
+    const remaining = await fs.readdir(dir).catch(() => ['keep']);
+    if (remaining.length === 0) {
+      await fs.rmdir(dir).catch(() => undefined);
+      removed += 1;
+    }
+  };
+  await walk(startPath);
+  let current = path.dirname(startPath);
+  while (current.startsWith(rootPath) && current !== rootPath) {
+    const remaining = await fs.readdir(current).catch(() => ['keep']);
+    if (remaining.length > 0) break;
+    await fs.rmdir(current).catch(() => undefined);
+    removed += 1;
+    current = path.dirname(current);
+  }
+  return removed;
+}
 
 export type RunEvent =
   | { type: 'status'; run: Run }
@@ -476,6 +505,15 @@ export class RunManager {
             delete nextSidecars[key];
           }
           if (removedSidecars > 0) this.log(run, 'info', `清理 ${removedSidecars} 个失效附属文件`);
+        }
+        try {
+          const libraryRoot = safeJoin(outputRoot, normalizeTargetPath(library.targetPath));
+          const scopeRelative = scope ? relativeSourcePath(library.sourcePath, scope) : '';
+          const scanRoot = scopeRelative ? safeJoin(libraryRoot, scopeRelative) : libraryRoot;
+          const removedDirs = await removeEmptyDirectories(libraryRoot, scanRoot);
+          if (removedDirs > 0) this.log(run, 'info', `清理 ${removedDirs} 个空目录`);
+        } catch {
+          // Empty-directory cleanup is best-effort.
         }
       }
       for (const [key, local] of currentSidecars) nextSidecars[key] = local;

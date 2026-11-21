@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.29.2] - 2026-11-21
+
+### Added
+
+- Empty-directory cleanup after orphan cleanup when “清理失效条目” is enabled.
+  Media library roots are preserved; scoped event runs only prune the affected
+  subtree and its now-empty parents.
+
 ## [1.29.1] - 2026-11-21
 
 ### Added
