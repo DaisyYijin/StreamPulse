@@ -21,6 +21,7 @@ export interface Manifest {
   libraryId: string;
   updatedAt: string;
   entries: Record<string, ManifestEntry>;
+  sidecars?: Record<string, string>;
 }
 
 export function emptyManifest(libraryId: string): Manifest {
@@ -29,6 +30,7 @@ export function emptyManifest(libraryId: string): Manifest {
     libraryId,
     updatedAt: new Date().toISOString(),
     entries: {},
+    sidecars: {},
   };
 }
 

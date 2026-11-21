@@ -59,6 +59,10 @@ async function readManifest(store: Store, libraryId: string): Promise<Manifest> 
         parsed.entries && typeof parsed.entries === 'object' && !Array.isArray(parsed.entries)
           ? parsed.entries
           : {},
+      sidecars:
+        parsed.sidecars && typeof parsed.sidecars === 'object' && !Array.isArray(parsed.sidecars)
+          ? parsed.sidecars
+          : {},
     };
   } catch {
     return emptyManifest(libraryId);
@@ -348,6 +352,18 @@ export class RunManager {
 
       const manifest = await readManifest(this.store, library.id);
       const nextEntries: Record<string, ManifestEntry> = { ...manifest.entries };
+      const nextSidecars: Record<string, string> = { ...(manifest.sidecars ?? {}) };
+      const currentSidecars = new Map<string, string>();
+      if (library.downloadSidecars) {
+        for (const sidecar of scan.sidecars) {
+          try {
+            const relativeStr = strmRelativePath(library.targetPath, sidecar.relative).replace(/\.strm$/, sidecar.extension);
+            currentSidecars.set(sidecar.relative, relativeStr);
+          } catch {
+            // Ignore paths that cannot be mapped.
+          }
+        }
+      }
       const currentKeys = new Set<string>();
       const claimedTargets = new Map<string, string>();
       let lastProgressLog = Date.now();
@@ -442,13 +458,34 @@ export class RunManager {
         if (missing.length > 0) {
           this.log(run, 'info', `清理 ${missing.length} 个失效 STRM 条目`);
         }
+        if (library.downloadSidecars) {
+          const missingSidecars = Object.keys(manifest.sidecars ?? {}).filter((key) => inScope(key) && !currentSidecars.has(key));
+          let removedSidecars = 0;
+          for (const key of missingSidecars) {
+            const local = (manifest.sidecars ?? {})[key];
+            if (!local) continue;
+            try {
+              const absolute = safeJoin(outputRoot, local);
+              if (await fileExists(absolute)) {
+                await fs.unlink(absolute);
+                removedSidecars += 1;
+              }
+            } catch {
+              // Sidecar cleanup is best-effort.
+            }
+            delete nextSidecars[key];
+          }
+          if (removedSidecars > 0) this.log(run, 'info', `清理 ${removedSidecars} 个失效附属文件`);
+        }
       }
+      for (const [key, local] of currentSidecars) nextSidecars[key] = local;
 
       await writeManifest(this.store, {
         version: 1,
         libraryId: library.id,
         updatedAt: nowIso(),
         entries: nextEntries,
+        sidecars: nextSidecars,
       });
 
       run.stats.matched = scan.files.length;

@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.29.1] - 2026-11-21
+
+### Added
+
+- Sidecar orphan cleanup: when “清理失效条目” is enabled, subtitles, NFO and
+  images recorded by StreamPulse are removed after their source sidecar
+  disappears. User-owned files are not touched.
+
 ## [1.29.0] - 2026-11-20
 
 ### Added
