@@ -21,7 +21,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, CloudDriveSettings, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, CloudDriveSettings, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, MetaTubeSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -75,6 +75,10 @@ export function SettingsPage() {
   const [hdhive, setHdhive] = useState<HdhiveSettings>({ baseUrl: 'https://hdhive.com', apiKey: '', userToken: '' });
   const [guanying, setGuanying] = useState<GuanyingSettings>({ baseUrl: '', cookie: '' });
   const [cloudDrive, setCloudDrive] = useState<CloudDriveSettings>({ webhookToken: '' });
+  const [metaTube, setMetaTube] = useState<MetaTubeSettings>({ baseUrl: '', token: '' });
+  const [metaTubeBusy, setMetaTubeBusy] = useState(false);
+  const [metaTubeQuery, setMetaTubeQuery] = useState('SSIS-001');
+  const [metaTubeResult, setMetaTubeResult] = useState<string>('');
   const [hdhiveBusy, setHdhiveBusy] = useState(false);
   const [embyManageId, setEmbyManageId] = useState('');
   const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrary[]>([]);
@@ -104,6 +108,7 @@ export function SettingsPage() {
       if (data.settings.hdhive) setHdhive(data.settings.hdhive);
       if (data.settings.guanying) setGuanying(data.settings.guanying);
       if (data.settings.cloudDrive) setCloudDrive(data.settings.cloudDrive);
+      if (data.settings.metaTube) setMetaTube(data.settings.metaTube);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -180,7 +185,7 @@ export function SettingsPage() {
     event.preventDefault();
     setIntegrationBusy(true);
     try {
-      await api.patch('/api/settings', { embyServers, notifications, hdhive, guanying, cloudDrive });
+      await api.patch('/api/settings', { embyServers, notifications, hdhive, guanying, cloudDrive, metaTube });
       toast.success('Emby 与通知设置已保存');
     } catch (caught) {
       toast.error(caught instanceof Error ? caught.message : '保存失败');
@@ -257,6 +262,30 @@ export function SettingsPage() {
       toast.error(caught instanceof Error ? caught.message : '影巢连接失败');
     } finally {
       setHdhiveBusy(false);
+    }
+  };
+
+  const testMetaTube = async () => {
+    setMetaTubeBusy(true);
+    try {
+      const result = await api.post<{ providers: number }>('/api/metatube/test', metaTube);
+      toast.success(`MetaTube 连接成功：${result.providers} 个数据源`);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : 'MetaTube 连接失败');
+    } finally {
+      setMetaTubeBusy(false);
+    }
+  };
+
+  const searchMetaTube = async () => {
+    setMetaTubeBusy(true);
+    try {
+      const result = await api.post<{ results: Array<{ number: string; title: string; actors: string[] }> }>('/api/metatube/search', { keyword: metaTubeQuery, settings: metaTube });
+      setMetaTubeResult(result.results[0] ? `${result.results[0].number || metaTubeQuery} · ${result.results[0].title}` : '没有匹配结果');
+    } catch (caught) {
+      setMetaTubeResult(caught instanceof Error ? caught.message : '识别失败');
+    } finally {
+      setMetaTubeBusy(false);
     }
   };
 
@@ -593,6 +622,23 @@ export function SettingsPage() {
               <p className="settings-hint">媒体库的“来源路径”需要与 CD2 推送的虚拟路径一致，才能匹配到对应库。</p>
 
               <div className="settings-head compact" style={{ marginTop: 22 }}>
+                <span className="settings-icon"><Database size={18} /></span>
+                <div><h2>MetaTube AV 识别</h2><p>填写 MetaTube Server 地址；用于 AV 番号识别和后续整理。</p></div>
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="MetaTube Server 地址"><Input value={metaTube.baseUrl} onChange={(event) => setMetaTube((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://192.168.1.10:8080" /></Field>
+                <Field label="MetaTube Token（可选）"><Input type="password" value={metaTube.token} onChange={(event) => setMetaTube((current) => ({ ...current, token: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="测试连接"><Button type="button" variant="secondary" icon={<Database size={14} />} loading={metaTubeBusy} onClick={() => void testMetaTube()}>测试 MetaTube</Button></Field>
+                <Field label="AV 番号识别测试">
+                  <div className="inline-action">
+                    <Input value={metaTubeQuery} onChange={(event) => setMetaTubeQuery(event.target.value)} placeholder="SSIS-001" />
+                    <Button type="button" variant="secondary" size="sm" loading={metaTubeBusy} onClick={() => void searchMetaTube()}>识别</Button>
+                    {metaTubeResult ? <span>{metaTubeResult}</span> : null}
+                  </div>
+                </Field>
+              </div>
+
+              <div className="settings-head compact" style={{ marginTop: 22 }}>
                 <span className="settings-icon"><Search size={18} /></span>
                 <div><h2>影巢搜索</h2><p>使用影巢 OpenAPI 搜索资源；只搜索，不会自动解锁或消耗积分。</p></div>
               </div>
@@ -750,7 +796,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.29.2'}</span>
+            <span>v{system?.version ?? '1.30.0'}</span>
           </section>
         </aside>
       </div>

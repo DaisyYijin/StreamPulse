@@ -77,6 +77,10 @@ function createDefaultDatabase(): Database {
       cloudDrive: {
         webhookToken: '',
       },
+      metaTube: {
+        baseUrl: '',
+        token: '',
+      },
       subscriptions: {
         doubanUserId: '',
         doubanCookie: '',
@@ -189,6 +193,10 @@ function normalizeDatabase(raw: unknown): Database {
       cloudDrive: {
         ...base.settings.cloudDrive,
         ...(input.settings?.cloudDrive ?? {}),
+      },
+      metaTube: {
+        ...base.settings.metaTube,
+        ...(input.settings?.metaTube ?? {}),
       },
       hdhive: {
         ...base.settings.hdhive,
@@ -357,6 +365,10 @@ export class Store {
         cloudDrive: {
           ...base.settings.cloudDrive,
           ...(settings.settings?.cloudDrive ?? {}),
+        },
+        metaTube: {
+          ...base.settings.metaTube,
+          ...(settings.settings?.metaTube ?? {}),
         },
         hdhive: {
           ...base.settings.hdhive,

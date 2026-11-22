@@ -1,6 +1,7 @@
 import {
   Activity,
   BookmarkPlus,
+  ScrollText,
   ChevronRight,
   Cloud,
   LayoutDashboard,
@@ -19,7 +20,7 @@ import { cx } from '../utils';
 import { Logo, LogoMark } from './Logo';
 import { Button, ToastViewport } from './ui';
 
-export type Route = 'dashboard' | 'libraries' | 'sources' | 'organize' | 'search' | 'subscriptions' | 'activity' | 'settings';
+export type Route = 'dashboard' | 'libraries' | 'sources' | 'organize' | 'search' | 'subscriptions' | 'activity' | 'logs' | 'settings';
 
 const NAV_ITEMS: Array<{ id: Route; label: string; icon: ReactNode; eyebrow: string }> = [
   { id: 'dashboard', label: '控制台', icon: <LayoutDashboard size={18} />, eyebrow: 'Overview' },
@@ -29,6 +30,7 @@ const NAV_ITEMS: Array<{ id: Route; label: string; icon: ReactNode; eyebrow: str
   { id: 'search', label: '影视搜索', icon: <Search size={18} />, eyebrow: 'Search' },
   { id: 'subscriptions', label: '订阅', icon: <BookmarkPlus size={18} />, eyebrow: 'Subscriptions' },
   { id: 'activity', label: '运行记录', icon: <Activity size={18} />, eyebrow: 'Activity' },
+  { id: 'logs', label: '实时日志', icon: <ScrollText size={18} />, eyebrow: 'Logs' },
   { id: 'settings', label: '设置', icon: <Settings size={18} />, eyebrow: 'Settings' },
 ];
 
@@ -40,6 +42,7 @@ const PAGE_TITLE: Record<Route, string> = {
   search: '影视搜索',
   subscriptions: '订阅',
   activity: '运行记录',
+  logs: '实时日志',
   settings: '设置',
 };
 

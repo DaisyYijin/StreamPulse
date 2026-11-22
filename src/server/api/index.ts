@@ -18,8 +18,10 @@ import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
 import { searchSeedhub } from '../seedhub.js';
+import { searchMetaTube, testMetaTube } from '../metatube.js';
 import { submitChallenge } from '../challenge.js';
 import { deleteSubscription, listSubscriptions, syncDoubanSubscriptions } from '../subscriptions.js';
+import { recentLiveLogs, subscribeLiveLogs } from '../live-logs.js';
 import { notify, notifyCookieInvalid } from '../notify.js';
 import { P115Client } from '../p115.js';
 import { evaluateWash, executeCloudOrganizerBatch, isTmdbError, parseName, scanCloudOrganizer } from '../organizer.js';
@@ -43,6 +45,8 @@ import {
   embyServerSchema,
   butailingSearchSchema,
   challengeSubmitSchema,
+  metaTubeSearchSchema,
+  metaTubeSettingsSchema,
   seedhubSearchSchema,
   guanyingSearchSchema,
   hdhiveConnectSchema,
@@ -656,6 +660,27 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
     }
   });
 
+  router.get('/logs', async (req, res) => {
+    const limit = Number(req.query.limit || 200);
+    res.json({ lines: recentLiveLogs(Number.isFinite(limit) ? limit : 200) });
+  });
+
+  router.get('/logs/stream', async (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders?.();
+    const send = (line: unknown) => res.write(`data: ${JSON.stringify(line)}\n\n`);
+    for (const line of recentLiveLogs(200)) send(line);
+    const unsubscribe = subscribeLiveLogs(send);
+    const heartbeat = setInterval(() => res.write(': ping\n\n'), 15_000);
+    req.on('close', () => {
+      clearInterval(heartbeat);
+      unsubscribe();
+    });
+  });
+
   router.get('/subscriptions', async (_req, res) => {
     res.json(await listSubscriptions(store.stateDir));
   });
@@ -698,6 +723,24 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       res.json(result);
     } catch (error) {
       throw new HttpError(502, error instanceof Error ? error.message : '不太灵搜索失败');
+    }
+  });
+
+  router.post('/metatube/test', async (req, res) => {
+    const body = parseBody(metaTubeSettingsSchema, req.body);
+    try {
+      res.json(await testMetaTube(body));
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : 'MetaTube 连接失败');
+    }
+  });
+
+  router.post('/metatube/search', async (req, res) => {
+    const body = parseBody(metaTubeSearchSchema, req.body);
+    try {
+      res.json({ results: await searchMetaTube(body.settings ?? store.snapshot.settings.metaTube, body.keyword) });
+    } catch (error) {
+      throw new HttpError(502, error instanceof Error ? error.message : 'MetaTube 搜索失败');
     }
   });
 
@@ -1056,6 +1099,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.guanying !== undefined) db.settings.guanying = body.guanying;
       if (body.subscriptions !== undefined) db.settings.subscriptions = body.subscriptions;
       if (body.cloudDrive !== undefined) db.settings.cloudDrive = body.cloudDrive;
+      if (body.metaTube !== undefined) db.settings.metaTube = body.metaTube;
       if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();

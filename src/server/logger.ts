@@ -3,6 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { inspect } from 'node:util';
 import { config } from './config.js';
+import { pushLiveLog } from './live-logs.js';
 
 type ConsoleLevel = 'log' | 'info' | 'warn' | 'error' | 'debug';
 
@@ -26,9 +27,11 @@ function formatArg(value: unknown): string {
 
 function write(level: ConsoleLevel, args: unknown[]): void {
   if (!stream) return;
-  const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${args.map(formatArg).join(' ')}\n`;
+  const message = args.map(formatArg).join(' ');
+  const line = `[${new Date().toISOString()}] [${level.toUpperCase()}] ${message}\n`;
   try {
     stream.write(line);
+    pushLiveLog(level === 'log' ? 'info' : level, message);
   } catch {
     // Logging must never take the server down.
   }

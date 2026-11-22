@@ -11,6 +11,7 @@ import { TelegramBot } from './telegram-bot.js';
 import { closeBrowser } from './browser.js';
 import { handleCloudDriveWebhook } from './clouddrive.js';
 import { P115WebSocketManager } from './p115-websocket.js';
+import { pushLiveLog } from './live-logs.js';
 import { initLogging } from './logger.js';
 import { createStreamServer } from './stream.js';
 import { Store } from './store.js';
@@ -56,6 +57,19 @@ async function main(): Promise<void> {
     void handleCloudDriveWebhook(req, res, store, runner);
   });
 
+  app.use('/api', (req, res, next) => {
+    if (req.path === '/logs/stream' || req.path === '/health') {
+      next();
+      return;
+    }
+    const started = Date.now();
+    res.on('finish', () => {
+      if (req.method === 'GET' && res.statusCode < 400) return;
+      const action = `${req.method} ${req.originalUrl.split('?')[0]} → ${res.statusCode} (${Date.now() - started}ms)`;
+      pushLiveLog(res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info', action);
+    });
+    next();
+  });
   app.use('/api', auth.middleware);
   app.use('/api', createApiRouter({ store, auth, runner, scheduler }));
   app.use('/api', (_req, _res, next) => next(new HttpError(404, '接口不存在')));

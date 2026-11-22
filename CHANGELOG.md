@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.30.0] - 2026-11-22
+
+### Added
+
+- Live log page using SSE, with level filters and pause/clear.
+- MetaTube Server settings, connection test and AV number recognition test.
+
+### Not yet included
+
+- Automatic AV organization into the library; this change only adds recognition.
+
 ## [1.29.2] - 2026-11-21
 
 ### Added

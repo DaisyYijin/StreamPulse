@@ -222,6 +222,11 @@ export const embyServerSchema = z.object({
   refreshAfterRun: z.boolean().default(false),
 });
 
+const metaTubeSchema = z.object({
+  baseUrl: z.string().trim().max(2000).default(''),
+  token: z.string().trim().max(2000).default(''),
+});
+
 const cloudDriveSchema = z.object({
   webhookToken: z.string().trim().max(200).default(''),
 });
@@ -272,6 +277,16 @@ export const guanyingSearchSchema = z.object({
   keyword: z.string().trim().min(1).max(200),
 });
 
+export const metaTubeSettingsSchema = z.object({
+  baseUrl: z.string().trim().max(2000),
+  token: z.string().trim().max(2000),
+});
+
+export const metaTubeSearchSchema = z.object({
+  keyword: z.string().trim().min(1).max(200),
+  settings: metaTubeSettingsSchema.optional(),
+});
+
 export const seedhubSearchSchema = z.object({
   keyword: z.string().trim().min(1).max(200),
 });
@@ -300,6 +315,7 @@ export const settingsUpdateSchema = z.object({
   guanying: guanyingSchema.optional(),
   subscriptions: subscriptionSettingsSchema.optional(),
   cloudDrive: cloudDriveSchema.optional(),
+  metaTube: metaTubeSchema.optional(),
   notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),
