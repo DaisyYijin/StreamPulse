@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.36.0] - 2026-11-23
+
+### Changed
+
+- Rule explanations now open in a modal from each tab’s “填写说明” button.
+- Save validation errors are surfaced as a toast instead of failing silently.
+
 ## [1.35.0] - 2026-11-23
 
 ### Added

@@ -230,6 +230,91 @@ const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
   weighted: '权重洗版',
 };
 
+function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }) {
+  if (topic === 'rename') {
+    return (
+      <div className="rule-help">
+        <section>
+          <h3>模板语法</h3>
+          <ul>
+            <li><code>{'{变量名}'}</code> 取变量值；认不出的变量名会原样保留。</li>
+            <li><code>&lt;...{'{变量}'}...&gt;</code> 条件块：块内变量都有值才输出整块。</li>
+            <li><code>[[ ]]</code> 输出真正的花括号。</li>
+            <li><code>/</code> 在文件夹规则里分隔层级，可建多级目录。</li>
+            <li><code>{'{变量.replace(\'.\', \' \')}'}</code> 替换字符；<code>{'{变量.lower()}'}</code> / <code>{'{变量.upper()}'}</code> 转大小写。</li>
+            <li>自动清理连续和首尾的 <code>.</code> <code>/</code> <code>-</code>；年份为空时不会留下尾巴。</li>
+          </ul>
+        </section>
+        <section>
+          <h3>基本信息</h3>
+          <ul>
+            <li><code>{'{title}'}</code> TMDb 标题；<code>{'{en_title}'}</code> 英文标题</li>
+            <li><code>{'{year}'}</code> 年份；<code>{'{tmdb_id}'}</code> TMDb ID</li>
+            <li><code>{'{first_letter}'}</code> 拼音首字母（大写）；<code>{'{ext}'}</code> 扩展名（含点）</li>
+            <li><code>{'{original_name}'}</code> 原文件名；<code>{'{custom_regex_match}'}</code> 自定义正则（可空）</li>
+          </ul>
+        </section>
+        <section>
+          <h3>剧集专用</h3>
+          <ul>
+            <li><code>{'{season_episode}'}</code> SxxExx；<code>{'{season_num}'}</code> 季号；<code>{'{episode_num}'}</code> 集号</li>
+            <li><code>{'{season_name}'}</code> 季名；<code>{'{season_year}'}</code> 季年份；<code>{'{episode_name}'}</code> 集名；<code>{'{disc_num}'}</code> 盘号（可能为空）</li>
+          </ul>
+        </section>
+        <section>
+          <h3>资源信息</h3>
+          <ul>
+            <li><code>{'{resource_pix}'}</code> 分辨率；<code>{'{fps}'}</code> 帧率；<code>{'{resource_version}'}</code> 版本</li>
+            <li><code>{'{resource_source}'}</code> 来源；<code>{'{resource_type}'}</code> 质量；<code>{'{resource_effect}'}</code> 特效</li>
+            <li><code>{'{video_encode}'}</code> 视频编码；<code>{'{audio_encode}'}</code> 音频编码；<code>{'{resource_team}'}</code> 发布组</li>
+          </ul>
+        </section>
+        <section>
+          <h3>执行顺序</h3>
+          <p>创建目标文件夹 → 重命名文件 → 移动到媒体库 → 生成 STRM。模板没写扩展名时自动补原扩展名。</p>
+        </section>
+      </div>
+    );
+  }
+  if (topic === 'categories') {
+    return (
+      <div className="rule-help">
+        <section>
+          <h3>匹配规则</h3>
+          <ul>
+            <li>按列表从上到下匹配，命中第一个分类就停止。</li>
+            <li>同一分类里的类型、国家、语言、关键词是 AND。</li>
+            <li>一个字段内多个值是 OR，例如 <code>Action, Adventure</code>。</li>
+            <li>没有命中任何条件时进入“其他”兜底分类。</li>
+            <li>分类目录自动创建在媒体库根目录下，不需要 CID。</li>
+          </ul>
+        </section>
+      </div>
+    );
+  }
+  return (
+    <div className="rule-help">
+      <section>
+        <h3>洗版模式</h3>
+        <ul>
+          <li><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。</li>
+          <li><code>max_size</code> 保留更大版本；<code>min_size</code> 保留更小版本。</li>
+          <li><code>weighted</code> 按分辨率、片源、HDR、编码、体积打分。</li>
+        </ul>
+      </section>
+      <section>
+        <h3>保护条件</h3>
+        <ul>
+          <li>最小分差：候选至少高多少分才替换。</li>
+          <li>最低覆盖率：识别出的质量信息不足时倾向保留现有版本。</li>
+          <li>必须/排除：字幕、DV、片源等硬性条件。</li>
+          <li>高级 YAML 可以模拟比较，不会移动文件。</li>
+        </ul>
+      </section>
+    </div>
+  );
+}
+
 function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
   return <span className={`category-type ${type}`}>{type === 'movie' ? '电影' : '剧集'}</span>;
 }
@@ -403,7 +488,13 @@ export function OrganizePage() {
       toast.error('YAML 有错误，修正后才能保存');
       throw new Error('YAML 有错误');
     }
-    validatePaths();
+    try {
+      validatePaths();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '请先完成目录选择';
+      toast.error(message);
+      throw error;
+    }
     setSaving(true);
     try {
       const response = await api.patch<{ settings: Settings }>('/api/settings', { organizer: form });
@@ -527,49 +618,7 @@ export function OrganizePage() {
             <div><h2>重命名规则</h2><p>先按规则生成文件夹和文件名，再移动到媒体库；文件夹不存在会自动创建。</p></div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'rename' ? null : 'rename')}>填写说明</Button>
           </div>
-          {helpTopic === 'rename' ? (<div className="tab-help">
-            <div className="tab-help-title"><HelpCircle size={15} /> 重命名说明</div>
-            <div className="tab-help-grid">
-              <div>
-                <strong>文件夹模板</strong>
-                <p>决定媒体库里的目标文件夹。可以用 <code>/</code> 多级目录，例如剧集按季分目录。</p>
-              </div>
-              <div>
-                <strong>文件模板</strong>
-                <p>决定最终文件名；模板没写扩展名时自动补原文件扩展名。</p>
-              </div>
-              <div>
-                <strong>条件块</strong>
-                <p><code>&lt;.&#123;resource_pix&#125;&gt;</code> 只有在变量非空时才输出，适合可选画质/编码/小组。</p>
-              </div>
-              <div>
-                <strong>执行顺序</strong>
-                <p>创建目标文件夹 → 重命名文件 → 移动到媒体库 → 生成 STRM。</p>
-              </div>
-            </div>
-            <div className="tab-help-vars">
-              <span>可用变量</span>
-              {['{title}', '{year}', '{season}', '{episode}', '{quality}', '{category}', '{ext}', '{resource_pix}', '{resource_type}', '{resource_effect}', '{video_encode}', '{audio_encode}', '{resource_team}', '{first_letter}', '{fps}', '{resource_version}', '{en_title}', '{tmdb_id}', '{original_name}', '{season_episode}', '{season_num}', '{episode_num}', '{resource_source}'].map((item) => <code key={item}>{item}</code>)}
-            </div>
-            <div className="tab-help-syntax">
-              <strong>模板语法</strong>
-              <ul>
-                <li><code>{'{变量名}'}</code> 取变量值；认不出的变量名会原样保留。</li>
-                <li><code>&lt;...{'{变量}'}...&gt;</code> 条件块：块内变量都有值才输出整块。</li>
-                <li><code>[[ ]]</code> 输出真正的花括号。</li>
-                <li><code>/</code> 在文件夹规则里分隔层级，可建多级目录。</li>
-                <li><code>{"{变量.replace('.', ' ')}"}</code> 替换字符；<code>{'{变量.lower()}'}</code> / <code>{'{变量.upper()}'}</code> 转大小写。</li>
-                <li>输出会自动清理连续 <code>.</code> <code>/</code> <code>-</code> 和首尾分隔符，年份为空时不会留下尾巴。</li>
-              </ul>
-            </div>
-            <div className="tab-help-table">
-              <div><strong>基本信息</strong><span><code>{'{title}'}</code> TMDB 标题 / <code>{'{en_title}'}</code> 英文标题 / <code>{'{year}'}</code> 年份 / <code>{'{tmdb_id}'}</code> TMDB ID</span></div>
-              <div><strong>通用</strong><span><code>{'{first_letter}'}</code> 拼音首字母 / <code>{'{ext}'}</code> 扩展名 / <code>{'{original_name}'}</code> 原文件名 / <code>{'{custom_regex_match}'}</code> 自定义正则（可空）</span></div>
-              <div><strong>剧集</strong><span><code>{'{season_episode}'}</code> SxxExx / <code>{'{season_num}'}</code> 季号 / <code>{'{episode_num}'}</code> 集号 / <code>{'{season_name}'}</code> 季名 / <code>{'{season_year}'}</code> 季年份 / <code>{'{episode_name}'}</code> 集名 / <code>{'{disc_num}'}</code> 盘号</span></div>
-              <div><strong>资源信息</strong><span><code>{'{resource_pix}'}</code> 分辨率 / <code>{'{fps}'}</code> 帧率 / <code>{'{resource_version}'}</code> 版本 / <code>{'{resource_source}'}</code> 来源 / <code>{'{resource_type}'}</code> 质量 / <code>{'{resource_effect}'}</code> 特效 / <code>{'{video_encode}'}</code> 视频编码 / <code>{'{audio_encode}'}</code> 音频编码 / <code>{'{resource_team}'}</code> 发布组</span></div>
-            </div>
-          </div>) : null}
-          <div className="form-grid two-col">
+                    <div className="form-grid two-col">
             <RenameTemplateField label="电影文件夹" hint="支持 / 多级目录；点击输入框可选择变量" value={form.movieFolderTemplate} onChange={(value) => update('movieFolderTemplate', value)} sampleType="movie" />
             <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" />
             <RenameTemplateField label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" />
@@ -595,17 +644,7 @@ export function OrganizePage() {
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
           </div>
-          {helpTopic === 'categories' ? (<div className="tab-help">
-            <div className="tab-help-title"><HelpCircle size={15} /> 分类匹配说明</div>
-            <div className="tab-help-grid">
-              <div><strong>从上到下</strong><p>按列表顺序匹配，命中第一个分类就停止；最后应保留一个“其他”兜底。</p></div>
-              <div><strong>字段之间</strong><p>同一分类里的类型、国家、语言、关键词是 AND，需要同时满足。</p></div>
-              <div><strong>字段内部</strong><p>一个字段填多个值是 OR，例如类型填 <code>Action, Adventure</code>。</p></div>
-              <div><strong>目录</strong><p>分类目录会自动创建在媒体库根目录下，不需要填写云盘 CID。</p></div>
-            </div>
-            <p className="tab-help-note">例如“国产剧”可以设置：类型=剧集，国家=CN, TW, HK。没有命中任何条件时进入“其他”。</p>
-          </div>) : null}
-          {categoryMode === 'simple' ? (
+                    {categoryMode === 'simple' ? (
             <div className="simple-category-list">
               {form.categories.map((category, index) => (
                 <div className="simple-category-row" key={category.id}>
@@ -670,17 +709,7 @@ export function OrganizePage() {
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'upgrade' ? null : 'upgrade')}>填写说明</Button>
           </div>
-          {helpTopic === 'upgrade' ? (<div className="tab-help">
-            <div className="tab-help-title"><HelpCircle size={15} /> 洗版说明</div>
-            <div className="tab-help-grid">
-              <div><strong>关闭 / 更好 / 总是</strong><p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。</p></div>
-              <div><strong>按体积</strong><p><code>max_size</code> 保留更大版本，<code>min_size</code> 保留更小版本。</p></div>
-              <div><strong>权重洗版</strong><p>按分辨率、片源、HDR、编码、体积打分；分差达到阈值才替换。</p></div>
-              <div><strong>保护条件</strong><p>最低覆盖率避免信息不足误判；必须/排除条件用于字幕、DV、片源等硬性要求。</p></div>
-            </div>
-            <p className="tab-help-note">高级 YAML 右侧可以输入现有/候选文件名做模拟比较，结果不会移动任何文件。</p>
-          </div>) : null}
-          {washMode === 'simple' ? (
+                    {washMode === 'simple' ? (
             <div className="simple-wash">
               <div className="form-grid form-grid-2">
                 <Field label="洗版模式" hint="决定已有版本时如何处理">
@@ -794,6 +823,16 @@ export function OrganizePage() {
           setPickerField(null);
         }}
       />
+
+      <Modal
+        open={helpTopic !== null}
+        onClose={() => setHelpTopic(null)}
+        title={helpTopic === 'rename' ? '重命名规则说明' : helpTopic === 'categories' ? '二级分类说明' : '洗版策略说明'}
+        description="规则语法和可用变量"
+        footer={<Button variant="secondary" onClick={() => setHelpTopic(null)}>关闭</Button>}
+      >
+        {helpTopic ? <OrganizerHelp topic={helpTopic} /> : null}
+      </Modal>
 
       <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="整理规则说明" description="二级分类、洗版策略和目录规范。" footer={<Button variant="secondary" onClick={() => setHelpOpen(false)}>关闭</Button>}>
         <div className="rule-help">
