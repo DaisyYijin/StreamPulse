@@ -304,14 +304,48 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
     return (
       <div className="rule-help">
         <section>
+          <h3>StreamPulse 当前格式</h3>
+          <pre>{`categories:
+  - name: 电影/动画电影
+    mediaType: movie
+    genres: [Animation]
+  - name: 电影/华语电影
+    mediaType: movie
+    languages: [zh, cn]
+  - name: 电影/外语电影
+    mediaType: movie
+  - name: 剧集/动漫番剧
+    mediaType: tv
+    genres: [Animation]
+    countries: [JP]
+  - name: 剧集/国产剧
+    mediaType: tv
+    countries: [CN, HK, TW]`}</pre>
+          <p>Name 的最后一条不写条件就是兜底。分类名里的 <code>/</code> 会建多级目录；系统会先放在 <code>Movies</code> 或 <code>TV</code> 下。</p>
+        </section>
+        <section>
+          <h3>当前支持的字段</h3>
+          <ul>
+            <li><code>name</code>：分类目录名，可写 <code>电影/动画电影</code> 建多级。</li>
+            <li><code>mediaType</code>：<code>movie</code> 或 <code>tv</code>。</li>
+            <li><code>genres</code>：TMDb 类型名称，如 <code>Animation</code>、<code>Action</code>。</li>
+            <li><code>countries</code>：国家代码，如 <code>CN</code>、<code>JP</code>、<code>US</code>。</li>
+            <li><code>languages</code>：语言代码，如 <code>zh</code>、<code>ja</code>、<code>en</code>。</li>
+            <li><code>keywords</code>：标题/别名关键词，子串匹配。</li>
+          </ul>
+        </section>
+        <section>
           <h3>匹配规则</h3>
           <ul>
             <li>按列表从上到下匹配，命中第一个分类就停止。</li>
-            <li>同一分类里的类型、国家、语言、关键词是 AND。</li>
-            <li>一个字段内多个值是 OR，例如 <code>Action, Adventure</code>。</li>
-            <li>没有命中任何条件时进入“其他”兜底分类。</li>
-            <li>分类目录自动创建在媒体库根目录下，不需要 CID。</li>
+            <li>同一分类里的多个字段是“且”，字段内多个值是“或”。</li>
+            <li>没有命中任何分类时进入 <code>其他</code>，不是“未分类”。</li>
+            <li>分类目录自动创建，不需要 CID。</li>
           </ul>
+        </section>
+        <section>
+          <h3>CMS 字段差异</h3>
+          <p>CMS 的 <code>movie:</code>/<code>tv:</code>、<code>genre_ids</code>、<code>original_language</code>、<code>origin_country</code>、<code>release_year</code>、<code>series_*</code>、<code>custom_regex</code>、<code>library</code> 等语法目前不直接支持。请使用上面的 <code>mediaType</code>、<code>genres</code>、<code>languages</code>、<code>countries</code> 写法。</p>
         </section>
       </div>
     );

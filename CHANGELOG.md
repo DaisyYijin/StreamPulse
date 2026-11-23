@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.37.1] - 2026-11-23
+
+### Changed
+
+- Category help now documents StreamPulse’s actual `categories:` schema and
+  calls out CMS-only fields that are not yet supported.
+
 ## [1.37.0] - 2026-11-23
 
 ### Added
