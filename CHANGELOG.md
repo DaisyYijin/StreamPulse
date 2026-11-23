@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.36.2] - 2026-11-23
+
+### Removed
+
+- Removed the organizer “整理后路径预览” block; each template field still
+  shows its own live example.
+
 ## [1.36.1] - 2026-11-23
 
 ### Changed

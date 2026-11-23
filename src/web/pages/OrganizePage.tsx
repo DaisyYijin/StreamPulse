@@ -618,13 +618,6 @@ export function OrganizePage() {
             <RenameTemplateField label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" />
             <RenameTemplateField label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}" value={form.tvFileTemplate} onChange={(value) => update('tvFileTemplate', value)} sampleType="tv" />
           </div>
-          <div className="rename-preview">
-            <div className="yaml-preview-head">整理后路径预览</div>
-            <code>{form.libraryPath}/Movies/{'{分类}'}/{form.movieFolderTemplate}/{form.movieFileTemplate}</code>
-            <code>{form.libraryPath}/TV/{'{分类}'}/{form.tvFolderTemplate}/{form.tvFileTemplate}</code>
-            <p>变量：{'{title}'} {'{year}'} {'{season}'} {'{episode}'} {'{quality}'} {'{category}'} {'{ext}'}，以及 {'{resource_pix}'} {'{resource_type}'} {'{resource_effect}'} {'{video_encode}'} {'{audio_encode}'} {'{resource_team}'} {'{first_letter}'}。</p>
-            <p>执行顺序：创建目标目录 → 重命名文件 → 移动到媒体库 → 可选自动生成 STRM。</p>
-          </div>
         </div>
       ) : null}
 
