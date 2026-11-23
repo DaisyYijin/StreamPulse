@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.34.1] - 2026-11-23
+
+### Fixed
+
+- `{first_letter}` now uses the pinyin initial for Chinese titles
+  (`蜘蛛侠` → `Z`) instead of the first Han character.
+
 ## [1.34.0] - 2026-11-23
 
 ### Added

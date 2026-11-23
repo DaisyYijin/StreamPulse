@@ -40,6 +40,9 @@ and StreamPulse does not call OpenList for native 115/123 accounts.
 
 ## Other runtime dependencies
 
+- `pinyin-pro` — Chinese pinyin initial extraction for `{first_letter}`.
+
+
 - `sharp` — image processing for library covers.
 - `yaml` — YAML parsing for organizer rules.
 - `qrcode` — QR image generation for 115/123 login.

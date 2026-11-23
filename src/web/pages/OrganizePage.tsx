@@ -141,13 +141,13 @@ const TEMPLATE_SAMPLES = {
     title: '沙丘2', year: '2024', season: '01', episode: '01', quality: ' [2160p BluRay]',
     category: '科幻', ext: '.mkv', resource_pix: '2160p', resource_type: 'BluRay',
     resource_effect: 'DV', video_encode: 'HEVC', audio_encode: 'DTS',
-    resource_team: 'WiKi', first_letter: '沙', fps: '24', resource_version: 'v2',
+    resource_team: 'WiKi', first_letter: 'S', fps: '24', resource_version: 'v2',
   },
   tv: {
     title: '怪奇物语', year: '2025', season: '05', episode: '01', quality: ' [1080p WEB-DL]',
     category: '美剧', ext: '.mkv', resource_pix: '1080p', resource_type: 'WEB-DL',
     resource_effect: 'HDR', video_encode: 'HEVC', audio_encode: 'AAC',
-    resource_team: 'WiKi', first_letter: '怪', fps: '24', resource_version: 'v2',
+    resource_team: 'WiKi', first_letter: 'G', fps: '24', resource_version: 'v2',
   },
 };
 

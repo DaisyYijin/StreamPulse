@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { pinyin } from 'pinyin-pro';
 import type { OrganizeCategory, OrganizerSettings, WashConfig } from '../shared/types.js';
 import { normalizeSourcePath } from './core/paths.js';
 import type { StorageClient, StorageEntry } from './storage.js';
@@ -239,6 +240,15 @@ function templateSegments(template: string): string[] {
   return template.split('/').map((segment) => safeComponent(segment)).filter(Boolean);
 }
 
+export function firstLetterOf(value: string): string {
+  const first = Array.from((value || '').trim()).find((char) => /[A-Za-z0-9\u3400-\u9fff]/.test(char));
+  if (!first) return '#';
+  if (/[A-Za-z]/.test(first)) return first.toUpperCase();
+  if (/[0-9]/.test(first)) return '#';
+  const initial = pinyin(first, { pattern: 'first', toneType: 'none', type: 'array' })[0];
+  return initial ? initial.toUpperCase() : '#';
+}
+
 function qualityTokens(filename: string): Record<string, string> {
   const lower = filename.toLowerCase();
   const pix = lower.match(/(2160p|1080p|720p|480p|4k)/)?.[1] || '';
@@ -295,7 +305,7 @@ function targetFor(
     quality: quality ? ` [${quality}]` : '',
     ext: extension,
     category,
-    first_letter: (info.title || parsed.title || '?').trim().charAt(0).toUpperCase(),
+    first_letter: firstLetterOf(info.title || parsed.title || ''),
     ...qualityTokens(filename),
   };
   if (parsed.mediaType === 'tv') {
