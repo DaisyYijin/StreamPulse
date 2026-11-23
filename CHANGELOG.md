@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.34.0] - 2026-11-23
+
+### Added
+
+- Rename template inputs now show a variable picker on focus, with example
+  values on the right and a live rendered example below each field.
+
 ## [1.33.0] - 2026-11-23
 
 ### Added

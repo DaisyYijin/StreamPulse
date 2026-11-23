@@ -14,7 +14,7 @@ RUN npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim AS runtime
-ARG STREAMPULSE_VERSION=1.33.0
+ARG STREAMPULSE_VERSION=1.34.0
 
 LABEL org.opencontainers.image.title="StreamPulse" \
       org.opencontainers.image.description="StreamPulse: 115 / 123 / OpenList STRM libraries for Emby and Jellyfin." \

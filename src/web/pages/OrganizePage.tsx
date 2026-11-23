@@ -1,5 +1,5 @@
 import { ArrowRight, FileCode2, FolderInput, FolderOpen, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
@@ -115,6 +115,107 @@ function fromWashYaml(text: string): WashConfig {
     must: strings(document?.must),
     exclude: strings(document?.exclude),
   };
+}
+
+const TEMPLATE_VARIABLES: Array<{ name: string; label: string }> = [
+  { name: 'title', label: '标题' },
+  { name: 'year', label: '年份' },
+  { name: 'season', label: '季' },
+  { name: 'episode', label: '集' },
+  { name: 'quality', label: '画质' },
+  { name: 'category', label: '分类' },
+  { name: 'ext', label: '扩展名' },
+  { name: 'resource_pix', label: '分辨率' },
+  { name: 'resource_type', label: '片源' },
+  { name: 'resource_effect', label: 'HDR' },
+  { name: 'video_encode', label: '视频编码' },
+  { name: 'audio_encode', label: '音频编码' },
+  { name: 'resource_team', label: '制作组' },
+  { name: 'first_letter', label: '首字母' },
+  { name: 'fps', label: '帧率' },
+  { name: 'resource_version', label: '版本' },
+];
+
+const TEMPLATE_SAMPLES = {
+  movie: {
+    title: '沙丘2', year: '2024', season: '01', episode: '01', quality: ' [2160p BluRay]',
+    category: '科幻', ext: '.mkv', resource_pix: '2160p', resource_type: 'BluRay',
+    resource_effect: 'DV', video_encode: 'HEVC', audio_encode: 'DTS',
+    resource_team: 'WiKi', first_letter: '沙', fps: '24', resource_version: 'v2',
+  },
+  tv: {
+    title: '怪奇物语', year: '2025', season: '05', episode: '01', quality: ' [1080p WEB-DL]',
+    category: '美剧', ext: '.mkv', resource_pix: '1080p', resource_type: 'WEB-DL',
+    resource_effect: 'HDR', video_encode: 'HEVC', audio_encode: 'AAC',
+    resource_team: 'WiKi', first_letter: '怪', fps: '24', resource_version: 'v2',
+  },
+};
+
+function templatePreview(template: string, samples: Record<string, string>): string {
+  if (!template.trim()) return '未填写';
+  const rendered = template.replace(/<([^<>]+)>/g, (_match, inner: string) => {
+    const keys = Array.from(inner.matchAll(/\{([a-z_]+)\}/gi)).map((match) => match[1].toLowerCase());
+    return keys.every((key) => Boolean(samples[key])) ? inner : '';
+  }).replace(/\{([a-z_]+)\}/gi, (_match, key: string) => samples[key.toLowerCase()] ?? '');
+  return rendered || '未填写';
+}
+
+function RenameTemplateField({
+  label, hint, value, onChange, sampleType,
+}: {
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (value: string) => void;
+  sampleType: 'movie' | 'tv';
+}) {
+  const [open, setOpen] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const samples = TEMPLATE_SAMPLES[sampleType];
+
+  const insert = (name: string) => {
+    const input = inputRef.current;
+    const start = input?.selectionStart ?? value.length;
+    const end = input?.selectionEnd ?? value.length;
+    const token = `{${name}}`;
+    const next = `${value.slice(0, start)}${token}${value.slice(end)}`;
+    onChange(next);
+    requestAnimationFrame(() => {
+      input?.focus();
+      const position = start + token.length;
+      input?.setSelectionRange(position, position);
+    });
+  };
+
+  return (
+    <Field label={label} hint={hint}>
+      <div className="template-field">
+        <input
+          ref={inputRef}
+          className="input mono-input"
+          value={value}
+          onFocus={() => setOpen(true)}
+          onBlur={() => window.setTimeout(() => setOpen(false), 160)}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder="点击选择变量，或手动输入"
+        />
+        {open ? (
+          <div className="template-variable-popover">
+            <div className="template-variable-head"><span>变量</span><span>示例值</span></div>
+            <div className="template-variable-list">
+              {TEMPLATE_VARIABLES.map((variable) => (
+                <button key={variable.name} type="button" onMouseDown={(event) => { event.preventDefault(); insert(variable.name); }}>
+                  <code>{`{${variable.name}}`}</code>
+                  <span>{samples[variable.name as keyof typeof samples]}<i>{variable.label}</i></span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="template-example">示例：<code>{templatePreview(value, samples)}</code></div>
+    </Field>
+  );
 }
 
 const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
@@ -429,10 +530,10 @@ export function OrganizePage() {
             </div>
           </div>
           <div className="form-grid two-col">
-            <Field label="电影文件夹" hint="支持 / 多级目录；例如 {title} ({year})"><Input value={form.movieFolderTemplate} onChange={(event) => update('movieFolderTemplate', event.target.value)} className="mono-input" /></Field>
-            <Field label="电影文件" hint="不带扩展名时自动补原扩展名"><Input value={form.movieFileTemplate} onChange={(event) => update('movieFileTemplate', event.target.value)} className="mono-input" /></Field>
-            <Field label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}"><Input value={form.tvFolderTemplate} onChange={(event) => update('tvFolderTemplate', event.target.value)} className="mono-input" /></Field>
-            <Field label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}"><Input value={form.tvFileTemplate} onChange={(event) => update('tvFileTemplate', event.target.value)} className="mono-input" /></Field>
+            <RenameTemplateField label="电影文件夹" hint="支持 / 多级目录；点击输入框可选择变量" value={form.movieFolderTemplate} onChange={(value) => update('movieFolderTemplate', value)} sampleType="movie" />
+            <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" />
+            <RenameTemplateField label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" />
+            <RenameTemplateField label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}" value={form.tvFileTemplate} onChange={(value) => update('tvFileTemplate', value)} sampleType="tv" />
           </div>
           <div className="rename-preview">
             <div className="yaml-preview-head">整理后路径预览</div>
