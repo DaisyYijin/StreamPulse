@@ -45,6 +45,78 @@ const EMPTY: OrganizerSettings = {
   cmsCategories: DEFAULT_CMS_CATEGORIES,
 };
 
+const GENRE_NAME_TO_ID: Record<string, number> = {
+  Action: 28, Adventure: 12, Animation: 16, Comedy: 35, Crime: 80,
+  Documentary: 99, Drama: 18, Family: 10751, Fantasy: 14, History: 36,
+  Horror: 27, Music: 10402, Mystery: 9648, Romance: 10749,
+  'Science Fiction': 878, 'TV Movie': 10770, Thriller: 53, War: 10752, Western: 37,
+  'Action & Adventure': 10759, Kids: 10762, News: 10763, Reality: 10764,
+  'Sci-Fi & Fantasy': 10765, Soap: 10766, Talk: 10767, 'War & Politics': 10768,
+};
+const GENRE_ID_TO_NAME: Record<number, string> = Object.fromEntries(
+  Object.entries(GENRE_NAME_TO_ID).map(([name, id]) => [id, name]),
+);
+
+function splitList(value: unknown): string[] {
+  return String(value ?? '').split(/[,;；\n]/).map((item) => item.trim()).filter(Boolean);
+}
+
+function simpleCategoriesToCms(categories: OrganizeCategory[]): string {
+  const build = (mediaType: 'movie' | 'tv') => {
+    const block: Record<string, Record<string, string>> = {};
+    for (const category of categories.filter((item) => item.mediaType === mediaType)) {
+      const conditions: Record<string, string> = {};
+      const genreIds = category.genres.map((name) => GENRE_NAME_TO_ID[name]).filter((id): id is number => Boolean(id));
+      if (genreIds.length) conditions.genre_ids = genreIds.join(',');
+      if (category.languages.length) conditions.original_language = category.languages.join(',');
+      if (category.countries.length) conditions.origin_country = category.countries.join(',');
+      if (category.keywords.length) conditions.keywords = category.keywords.join(',');
+      block[category.name] = conditions;
+    }
+    return block;
+  };
+  return stringifyYaml({ movie: build('movie'), tv: build('tv') }, { lineWidth: 0 });
+}
+
+function cmsToSimpleCategories(yamlText: string): { categories: OrganizeCategory[]; skipped: string[] } {
+  const document = parseYaml(yamlText) as { movie?: unknown; tv?: unknown } | null;
+  const categories: OrganizeCategory[] = [];
+  const skipped: string[] = [];
+  if (!document || typeof document !== 'object') return { categories, skipped };
+  for (const mediaType of ['movie', 'tv'] as const) {
+    const block = document[mediaType];
+    if (!block || typeof block !== 'object' || Array.isArray(block)) continue;
+    for (const [name, raw] of Object.entries(block as Record<string, unknown>)) {
+      const conditions = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+      const unsupported = Object.keys(conditions).some((key) => !['genre_ids', 'original_language', 'origin_country', 'keywords'].includes(key) || /^[?+\-]/.test(key));
+      if (unsupported) { skipped.push(name); continue; }
+      const genres: string[] = [];
+      for (const value of splitList(conditions.genre_ids)) {
+        const id = Number(value);
+        if (GENRE_ID_TO_NAME[id]) genres.push(GENRE_ID_TO_NAME[id]);
+        else skipped.push(`${name} (类型 ${value})`);
+      }
+      const countries = splitList(conditions.origin_country);
+      const languages = splitList(conditions.original_language);
+      const keywords = splitList(conditions.keywords);
+      if (countries.some((value) => value.startsWith('!')) || languages.some((value) => value.startsWith('!'))) {
+        skipped.push(name);
+        continue;
+      }
+      categories.push({
+        id: `cms_${mediaType}_${categories.length}`,
+        name,
+        mediaType,
+        genres,
+        countries,
+        languages,
+        keywords,
+      });
+    }
+  }
+  return { categories, skipped };
+}
+
 const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile', Array<{ label: string; value: string }>> = {
   movieFolder: [
     { label: '精简', value: '{title}' },
@@ -401,7 +473,10 @@ export function OrganizePage() {
         categories: data.settings.organizer?.categories?.length ? data.settings.organizer.categories : DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       };
       setForm(organizer);
-      setCmsYaml(organizer.cmsCategories ?? '');
+      const initialCms = organizer.cmsCategories || simpleCategoriesToCms(organizer.categories);
+      organizer.cmsCategories = initialCms;
+      setForm(organizer);
+      setCmsYaml(initialCms);
       setCategoryMode(organizer.categoryFormat === 'cms' ? 'yaml' : 'simple');
       setWashYaml(toWashYaml(organizer.washing ?? EMPTY.washing));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
@@ -413,15 +488,30 @@ export function OrganizePage() {
     setForm((previous) => ({ ...previous, [key]: value }));
   };
 
+  const applySimpleCategories = (categories: OrganizeCategory[]) => {
+    const cms = simpleCategoriesToCms(categories);
+    setCmsYaml(cms);
+    setForm((previous) => ({ ...previous, categories, cmsCategories: cms, categoryFormat: 'simple' }));
+  };
+
+  const applyCmsYaml = (text: string) => {
+    setCmsYaml(text);
+    try {
+      const { categories, skipped } = cmsToSimpleCategories(text);
+      setForm((previous) => ({ ...previous, cmsCategories: text, ...(categories.length ? { categories } : {}) }));
+      if (skipped.length) toast.info(`YAML 已保存；${skipped.length} 条复杂规则无法同步到简单模式`);
+    } catch {
+      setForm((previous) => ({ ...previous, cmsCategories: text }));
+    }
+  };
+
   const updateCategory = (index: number, patch: Partial<OrganizeCategory>) => {
-    setForm((previous) => ({
-      ...previous,
-      categories: previous.categories.map((category, current) => current === index ? { ...category, ...patch } : category),
-    }));
+    const categories = form.categories.map((category, current) => current === index ? { ...category, ...patch } : category);
+    applySimpleCategories(categories);
   };
 
   const resetCategories = () => {
-    setForm((previous) => ({ ...previous, categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })) }));
+    applySimpleCategories(DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })));
     toast.success('已恢复默认简单分类');
   };
 
@@ -433,7 +523,7 @@ export function OrganizePage() {
 
   const addCategory = () => {
     const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: '新分类', mediaType: 'movie' as const, genres: [], countries: [], languages: [], keywords: [] }];
-    setForm((previous) => ({ ...previous, categories }));
+    applySimpleCategories(categories);
   };
 
   const removeCategory = (index: number) => {
@@ -442,7 +532,7 @@ export function OrganizePage() {
       return;
     }
     const categories = form.categories.filter((_, current) => current !== index);
-    setForm((previous) => ({ ...previous, categories }));
+    applySimpleCategories(categories);
   };
 
   const updateWash = (patch: Partial<WashConfig>) => {
@@ -643,7 +733,7 @@ export function OrganizePage() {
           <div className="panel-head">
             <div><h2>二级分类</h2><p>按类型、国家、语言、关键词匹配；不匹配进入“其他”。</p></div>
             <div className="editor-switch">
-              <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => { setCategoryMode('simple'); update('categoryFormat', 'simple'); }}>简单模式</button>
+              <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => { setCategoryMode('simple'); const converted = cmsToSimpleCategories(cmsYaml); if (converted.categories.length) update('categories', converted.categories); update('categoryFormat', 'simple'); }}>简单模式</button>
               <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); update('categoryFormat', 'cms'); }}>YAML 模式</button>
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
@@ -653,10 +743,7 @@ export function OrganizePage() {
               <textarea
                 className="yaml-editor"
                 value={cmsYaml}
-                onChange={(event) => {
-                  setCmsYaml(event.target.value);
-                  update('cmsCategories', event.target.value);
-                }}
+                onChange={(event) => applyCmsYaml(event.target.value)}
                 spellCheck={false}
                 placeholder={'movie:\n  电影/动画电影:\n    genre_ids: "16"\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"'}
               />

@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.41.0] - 2026-11-23
+
+### Added
+
+- Two-way category synchronization: YAML changes regenerate simple
+  categories, and simple-category edits regenerate CMS YAML. Complex YAML
+  rules that cannot be represented in the simple form are reported.
+
 ## [1.40.0] - 2026-11-23
 
 ### Changed
