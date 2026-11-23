@@ -14,6 +14,7 @@ import { clientForSource } from '../client.js';
 import { generateLibraryCover } from '../covers.js';
 import { createEmbyLibrary, listEmbyLibraries, testEmby } from '../emby.js';
 import { searchHdhive, testHdhive } from '../hdhive.js';
+import { parseCmsCategories } from '../cms-categories.js';
 import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
@@ -1094,6 +1095,13 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
         await fs.unlink(probe);
       } catch (error) {
         throw new HttpError(400, `输出目录不可写：${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    if (body.organizer?.categoryFormat === 'cms') {
+      try {
+        parseCmsCategories(body.organizer.cmsCategories);
+      } catch (error) {
+        throw new HttpError(400, error instanceof Error ? error.message : 'CMS 分类 YAML 无效');
       }
     }
     await store.mutate((db) => {

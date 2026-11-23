@@ -1,7 +1,7 @@
 import { ArrowRight, FileCode2, FolderInput, FolderOpen, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
+import { DEFAULT_CMS_CATEGORIES, DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 import { DirectoryPicker } from '../components/DirectoryPicker';
@@ -41,6 +41,8 @@ const EMPTY: OrganizerSettings = {
   tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
   washing: { mode: 'better', minGap: 0, minCoverage: 0.35, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
+  categoryFormat: 'cms',
+  cmsCategories: DEFAULT_CMS_CATEGORIES,
 };
 
 const RENAME_PRESETS = {
@@ -304,7 +306,7 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
     return (
       <div className="rule-help">
         <section>
-          <h3>StreamPulse 当前格式</h3>
+          <h3>CMS 语法（默认）</h3>
           <pre>{`categories:
   - name: 电影/动画电影
     mediaType: movie
@@ -321,17 +323,16 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
   - name: 剧集/国产剧
     mediaType: tv
     countries: [CN, HK, TW]`}</pre>
-          <p>Name 的最后一条不写条件就是兜底。分类名里的 <code>/</code> 会建多级目录；系统会先放在 <code>Movies</code> 或 <code>TV</code> 下。</p>
+          <p>分类名写什么就落到媒体库根下的什么位置，不再自动加 <code>Movies</code>/<code>TV</code> 前缀。最后一条不写条件就是兜底。</p>
         </section>
         <section>
           <h3>当前支持的字段</h3>
           <ul>
-            <li><code>name</code>：分类目录名，可写 <code>电影/动画电影</code> 建多级。</li>
-            <li><code>mediaType</code>：<code>movie</code> 或 <code>tv</code>。</li>
-            <li><code>genres</code>：TMDb 类型名称，如 <code>Animation</code>、<code>Action</code>。</li>
-            <li><code>countries</code>：国家代码，如 <code>CN</code>、<code>JP</code>、<code>US</code>。</li>
-            <li><code>languages</code>：语言代码，如 <code>zh</code>、<code>ja</code>、<code>en</code>。</li>
-            <li><code>keywords</code>：标题/别名关键词，子串匹配。</li>
+            <li><code>movie</code> / <code>tv</code>：顶层必须二选一。</li>
+            <li>分类名：目录名，可用 <code>/</code> 建多级；没有条件的规则是兜底。</li>
+            <li><code>genre_ids</code> / <code>original_language</code> / <code>origin_country</code> / <code>production_countries</code> / <code>release_year</code>。</li>
+            <li><code>keywords</code> / <code>include_keywords</code> / <code>series_keywords</code> / <code>series_actors</code> / <code>series_directors</code>。</li>
+            <li><code>custom_regex</code>；<code>?</code> 可选、<code>+</code> 必须、<code>-</code>/<code>!</code> 排除。</li>
           </ul>
         </section>
         <section>
@@ -339,13 +340,13 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
           <ul>
             <li>按列表从上到下匹配，命中第一个分类就停止。</li>
             <li>同一分类里的多个字段是“且”，字段内多个值是“或”。</li>
-            <li>没有命中任何分类时进入 <code>其他</code>，不是“未分类”。</li>
+            <li>没有命中任何分类时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</li>
             <li>分类目录自动创建，不需要 CID。</li>
           </ul>
         </section>
         <section>
-          <h3>CMS 字段差异</h3>
-          <p>CMS 的 <code>movie:</code>/<code>tv:</code>、<code>genre_ids</code>、<code>original_language</code>、<code>origin_country</code>、<code>release_year</code>、<code>series_*</code>、<code>custom_regex</code>、<code>library</code> 等语法目前不直接支持。请使用上面的 <code>mediaType</code>、<code>genres</code>、<code>languages</code>、<code>countries</code> 写法。</p>
+          <h3>简单分类模式</h3>
+          <p>切换“简单分类”仍可用表单逐个填写分类；CMS 模式则直接解析上面的 YAML。</p>
         </section>
       </div>
     );
@@ -387,6 +388,7 @@ export function OrganizePage() {
     }
   });
   const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
+  const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | 'libraryPath' | null>(null);
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
@@ -427,6 +429,7 @@ export function OrganizePage() {
       };
       setForm(organizer);
       setCategoryYaml(toCategoryYaml(organizer.categories));
+      setCmsYaml(organizer.cmsCategories ?? '');
       setWashYaml(toWashYaml(organizer.washing ?? EMPTY.washing));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
@@ -706,13 +709,40 @@ export function OrganizePage() {
         <div className="panel">
           <div className="panel-head">
             <div><h2>二级分类</h2><p>按类型、国家、语言、关键词匹配；不匹配进入“其他”。</p></div>
-            <div className="editor-switch">
-              <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => setCategoryMode('simple')}>简单表单</button>
-              <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); setCategoryYaml(toCategoryYaml(form.categories)); }}>高级 YAML</button>
+            <div className="category-format-switch">
+              <div className="editor-switch">
+                <button type="button" className={form.categoryFormat === 'simple' ? 'active' : ''} onClick={() => update('categoryFormat', 'simple')}>简单分类</button>
+                <button type="button" className={form.categoryFormat === 'cms' ? 'active' : ''} onClick={() => update('categoryFormat', 'cms')}>CMS 语法</button>
+              </div>
+              {form.categoryFormat === 'simple' ? (
+                <div className="editor-switch">
+                  <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => setCategoryMode('simple')}>表单</button>
+                  <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); setCategoryYaml(toCategoryYaml(form.categories)); }}>YAML</button>
+                </div>
+              ) : null}
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
           </div>
-                    {categoryMode === 'simple' ? (
+                    {form.categoryFormat === 'cms' ? (
+            <div className="cms-category-editor">
+              <textarea
+                className="yaml-editor"
+                value={cmsYaml}
+                onChange={(event) => {
+                  setCmsYaml(event.target.value);
+                  update('cmsCategories', event.target.value);
+                }}
+                spellCheck={false}
+                placeholder={'movie:\n  电影/动画电影:\n    genre_ids: "16"\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"'}
+              />
+              <div className="cms-category-preview">
+                <strong>CMS 格式说明</strong>
+                <p>顶层写 <code>movie</code> / <code>tv</code>，下一层是分类目录名，再下一层是条件。分类名写什么就落到媒体库根下的什么位置，不再自动加 Movies/TV 前缀。</p>
+                <p>支持 <code>genre_ids</code>、<code>original_language</code>、<code>origin_country</code>、<code>production_countries</code>、<code>release_year</code>、<code>keywords</code>、<code>include_keywords</code>、<code>series_*</code>、<code>custom_regex</code>、可选 <code>?</code> 和排除 <code>-</code>/<code>!</code> 条件。</p>
+                <p>不写条件的分类作为兜底；没有命中时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</p>
+              </div>
+            </div>
+          ) : categoryMode === 'simple' ? (
             <div className="simple-category-list">
               {form.categories.map((category, index) => (
                 <div className="simple-category-row" key={category.id}>

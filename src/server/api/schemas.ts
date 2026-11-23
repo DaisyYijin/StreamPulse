@@ -211,6 +211,8 @@ const organizerSchema = z.object({
   tvFileTemplate: z.string().trim().min(1).max(500),
   washing: washSchema,
   categories: z.array(organizeCategorySchema).max(100),
+  categoryFormat: z.enum(['simple', 'cms']).default('simple'),
+  cmsCategories: z.string().max(200_000).default(''),
 });
 
 export const embyServerSchema = z.object({

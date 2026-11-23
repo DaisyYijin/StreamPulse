@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, type Settings, type WashConfig } from '../shared/types.js';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, DEFAULT_CMS_CATEGORIES, type Settings, type WashConfig } from '../shared/types.js';
 import { config } from './config.js';
 import {
   makeStreamKey,
@@ -68,6 +68,8 @@ function createDefaultDatabase(): Database {
           exclude: [],
         },
         categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
+        categoryFormat: 'cms',
+        cmsCategories: DEFAULT_CMS_CATEGORIES,
       },
       embyServers: [],
       guanying: {
@@ -221,6 +223,8 @@ function normalizeDatabase(raw: unknown): Database {
         ...(input.settings?.organizer ?? {}),
         washing: normalizeWashing(input.settings?.organizer?.washing, base.settings.organizer.washing),
         categories: normalizeCategories(input.settings?.organizer?.categories, base.settings.organizer.categories),
+        categoryFormat: input.settings?.organizer?.categoryFormat === 'simple' ? 'simple' : 'cms',
+        cmsCategories: typeof input.settings?.organizer?.cmsCategories === 'string' ? input.settings.organizer.cmsCategories : DEFAULT_CMS_CATEGORIES,
       },
     },
     createdAt: input.createdAt || base.createdAt,
@@ -399,6 +403,8 @@ export class Store {
           ...(settings.settings?.organizer ?? {}),
           washing: normalizeWashing(settings.settings?.organizer?.washing, base.settings.organizer.washing),
           categories: normalizeCategories(settings.settings?.organizer?.categories, base.settings.organizer.categories),
+          categoryFormat: settings.settings?.organizer?.categoryFormat === 'simple' ? 'simple' : 'cms',
+          cmsCategories: typeof settings.settings?.organizer?.cmsCategories === 'string' ? settings.settings.organizer.cmsCategories : DEFAULT_CMS_CATEGORIES,
         },
       },
       createdAt: settings.createdAt || base.createdAt,

@@ -20,8 +20,13 @@ export interface TmdbInfo {
   originalTitle?: string;
   year: string;
   genres: string[];
+  genreIds: number[];
   countries: string[];
+  productionCountries: string[];
   languages: string[];
+  keywords: string[];
+  cast: string[];
+  directors: string[];
   overview: string;
 }
 
@@ -110,8 +115,11 @@ export async function searchTmdb(options: {
 }
 
 async function details(mediaType: 'movie' | 'tv', id: number, apiKey: string, language: string): Promise<TmdbInfo> {
-  const payload = await request(`/${mediaType}/${id}`, { language }, apiKey);
+  const payload = await request(`/${mediaType}/${id}`, { language, append_to_response: 'keywords,credits' }, apiKey);
   const genres = (payload.genres ?? []).map((genre: { name: string }) => genre.name);
+  const keywordContainer = payload.keywords?.keywords ?? payload.keywords?.results ?? [];
+  const cast = (payload.credits?.cast ?? []).slice(0, 6).map((person: { name: string }) => person.name).filter(Boolean);
+  const directors = (payload.credits?.crew ?? []).filter((person: { job?: string }) => person.job === 'Director').slice(0, 6).map((person: { name: string }) => person.name).filter(Boolean);
   return {
     id,
     mediaType,
@@ -119,7 +127,12 @@ async function details(mediaType: 'movie' | 'tv', id: number, apiKey: string, la
     originalTitle: payload.original_title || payload.original_name || '',
     year: String(payload.release_date || payload.first_air_date || '').slice(0, 4),
     genres: genres.length ? genres : (payload.genre_ids ?? []).map((genre: number) => (mediaType === 'movie' ? MOVIE_GENRES : TV_GENRES)[genre]).filter(Boolean),
+    genreIds: (payload.genres ?? []).map((genre: { id: number }) => genre.id).filter(Boolean),
     countries: payload.origin_country ?? payload.production_countries?.map((item: { iso_3166_1: string }) => item.iso_3166_1) ?? [],
+    productionCountries: (payload.production_countries ?? []).map((item: { iso_3166_1: string }) => item.iso_3166_1),
+    keywords: keywordContainer.map((item: { name: string }) => item.name).filter(Boolean),
+    cast,
+    directors,
     languages: [payload.original_language].filter(Boolean),
     overview: payload.overview || '',
   };

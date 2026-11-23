@@ -2,6 +2,19 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.38.0] - 2026-11-23
+
+### Added
+
+- CMS-style category YAML: top-level `movie:` / `tv:`, category names as
+  directory paths, and no automatic Movies/TV prefix in CMS mode.
+- TMDb enrichment for genre IDs, production countries, keywords, cast and
+  directors.
+- CMS conditions: genre_ids, language/country, release_year ranges, keywords,
+  include_keywords, series rules, custom_regex, optional `?`, required `+`,
+  exclusion `-`/`!`, and fallback rules.
+- CMS YAML validation on save and category help modal updated.
+
 ## [1.37.1] - 2026-11-23
 
 ### Changed

@@ -4,6 +4,7 @@ import type { OrganizeCategory, OrganizerSettings, WashConfig } from '../shared/
 import { normalizeSourcePath } from './core/paths.js';
 import type { StorageClient, StorageEntry } from './storage.js';
 import { searchTmdb, TmdbError, type TmdbInfo } from './tmdb.js';
+import { matchCmsCategory, parseCmsCategories, type CmsCategoryConfig } from './cms-categories.js';
 import { makeId } from './types.js';
 
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.ts', '.m2ts', '.flv', '.webm', '.rmvb']);
@@ -319,6 +320,7 @@ function targetFor(
   extension: string,
   quality: string,
   filename: string,
+  cmsMode = false,
 ): { dir: string; name: string } {
   const title = info.title || parsed.title;
   const year = info.year || parsed.year;
@@ -351,14 +353,14 @@ function targetFor(
     const folder = templateSegments(renderTemplate(settings.tvFolderTemplate, variables));
     const name = renderTemplate(settings.tvFileTemplate, variables);
     return {
-      dir: cloudJoin(settings.libraryPath, 'TV', category, ...folder),
+      dir: cmsMode ? cloudJoin(settings.libraryPath, category, ...folder) : cloudJoin(settings.libraryPath, 'TV', category, ...folder),
       name: name.toLowerCase().endsWith(extension.toLowerCase()) ? name : `${name}${extension}`,
     };
   }
   const folder = templateSegments(renderTemplate(settings.movieFolderTemplate, variables));
   const name = renderTemplate(settings.movieFileTemplate, variables);
   return {
-    dir: cloudJoin(settings.libraryPath, 'Movies', category, ...folder),
+    dir: cmsMode ? cloudJoin(settings.libraryPath, category, ...folder) : cloudJoin(settings.libraryPath, 'Movies', category, ...folder),
     name: name.toLowerCase().endsWith(extension.toLowerCase()) ? name : `${name}${extension}`,
   };
 }
@@ -388,6 +390,7 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
   if (sourcePath === libraryPath) throw new Error('待整理目录不能与媒体库目录相同');
   const files = await scanCloud(client, sourcePath);
   const items: OrganizeItem[] = [];
+  const cmsConfig: CmsCategoryConfig | null = settings.categoryFormat === 'cms' ? parseCmsCategories(settings.cmsCategories) : null;
   const cache = new Map<string, TmdbInfo | null>();
 
   for (const { path: filePath, entry } of files) {
@@ -420,8 +423,9 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
         cache.set(key, info);
       }
       if (!info) throw new Error('TMDb 未找到匹配条目');
-      const category = categoryFor(info, settings.categories, entry.name);
-      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase(), qualityOf(entry.name), entry.name);
+      const cmsMatch = cmsConfig ? matchCmsCategory(cmsConfig, info, path.extname(entry.name).toLowerCase(), entry.name) : null;
+      const category = cmsMatch?.name ?? (cmsConfig ? (parsed.mediaType === 'tv' ? '剧集/未分类' : '电影/未分类') : categoryFor(info, settings.categories, entry.name));
+      const target = targetFor(settings, info, parsed, category, path.extname(entry.name).toLowerCase(), qualityOf(entry.name), entry.name, Boolean(cmsConfig));
       const existing = await existingFor(client, target.dir, parsed.mediaType, parsed.season, parsed.episode);
       const best = existing.sort((a, b) => {
         const left = qualityScore(a.name), right = qualityScore(b.name);

@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.37.1';
+export const APP_VERSION = '1.38.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -198,12 +198,28 @@ export interface OrganizerSettings {
   tvFileTemplate: string;
   washing: WashConfig;
   categories: OrganizeCategory[];
+  categoryFormat: 'simple' | 'cms';
+  cmsCategories: string;
 }
 
 export const DEFAULT_MOVIE_FOLDER_TEMPLATE = '{title} ({year})';
 export const DEFAULT_MOVIE_FILE_TEMPLATE = '{title} ({year}){quality}';
 export const DEFAULT_TV_FOLDER_TEMPLATE = '{title} ({year})/Season {season}';
 export const DEFAULT_TV_FILE_TEMPLATE = '{title} - S{season}E{episode}{quality}';
+
+export const DEFAULT_CMS_CATEGORIES = `movie:
+  电影/动画电影:
+    genre_ids: "16"
+  电影/华语电影:
+    original_language: "zh,cn"
+  电影/外语电影:
+tv:
+  剧集/动漫番剧:
+    genre_ids: "16"
+  剧集/国产剧:
+    origin_country: "CN,HK,TW"
+  剧集/剧集:
+`;
 
 export const DEFAULT_ORGANIZE_CATEGORIES: OrganizeCategory[] = [
   { id: 'default_action', name: '动作', mediaType: 'movie', genres: ['Action', 'Adventure'], countries: [], languages: [], keywords: [] },

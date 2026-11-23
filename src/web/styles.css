@@ -6837,3 +6837,46 @@ html[data-theme='light'] .template-variable-popover {
   font-size: 8.5px;
   font-style: normal;
 }
+
+.category-format-switch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cms-category-editor {
+  display: grid;
+  gap: 10px;
+}
+
+.cms-category-preview {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.cms-category-preview strong {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.cms-category-preview p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.6;
+}
+
+.cms-category-preview code {
+  color: var(--lime);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+html[data-theme='light'] .cms-category-preview {
+  background: #f7faf4;
+}

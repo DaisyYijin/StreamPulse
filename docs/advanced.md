@@ -188,3 +188,22 @@ Token（可选）
 
 
 整理目录默认留空，必须用“选择”按钮选择待整理、失败、冗余和媒体库根目录。TMDb 配置在设置页。整理成功后会自动同步同来源、同一媒体库根目录的媒体库，无法关闭。
+
+
+## CMS 分类格式
+
+默认使用 CMS 语法：
+
+```yaml
+movie:
+  电影/动画电影:
+    genre_ids: "16"
+  电影/外语电影:
+tv:
+  剧集/动漫番剧:
+    genre_ids: "16"
+  剧集/国产剧:
+    origin_country: "CN,HK,TW"
+```
+
+分类名就是媒体库根下的路径，不再自动加 Movies/TV 前缀。支持 genre_ids、original_language、origin_country、production_countries、release_year 范围、keywords、include_keywords、series_*、custom_regex、可选 `?`、必须 `+`、排除 `-`/`!`。
