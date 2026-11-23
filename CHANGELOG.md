@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.48.1] - 2026-11-24
+
+### Fixed
+
+- Conditional rename blocks with prefixed variables such as
+  `{-resource_team}` now render the prefix and value instead of leaking the
+  raw variable expression.
+
 ## [1.48.0] - 2026-11-24
 
 ### Changed

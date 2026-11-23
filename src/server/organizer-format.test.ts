@@ -22,6 +22,11 @@ describe('rename template syntax', () => {
     expect(renderTemplate('{unknown}', {})).toBe('{unknown}');
   });
 
+  it('renders variables inside conditional blocks with prefixes', () => {
+    expect(renderTemplate('{title}<{-team}>', { title: 'SSIS-001', team: 'MetaTube' })).toBe('SSIS-001-MetaTube');
+    expect(renderTemplate('{title}<{-team}>', { title: 'SSIS-001', team: '' })).toBe('SSIS-001');
+  });
+
   it('cleans repeated and trailing separators', () => {
     expect(renderTemplate('{title}.{year}', { title: 'Iron Man', year: '' })).toBe('Iron Man');
     expect(renderTemplate('{title}..-{year}', { title: 'Iron Man', year: '2008' })).toBe('Iron Man-2008');

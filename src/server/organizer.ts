@@ -255,9 +255,14 @@ export function renderTemplate(template: string, variables: Record<string, strin
   };
   const rendered = protectedTemplate.replace(/<([^<>]+)>/g, (_match, inner: string) => {
     const keys = Array.from(inner.matchAll(/\{([^{}]+)\}/g))
-      .map((match) => /^([a-z_]+)/i.exec(match[1].trim())?.[1].toLowerCase())
+      .map((match) => /^[-+]?([a-z_]+)/i.exec(match[1].trim())?.[1].toLowerCase())
       .filter((key): key is string => Boolean(key));
-    return keys.every((key) => Boolean(variables[key])) ? inner : '';
+    if (!keys.every((key) => Boolean(variables[key]))) return '';
+    return inner.replace(/\{([^{}]+)\}/g, (innerMatch, expression: string) => {
+      const prefix = /^[-+]/.exec(expression)?.[0] ?? '';
+      const value = valueOf(expression.replace(/^[-+]/, ''));
+      return value === null ? innerMatch : `${prefix}${value}`;
+    });
   }).replace(/\{([^{}]+)\}/g, (match, expression: string) => {
     const value = valueOf(expression);
     return value === null ? match : value;

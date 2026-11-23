@@ -403,8 +403,9 @@ const TEMPLATE_SAMPLES = {
 function templatePreview(template: string, samples: Record<string, string>): string {
   if (!template.trim()) return '未填写';
   const rendered = template.replace(/<([^<>]+)>/g, (_match, inner: string) => {
-    const keys = Array.from(inner.matchAll(/\{([a-z_]+)\}/gi)).map((match) => match[1].toLowerCase());
-    return keys.every((key) => Boolean(samples[key])) ? inner : '';
+    const keys = Array.from(inner.matchAll(/\{[-+]?([a-z_]+)\}/gi)).map((match) => match[1].toLowerCase());
+    if (!keys.every((key) => Boolean(samples[key]))) return '';
+    return inner.replace(/\{([-+]?)([a-z_]+)\}/gi, (_innerMatch, prefix: string, key: string) => `${prefix}${samples[key.toLowerCase()] ?? ''}`);
   }).replace(/\{([a-z_]+)\}/gi, (_match, key: string) => samples[key.toLowerCase()] ?? '');
   return rendered || '未填写';
 }
