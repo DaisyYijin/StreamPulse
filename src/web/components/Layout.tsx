@@ -30,7 +30,6 @@ const NAV_ITEMS: Array<{ id: Route; label: string; icon: ReactNode; eyebrow: str
   { id: 'search', label: '影视搜索', icon: <Search size={18} />, eyebrow: 'Search' },
   { id: 'subscriptions', label: '订阅', icon: <BookmarkPlus size={18} />, eyebrow: 'Subscriptions' },
   { id: 'activity', label: '运行记录', icon: <Activity size={18} />, eyebrow: 'Activity' },
-  { id: 'logs', label: '实时日志', icon: <ScrollText size={18} />, eyebrow: 'Logs' },
   { id: 'settings', label: '设置', icon: <Settings size={18} />, eyebrow: 'Settings' },
 ];
 
@@ -146,6 +145,15 @@ export function Layout({
             </div>
           </div>
           <div className="topbar-right">
+            <button
+              className="topbar-log-button"
+              onClick={() => onNavigate('logs')}
+              aria-label="实时日志"
+              title="实时日志"
+            >
+              <ScrollText size={15} />
+              <span>日志</span>
+            </button>
             <button
               className="theme-toggle"
               onClick={toggleTheme}

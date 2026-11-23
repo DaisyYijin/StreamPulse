@@ -1,5 +1,5 @@
 import { Copy, ExternalLink, Search, Settings2, Sparkles } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { Button, Input, Select, toast } from '../components/ui';
 
@@ -68,6 +68,41 @@ export function SearchPage() {
   const [challengeCode, setChallengeCode] = useState('');
   const [challengeBusy, setChallengeBusy] = useState(false);
   const [error, setError] = useState('');
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [guanyingBase, setGuanyingBase] = useState('');
+
+  useEffect(() => {
+    void api.get<{ settings: { guanying?: { baseUrl?: string } } }>('/api/settings')
+      .then((data) => setGuanyingBase(data.settings.guanying?.baseUrl ?? ''))
+      .catch(() => undefined);
+  }, []);
+
+  const loginGuanying = async () => {
+    if (!loginUsername.trim() || !loginPassword) {
+      toast.error('请填写账号和密码');
+      return;
+    }
+    setLoginBusy(true);
+    try {
+      const result = await api.post<{ cookie: string }>('/api/search/login', {
+        site: 'guanying',
+        baseUrl: guanyingBase,
+        username: loginUsername.trim(),
+        password: loginPassword,
+      });
+      await api.patch('/api/settings', { guanying: { baseUrl: guanyingBase, cookie: result.cookie } });
+      toast.success('观影账号登录成功，Cookie 已保存');
+      setLoginPassword('');
+      setLoginOpen(false);
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '登录失败');
+    } finally {
+      setLoginBusy(false);
+    }
+  };
 
   const search = async (event?: FormEvent) => {
     event?.preventDefault();
@@ -138,6 +173,21 @@ export function SearchPage() {
         <button type="button" className={source === 'seedhub' ? 'active' : ''} onClick={() => { setSource('seedhub'); setResult(null); setAlternative(null); }}>SeedHub</button>
         <button type="button" disabled title="癫影为邀请制站点，需登录 Cookie 和站点适配">癫影（需适配）</button>
       </div>
+
+      <div className="search-login-bar">
+        <span>观影站点登录</span>
+        <Button type="button" variant="ghost" size="sm" icon={<Settings2 size={14} />} onClick={() => setLoginOpen((current) => !current)}>{loginOpen ? '收起账号登录' : '账号登录'}</Button>
+      </div>
+      {loginOpen ? (
+        <div className="panel search-login-panel">
+          <div className="form-grid form-grid-2">
+            <label className="field"><span className="field-label">观影站点地址</span><Input value={guanyingBase} onChange={(event) => setGuanyingBase(event.target.value)} placeholder="https://..." /></label>
+            <label className="field"><span className="field-label">账号</span><Input value={loginUsername} onChange={(event) => setLoginUsername(event.target.value)} autoComplete="username" /></label>
+            <label className="field"><span className="field-label">密码</span><Input type="password" value={loginPassword} onChange={(event) => setLoginPassword(event.target.value)} autoComplete="current-password" /></label>
+            <div className="inline-action"><Button type="button" variant="primary" loading={loginBusy} onClick={() => void loginGuanying()}>登录并保存 Cookie</Button><span className="settings-hint">登录成功后搜索会自动使用保存的 Cookie。</span></div>
+          </div>
+        </div>
+      ) : null}
 
       <form className="panel search-panel" onSubmit={(event) => void search(event)}>
         <div className="search-bar">

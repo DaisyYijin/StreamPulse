@@ -2,6 +2,7 @@ import {
   CheckCircle2,
   Database,
   FolderCog,
+  FolderOpen,
   FolderPlus,
   LibraryBig,
   Bell,
@@ -29,35 +30,74 @@ import {
   ConfirmDialog,
   Field,
   Input,
+  Modal,
   Select,
   Toggle,
   toast,
 } from '../components/ui';
 import { uptimeLabel } from '../utils';
 
-const TIMEZONES = [
-  'Asia/Shanghai',
-  'Asia/Hong_Kong',
-  'Asia/Tokyo',
-  'Asia/Singapore',
-  'UTC',
-  'Europe/London',
-  'Europe/Berlin',
-  'America/New_York',
-  'America/Los_Angeles',
-];
+function LocalDirectoryPicker({ open, initial, onClose, onSelect }: {
+  open: boolean;
+  initial: string;
+  onClose: () => void;
+  onSelect: (path: string) => void;
+}) {
+  const [current, setCurrent] = useState(initial || '/');
+  const [parent, setParent] = useState<string | null>(null);
+  const [directories, setDirectories] = useState<Array<{ name: string; path: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setLoading(true);
+    void api.get<{ path: string; parent: string | null; directories: Array<{ name: string; path: string }> }>(`/api/system/directories?path=${encodeURIComponent(current)}`)
+      .then((data) => {
+        setCurrent(data.path);
+        setParent(data.parent);
+        setDirectories(data.directories);
+      })
+      .catch((error) => toast.error(error instanceof Error ? error.message : '读取目录失败'))
+      .finally(() => setLoading(false));
+  }, [open, current]);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="选择 STRM 输出根目录"
+      description="浏览容器内目录；选择后仍需保存设置。"
+      footer={<><Button variant="secondary" onClick={onClose}>取消</Button><Button variant="primary" onClick={() => { onSelect(current); onClose(); }}>使用此目录</Button></>}
+    >
+      <div className="local-dir-picker">
+        <div className="path-input">
+          <Input value={current} onChange={(event) => setCurrent(event.target.value)} spellCheck={false} />
+          <Button variant="secondary" size="sm" disabled={!parent || loading} onClick={() => parent && setCurrent(parent)}>上一级</Button>
+        </div>
+        <div className="local-dir-list">
+          {loading ? <p className="settings-hint">读取中…</p> : directories.length === 0 ? <p className="settings-hint">没有子目录。</p> : directories.map((directory) => (
+            <button type="button" key={directory.path} onClick={() => setCurrent(directory.path)}>
+              <FolderOpen size={14} />
+              <span>{directory.name}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 export function SettingsPage() {
-  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security' | 'integrations' | 'tmdb'>('runtime');
+  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security' | 'integrations' | 'tmdb' | 'metatube'>('runtime');
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [outputDir, setOutputDir] = useState('');
-  const [timezone, setTimezone] = useState('Asia/Shanghai');
   const [defaultUrlTemplate, setDefaultUrlTemplate] = useState('');
   const [streamBaseUrl, setStreamBaseUrl] = useState('');
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(2);
   const [runRetention, setRunRetention] = useState(80);
   const [saving, setSaving] = useState(false);
+  const [dirPickerOpen, setDirPickerOpen] = useState(false);
   const [adminUsername, setAdminUsername] = useState('admin');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -99,7 +139,6 @@ export function SettingsPage() {
       setAuth(authData);
       setAdminUsername(authData.username);
       setOutputDir(data.settings.outputDir);
-      setTimezone(data.settings.timezone);
       setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
       setStreamBaseUrl(data.settings.streamBaseUrl);
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
@@ -128,7 +167,6 @@ export function SettingsPage() {
     try {
       const data = await api.patch<{ settings: Settings; system: SystemInfo }>('/api/settings', {
         outputDir,
-        timezone,
         defaultUrlTemplate,
         streamBaseUrl,
         maxConcurrentRuns,
@@ -136,7 +174,6 @@ export function SettingsPage() {
       });
       setSystem(data.system);
       setOutputDir(data.settings.outputDir);
-      setTimezone(data.settings.timezone);
       setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
       setStreamBaseUrl(data.settings.streamBaseUrl);
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
@@ -305,6 +342,19 @@ export function SettingsPage() {
     }
   };
 
+  const saveMetaTube = async (event: FormEvent) => {
+    event.preventDefault();
+    setMetaTubeBusy(true);
+    try {
+      await api.patch('/api/settings', { metaTube });
+      toast.success('MetaTube 设置已保存');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '保存失败');
+    } finally {
+      setMetaTubeBusy(false);
+    }
+  };
+
   const testNotify = async () => {
     try {
       await api.post('/api/integrations/notify/test');
@@ -347,6 +397,7 @@ export function SettingsPage() {
         <button role="tab" className={settingsTab === 'security' ? 'active' : ''} onClick={() => setSettingsTab('security')}>账号与安全</button>
         <button role="tab" className={settingsTab === 'integrations' ? 'active' : ''} onClick={() => setSettingsTab('integrations')}>Emby 与通知</button>
         <button role="tab" className={settingsTab === 'tmdb' ? 'active' : ''} onClick={() => setSettingsTab('tmdb')}>TMDb</button>
+        <button role="tab" className={settingsTab === 'metatube' ? 'active' : ''} onClick={() => setSettingsTab('metatube')}>MetaTube AV</button>
       </div>
 
       <div className="settings-layout">
@@ -365,29 +416,22 @@ export function SettingsPage() {
             <div className="form-grid">
               <Field
                 label="STRM 输出根目录"
-                hint="必须为绝对路径且容器内可写。媒体库输出目录会拼接在此路径下。"
+                hint="点击选择容器内可写目录；媒体库输出目录会拼接在此路径下。"
               >
-                <div className="input-with-icon">
-                  <HardDrive size={16} />
-                  <Input
-                    value={outputDir}
-                    onChange={(event) => setOutputDir(event.target.value)}
-                    placeholder="/strm"
-                    spellCheck={false}
-                  />
+                <div className="path-input">
+                  <div className="input-with-icon">
+                    <HardDrive size={16} />
+                    <Input
+                      value={outputDir}
+                      onChange={(event) => setOutputDir(event.target.value)}
+                      placeholder="/strm"
+                      spellCheck={false}
+                    />
+                  </div>
+                  <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} onClick={() => setDirPickerOpen(true)}>选择</Button>
                 </div>
               </Field>
               <div className="form-grid form-grid-2">
-                <Field label="时区" hint="用于 Cron 调度与界面时间显示">
-                  <Select value={timezone} onChange={(event) => setTimezone(event.target.value)}>
-                    {!TIMEZONES.includes(timezone) ? <option value={timezone}>{timezone}</option> : null}
-                    {TIMEZONES.map((zone) => (
-                      <option key={zone} value={zone}>
-                        {zone}
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
                 <Field label="最大并发任务" hint="同时运行的媒体库同步数量">
                   <Select
                     value={String(maxConcurrentRuns)}
@@ -415,13 +459,19 @@ export function SettingsPage() {
                   />
                 </div>
               </Field>
-              <Field label="默认 URL 模板" hint="新建媒体库时使用，可包含 {streamBase}、{streamToken}、{sourceUrl} 等变量">
+              <Field label="STRM 地址生成" hint="用于生成 STRM 内的播放地址；{streamBase} 为 302 服务地址，{streamToken} 为文件令牌，{encodedPath} 为文件路径。">
                 <Input
                   value={defaultUrlTemplate}
                   onChange={(event) => setDefaultUrlTemplate(event.target.value)}
                   className="mono-input"
+                  placeholder="{streamBase}/r/{streamToken}{encodedPath}"
                   spellCheck={false}
                 />
+                <code className="strm-example">示例：{defaultUrlTemplate
+                  .replaceAll('{streamBase}', streamBaseUrl || `http://192.168.1.10:${system?.streamPort ?? 2048}`)
+                  .replaceAll('{streamToken}', 'a1b2c3d4')
+                  .replaceAll('{encodedPath}', '/%E7%94%B5%E5%BD%B1/%E6%B2%99%E4%B8%982%20(2024)/%E6%B2%99%E4%B8%982%20(2024).strm')
+                  .replaceAll('{sourceUrl}', 'https://example.com/video.mkv')}</code>
               </Field>
               <Field label="运行记录保留数量" hint="超过数量的旧记录会自动清理">
                 <Input
@@ -639,23 +689,6 @@ export function SettingsPage() {
               <p className="settings-hint">媒体库的“来源路径”需要与 CD2 推送的虚拟路径一致，才能匹配到对应库。</p>
 
               <div className="settings-head compact" style={{ marginTop: 22 }}>
-                <span className="settings-icon"><Database size={18} /></span>
-                <div><h2>MetaTube AV 识别</h2><p>填写 MetaTube Server 地址；用于 AV 番号识别和后续整理。</p></div>
-              </div>
-              <div className="form-grid form-grid-2">
-                <Field label="MetaTube Server 地址"><Input value={metaTube.baseUrl} onChange={(event) => setMetaTube((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://192.168.1.10:8080" /></Field>
-                <Field label="MetaTube Token（可选）"><Input type="password" value={metaTube.token} onChange={(event) => setMetaTube((current) => ({ ...current, token: event.target.value }))} autoComplete="off" /></Field>
-                <Field label="测试连接"><Button type="button" variant="secondary" icon={<Database size={14} />} loading={metaTubeBusy} onClick={() => void testMetaTube()}>测试 MetaTube</Button></Field>
-                <Field label="AV 番号识别测试">
-                  <div className="inline-action">
-                    <Input value={metaTubeQuery} onChange={(event) => setMetaTubeQuery(event.target.value)} placeholder="SSIS-001" />
-                    <Button type="button" variant="secondary" size="sm" loading={metaTubeBusy} onClick={() => void searchMetaTube()}>识别</Button>
-                    {metaTubeResult ? <span>{metaTubeResult}</span> : null}
-                  </div>
-                </Field>
-              </div>
-
-              <div className="settings-head compact" style={{ marginTop: 22 }}>
                 <span className="settings-icon"><Search size={18} /></span>
                 <div><h2>影巢搜索</h2><p>使用影巢 OpenAPI 搜索资源；只搜索，不会自动解锁或消耗积分。</p></div>
               </div>
@@ -698,6 +731,27 @@ export function SettingsPage() {
                 <Field label="TMDb 语言"><Input value={tmdb.language} onChange={(event) => setTmdb((current) => ({ ...current, language: event.target.value }))} placeholder="zh-CN" /></Field>
               </div>
               <div className="settings-actions"><Button type="submit" variant="primary" loading={tmdbBusy}>保存 TMDb 设置</Button></div>
+            </form>
+          ) : null}
+          {settingsTab === 'metatube' ? (
+            <form className="panel settings-panel" onSubmit={saveMetaTube}>
+              <div className="settings-head">
+                <span className="settings-icon"><Database size={18} /></span>
+                <div><h2>MetaTube AV 识别</h2><p>独立配置 MetaTube Server；用于 AV 番号识别和后续整理。</p></div>
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="MetaTube Server 地址"><Input value={metaTube.baseUrl} onChange={(event) => setMetaTube((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://192.168.1.10:8080" /></Field>
+                <Field label="MetaTube Token（可选）"><Input type="password" value={metaTube.token} onChange={(event) => setMetaTube((current) => ({ ...current, token: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="测试连接"><Button type="button" variant="secondary" icon={<Database size={14} />} loading={metaTubeBusy} onClick={() => void testMetaTube()}>测试 MetaTube</Button></Field>
+                <Field label="AV 番号识别测试">
+                  <div className="inline-action">
+                    <Input value={metaTubeQuery} onChange={(event) => setMetaTubeQuery(event.target.value)} placeholder="SSIS-001" />
+                    <Button type="button" variant="secondary" size="sm" loading={metaTubeBusy} onClick={() => void searchMetaTube()}>识别</Button>
+                    {metaTubeResult ? <span>{metaTubeResult}</span> : null}
+                  </div>
+                </Field>
+              </div>
+              <div className="settings-actions"><Button type="submit" variant="primary" loading={metaTubeBusy}>保存 MetaTube 设置</Button></div>
             </form>
           ) : null}
         </div>
@@ -826,10 +880,17 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.45.0'}</span>
+            <span>v{system?.version ?? '1.46.0'}</span>
           </section>
         </aside>
       </div>
+
+      <LocalDirectoryPicker
+        open={dirPickerOpen}
+        initial={outputDir || '/strm'}
+        onClose={() => setDirPickerOpen(false)}
+        onSelect={(path) => setOutputDir(path)}
+      />
 
       <ConfirmDialog
         open={clearOpen}

@@ -19,6 +19,7 @@ import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
 import { searchSeedhub } from '../seedhub.js';
+import { loginSearchSite } from '../search-login.js';
 import { searchMetaTube, testMetaTube } from '../metatube.js';
 import { submitChallenge } from '../challenge.js';
 import { deleteSubscription, listSubscriptions, syncDoubanSubscriptions } from '../subscriptions.js';
@@ -333,6 +334,22 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       system: await systemInfo(store),
     };
     res.json(overview);
+  });
+
+  router.get('/system/directories', async (req, res) => {
+    const requested = String(req.query.path ?? '/');
+    if (!path.isAbsolute(requested)) throw new HttpError(400, '目录必须是绝对路径');
+    const resolved = path.resolve(requested);
+    try {
+      const entries = await fs.readdir(resolved, { withFileTypes: true });
+      const directories = entries
+        .filter((entry) => entry.isDirectory() && !entry.name.startsWith('.'))
+        .map((entry) => ({ name: entry.name, path: path.join(resolved, entry.name) }))
+        .sort((left, right) => left.name.localeCompare(right.name, 'zh-CN'));
+      res.json({ path: resolved, parent: path.dirname(resolved) === resolved ? null : path.dirname(resolved), directories });
+    } catch (error) {
+      throw new HttpError(400, `无法读取目录：${error instanceof Error ? error.message : String(error)}`);
+    }
   });
 
   router.get('/system', async (_req, res) => {
@@ -790,6 +807,25 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       res.json(result);
     } catch (error) {
       throw new HttpError(502, error instanceof Error ? error.message : '影巢连接失败');
+    }
+  });
+
+  router.post('/search/login', async (req, res) => {
+    const body = req.body as { site?: unknown; baseUrl?: unknown; username?: unknown; password?: unknown };
+    const site = body.site === 'butailing' ? 'butailing' : 'guanying';
+    const username = String(body.username ?? '').trim();
+    const password = String(body.password ?? '');
+    if (!username || !password) throw new HttpError(400, '请填写账号和密码');
+    try {
+      const result = await loginSearchSite({
+        site,
+        baseUrl: String(body.baseUrl ?? ''),
+        username,
+        password,
+      });
+      res.json(result);
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : '登录失败');
     }
   });
 

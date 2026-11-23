@@ -2,6 +2,21 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.46.0] - 2026-11-23
+
+### Added
+
+- Search page account/password login for the Guanying site; the resulting
+  cookie is saved for searches.
+- Local directory picker for the STRM output root.
+- Separate MetaTube AV settings tab.
+- STRM URL generator field with a live example.
+
+### Changed
+
+- Live logs moved from the sidebar to a top-right button.
+- Removed the timezone and “默认 URL 模板” settings from the UI.
+
 ## [1.45.0] - 2026-11-23
 
 ### Changed

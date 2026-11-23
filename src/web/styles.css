@@ -7089,3 +7089,88 @@ html[data-theme='light'] .genre-picker-menu {
   color: var(--dim);
   font-size: 9px;
 }
+
+.topbar-log-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9.5px;
+}
+
+.topbar-log-button:hover {
+  color: var(--lime);
+  border-color: var(--lime-dim);
+}
+
+@media (max-width: 760px) {
+  .topbar-log-button span {
+    display: none;
+  }
+}
+
+.strm-example {
+  display: block;
+  margin-top: 6px;
+  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--lime);
+  font-family: var(--mono);
+  font-size: 8.5px;
+  line-height: 1.5;
+  word-break: break-all;
+}
+
+.local-dir-picker {
+  display: grid;
+  gap: 10px;
+}
+
+.local-dir-list {
+  display: grid;
+  max-height: 360px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.local-dir-list button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-soft);
+  cursor: pointer;
+  text-align: left;
+  font-size: 10px;
+}
+
+.local-dir-list button:hover {
+  background: var(--lime-soft);
+  color: var(--lime);
+}
+
+.search-login-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 10px 0;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.search-login-panel {
+  margin-bottom: 10px;
+}
