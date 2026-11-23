@@ -144,6 +144,97 @@ const GENRE_LABELS: Record<string, string> = Object.fromEntries(
   [...GENRE_OPTIONS.movie, ...GENRE_OPTIONS.tv].map((genre) => [genre.name, genre.label]),
 );
 
+const COUNTRY_OPTIONS = [
+  { value: 'CN', label: '中国大陆' }, { value: 'HK', label: '中国香港' }, { value: 'TW', label: '中国台湾' },
+  { value: 'JP', label: '日本' }, { value: 'KR', label: '韩国' }, { value: 'KP', label: '朝鲜' },
+  { value: 'TH', label: '泰国' }, { value: 'IN', label: '印度' }, { value: 'SG', label: '新加坡' },
+  { value: 'MY', label: '马来西亚' }, { value: 'ID', label: '印度尼西亚' }, { value: 'PH', label: '菲律宾' },
+  { value: 'VN', label: '越南' }, { value: 'TR', label: '土耳其' }, { value: 'IL', label: '以色列' },
+  { value: 'AE', label: '阿联酋' }, { value: 'IR', label: '伊朗' }, { value: 'KZ', label: '哈萨克斯坦' },
+  { value: 'US', label: '美国' }, { value: 'GB', label: '英国' }, { value: 'CA', label: '加拿大' },
+  { value: 'AU', label: '澳大利亚' }, { value: 'NZ', label: '新西兰' }, { value: 'IE', label: '爱尔兰' },
+  { value: 'FR', label: '法国' }, { value: 'DE', label: '德国' }, { value: 'ES', label: '西班牙' },
+  { value: 'IT', label: '意大利' }, { value: 'PT', label: '葡萄牙' }, { value: 'NL', label: '荷兰' },
+  { value: 'BE', label: '比利时' }, { value: 'CH', label: '瑞士' }, { value: 'SE', label: '瑞典' },
+  { value: 'NO', label: '挪威' }, { value: 'DK', label: '丹麦' }, { value: 'FI', label: '芬兰' },
+  { value: 'PL', label: '波兰' }, { value: 'CZ', label: '捷克' }, { value: 'RU', label: '俄罗斯' },
+  { value: 'UA', label: '乌克兰' }, { value: 'HU', label: '匈牙利' }, { value: 'GR', label: '希腊' },
+  { value: 'RO', label: '罗马尼亚' }, { value: 'AT', label: '奥地利' }, { value: 'IS', label: '冰岛' },
+  { value: 'BR', label: '巴西' }, { value: 'MX', label: '墨西哥' }, { value: 'AR', label: '阿根廷' },
+  { value: 'CO', label: '哥伦比亚' }, { value: 'CL', label: '智利' }, { value: 'ZA', label: '南非' },
+  { value: 'EG', label: '埃及' }, { value: 'NG', label: '尼日利亚' }, { value: 'JO', label: '约旦' },
+  { value: 'SA', label: '沙特' }, { value: 'QA', label: '卡塔尔' }, { value: 'LB', label: '黎巴嫩' },
+  { value: 'MA', label: '摩洛哥' }, { value: 'PE', label: '秘鲁' }, { value: 'VE', label: '委内瑞拉' },
+  { value: 'UY', label: '乌拉圭' }, { value: 'KE', label: '肯尼亚' }, { value: 'GH', label: '加纳' },
+  { value: 'DZ', label: '阿尔及利亚' }, { value: 'TN', label: '突尼斯' }, { value: 'IQ', label: '伊拉克' },
+  { value: 'KW', label: '科威特' }, { value: 'BD', label: '孟加拉国' }, { value: 'PK', label: '巴基斯坦' },
+  { value: 'LK', label: '斯里兰卡' }, { value: 'MM', label: '缅甸' }, { value: 'KH', label: '柬埔寨' },
+  { value: 'LA', label: '老挝' }, { value: 'MN', label: '蒙古' }, { value: 'NP', label: '尼泊尔' },
+];
+const LANGUAGE_OPTIONS = [
+  { value: 'zh', label: '中文（普通话）' }, { value: 'cn', label: '粤语' }, { value: 'bo', label: '藏语' },
+  { value: 'za', label: '壮语' }, { value: 'ja', label: '日语' }, { value: 'ko', label: '韩语' },
+  { value: 'en', label: '英语' }, { value: 'fr', label: '法语' }, { value: 'de', label: '德语' },
+  { value: 'es', label: '西班牙语' }, { value: 'it', label: '意大利语' }, { value: 'pt', label: '葡萄牙语' },
+  { value: 'ru', label: '俄语' }, { value: 'th', label: '泰语' }, { value: 'hi', label: '印地语' },
+  { value: 'ta', label: '泰米尔语' }, { value: 'te', label: '泰卢固语' }, { value: 'ml', label: '马拉雅拉姆语' },
+  { value: 'kn', label: '卡纳达语' }, { value: 'ar', label: '阿拉伯语' }, { value: 'he', label: '希伯来语' },
+  { value: 'fa', label: '波斯语' }, { value: 'tr', label: '土耳其语' }, { value: 'pl', label: '波兰语' },
+  { value: 'nl', label: '荷兰语' }, { value: 'sv', label: '瑞典语' }, { value: 'no', label: '挪威语' },
+  { value: 'da', label: '丹麦语' }, { value: 'fi', label: '芬兰语' }, { value: 'cs', label: '捷克语' },
+  { value: 'el', label: '希腊语' }, { value: 'hu', label: '匈牙利语' }, { value: 'ro', label: '罗马尼亚语' },
+  { value: 'uk', label: '乌克兰语' }, { value: 'vi', label: '越南语' }, { value: 'id', label: '印尼语' },
+  { value: 'ms', label: '马来语' }, { value: 'tl', label: '菲律宾语' }, { value: 'km', label: '高棉语' },
+];
+
+function CodePicker({ value, options, onChange, placeholder }: {
+  value: string[];
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string[]) => void;
+  placeholder: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  const labelOf = (code: string) => options.find((option) => option.value === code)?.label ?? code;
+  const filtered = options.filter((option) => `${option.label} ${option.value}`.toLowerCase().includes(search.toLowerCase()));
+  const toggle = (code: string) => {
+    onChange(value.includes(code) ? value.filter((item) => item !== code) : [...value, code]);
+  };
+  return (
+    <div className="genre-picker" ref={ref}>
+      <button type="button" className="input genre-picker-trigger" onClick={() => setOpen((current) => !current)}>
+        {value.length ? value.map((code) => <span className="genre-chip" key={code}>{labelOf(code)}</span>) : <span className="genre-placeholder">{placeholder}</span>}
+        <span className="genre-arrow">▾</span>
+      </button>
+      {open ? (
+        <div className="genre-picker-menu code-picker-menu">
+          <div className="genre-picker-head"><span>{placeholder}</span><button type="button" onClick={() => onChange([])}>清空</button></div>
+          <input className="code-picker-search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索中文或代码" autoFocus />
+          <div className="genre-picker-list code-picker-list">
+            {filtered.map((option) => (
+              <button key={option.value} type="button" className={value.includes(option.value) ? 'active' : ''} onClick={() => toggle(option.value)}>
+                <span className="genre-check">{value.includes(option.value) ? '✓' : ''}</span>
+                <span>{option.label}</span>
+                <em>{option.value}</em>
+              </button>
+            ))}
+            {filtered.length === 0 ? <p className="code-picker-empty">没有匹配项</p> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function GenrePicker({ value, mediaType, onChange }: {
   value: string[];
   mediaType: 'movie' | 'tv';
@@ -842,8 +933,8 @@ export function OrganizePage() {
                     <Input value={category.name} onChange={(event) => updateCategory(index, { name: event.target.value })} placeholder="分类名" />
                   </div>
                   <GenrePicker value={category.genres} mediaType={category.mediaType} onChange={(genres) => updateCategory(index, { genres })} />
-                  <Input value={category.countries.join(', ')} onChange={(event) => updateCategory(index, { countries: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="国家，如 CN, US" />
-                  <Input value={category.languages.join(', ')} onChange={(event) => updateCategory(index, { languages: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="语言，如 zh, en" />
+                  <CodePicker value={category.countries} options={COUNTRY_OPTIONS} onChange={(countries) => updateCategory(index, { countries })} placeholder="选择国家" />
+                  <CodePicker value={category.languages} options={LANGUAGE_OPTIONS} onChange={(languages) => updateCategory(index, { languages })} placeholder="选择语言" />
                   <Input value={category.keywords.join(', ')} onChange={(event) => updateCategory(index, { keywords: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="关键词（可选）" />
                   <button type="button" className="simple-remove" onClick={() => removeCategory(index)} aria-label="删除分类">×</button>
                 </div>

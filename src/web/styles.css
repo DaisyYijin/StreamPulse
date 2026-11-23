@@ -7055,3 +7055,37 @@ html[data-theme='light'] .genre-picker-menu {
   background: #fff;
   box-shadow: 0 16px 36px rgba(35, 60, 40, 0.16);
 }
+
+.code-picker-menu {
+  width: 270px;
+}
+
+.code-picker-search {
+  display: block;
+  width: calc(100% - 12px);
+  height: 26px;
+  margin: 6px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  outline: none;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 9px;
+}
+
+.code-picker-search:focus {
+  border-color: var(--lime-dim);
+}
+
+.code-picker-list {
+  grid-template-columns: 1fr;
+  max-height: 250px;
+}
+
+.code-picker-empty {
+  margin: 0;
+  padding: 8px;
+  color: var(--dim);
+  font-size: 9px;
+}

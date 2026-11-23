@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.44.0] - 2026-11-23
+
+### Added
+
+- Simple-category country and language fields now use searchable Chinese
+  multi-select pickers, storing ISO/language codes internally.
+
 ## [1.43.0] - 2026-11-23
 
 ### Added
