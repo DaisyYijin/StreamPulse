@@ -45,29 +45,28 @@ const EMPTY: OrganizerSettings = {
   cmsCategories: DEFAULT_CMS_CATEGORIES,
 };
 
-const RENAME_PRESETS = {
-  compact: {
-    label: '精简',
-    movieFolderTemplate: '{title}',
-    movieFileTemplate: '{title}',
-    tvFolderTemplate: '{title}/Season {season}',
-    tvFileTemplate: '{title}.S{season}E{episode}',
-  },
-  standard: {
-    label: '标准',
-    movieFolderTemplate: '{title} ({year})',
-    movieFileTemplate: '{title} ({year}){quality}',
-    tvFolderTemplate: '{title} ({year})/Season {season}',
-    tvFileTemplate: '{title}.S{season}E{episode}{quality}',
-  },
-  detailed: {
-    label: '详细',
-    movieFolderTemplate: '{first_letter}/{title} ({year})',
-    movieFileTemplate: '{title}.{year}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>',
-    tvFolderTemplate: '{first_letter}/{title} ({year})/Season {season}',
-    tvFileTemplate: '{title}.S{season}E{episode}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>',
-  },
-} as const;
+const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile', Array<{ label: string; value: string }>> = {
+  movieFolder: [
+    { label: '精简', value: '{title}' },
+    { label: '标准', value: '{title} ({year})' },
+    { label: '详细', value: '{first_letter}-{title} ({year})' },
+  ],
+  movieFile: [
+    { label: '精简', value: '{title}' },
+    { label: '标准', value: '{title} ({year}){quality}' },
+    { label: '详细', value: '{title}.{year}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>' },
+  ],
+  tvFolder: [
+    { label: '精简', value: '{title}-Season {season}' },
+    { label: '标准', value: '{title} ({year})-Season {season}' },
+    { label: '详细', value: '{first_letter}-{title} ({year})-Season {season}' },
+  ],
+  tvFile: [
+    { label: '精简', value: '{title}.S{season}E{episode}' },
+    { label: '标准', value: '{title}.S{season}E{episode}{quality}' },
+    { label: '详细', value: '{title}.S{season}E{episode}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>' },
+  ],
+};
 
 const ACTION_LABEL: Record<OrganizeItem['action'], string> = {
   create: '新增', upgrade: '洗版', skip: '跳过', error: '失败',
@@ -188,13 +187,14 @@ function templatePreview(template: string, samples: Record<string, string>): str
 }
 
 function RenameTemplateField({
-  label, hint, value, onChange, sampleType,
+  label, hint, value, onChange, sampleType, variants,
 }: {
   label: string;
   hint: string;
   value: string;
   onChange: (value: string) => void;
   sampleType: 'movie' | 'tv';
+  variants: Array<{ label: string; value: string }>;
 }) {
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -241,6 +241,13 @@ function RenameTemplateField({
           </div>
         ) : null}
       </div>
+      <div className="template-variants">
+        {variants.map((variant) => (
+          <button type="button" key={variant.label} className={value === variant.value ? 'active' : ''} onClick={() => onChange(variant.value)}>
+            {variant.label}
+          </button>
+        ))}
+      </div>
       <div className="template-example">示例：<code>{templatePreview(value, samples)}</code></div>
       <span className="field-hint">{hint}</span>
     </div>
@@ -266,7 +273,7 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
             <li><code>{'{变量名}'}</code> 取变量值；认不出的变量名会原样保留。</li>
             <li><code>&lt;...{'{变量}'}...&gt;</code> 条件块：块内变量都有值才输出整块。</li>
             <li><code>[[ ]]</code> 输出真正的花括号。</li>
-            <li><code>/</code> 在文件夹规则里分隔层级，可建多级目录。</li>
+            <li>文件夹规则建议用 <code>-</code> 连接；如需多级目录仍可使用 <code>/</code>。</li>
             <li><code>{'{变量.replace(\'.\', \' \')}'}</code> 替换字符；<code>{'{变量.lower()}'}</code> / <code>{'{变量.upper()}'}</code> 转大小写。</li>
             <li>自动清理连续和首尾的 <code>.</code> <code>/</code> <code>-</code>；年份为空时不会留下尾巴。</li>
           </ul>
@@ -400,7 +407,6 @@ export function OrganizePage() {
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTopic, setHelpTopic] = useState<'rename' | 'categories' | 'upgrade' | null>(null);
-  const [renamePreset, setRenamePreset] = useState<keyof typeof RENAME_PRESETS>('standard');
   const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
   const [categoryError, setCategoryError] = useState('');
   const [washYaml, setWashYaml] = useState(toWashYaml(EMPTY.washing));
@@ -545,19 +551,6 @@ export function OrganizePage() {
     if (!form.libraryPath.trim()) throw new Error('扫描前请选择网盘媒体库根目录');
   };
 
-  const applyRenamePreset = (key: keyof typeof RENAME_PRESETS) => {
-    const preset = RENAME_PRESETS[key];
-    setRenamePreset(key);
-    setForm((previous) => ({
-      ...previous,
-      movieFolderTemplate: preset.movieFolderTemplate,
-      movieFileTemplate: preset.movieFileTemplate,
-      tvFolderTemplate: preset.tvFolderTemplate,
-      tvFileTemplate: preset.tvFileTemplate,
-    }));
-    toast.success(`已应用${preset.label}模板，保存后生效`);
-  };
-
   const save = async () => {
     if (categoryError || washError) {
       toast.error('YAML 有错误，修正后才能保存');
@@ -687,20 +680,11 @@ export function OrganizePage() {
             <div><h2>重命名规则</h2><p>先按规则生成文件夹和文件名，再移动到媒体库；文件夹不存在会自动创建。</p></div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'rename' ? null : 'rename')}>填写说明</Button>
           </div>
-          <div className="template-presets">
-            <span>快速模板</span>
-            {(Object.keys(RENAME_PRESETS) as Array<keyof typeof RENAME_PRESETS>).map((key) => (
-              <button key={key} type="button" className={renamePreset === key ? 'active' : ''} onClick={() => applyRenamePreset(key)}>
-                {RENAME_PRESETS[key].label}
-              </button>
-            ))}
-            <em>点击后替换四组模板；仍需保存</em>
-          </div>
           <div className="form-grid two-col">
-            <RenameTemplateField label="电影文件夹" hint="支持 / 多级目录；点击输入框可选择变量" value={form.movieFolderTemplate} onChange={(value) => update('movieFolderTemplate', value)} sampleType="movie" />
-            <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" />
-            <RenameTemplateField label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" />
-            <RenameTemplateField label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}" value={form.tvFileTemplate} onChange={(value) => update('tvFileTemplate', value)} sampleType="tv" />
+            <RenameTemplateField label="电影文件夹" hint="点击输入框选择变量；快速模板会填入 - 分隔格式" value={form.movieFolderTemplate} onChange={(value) => update('movieFolderTemplate', value)} sampleType="movie" variants={RENAME_VARIANTS.movieFolder} />
+            <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" variants={RENAME_VARIANTS.movieFile} />
+            <RenameTemplateField label="剧集文件夹" hint="例如 {title} ({year})-Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" variants={RENAME_VARIANTS.tvFolder} />
+            <RenameTemplateField label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}" value={form.tvFileTemplate} onChange={(value) => update('tvFileTemplate', value)} sampleType="tv" variants={RENAME_VARIANTS.tvFile} />
           </div>
         </div>
       ) : null}

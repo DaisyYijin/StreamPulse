@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.39.0] - 2026-11-23
+
+### Changed
+
+- Rename presets are now attached to each individual input instead of one
+  global row. Folder presets use `-` instead of `/` by default.
+
 ## [1.38.0] - 2026-11-23
 
 ### Added

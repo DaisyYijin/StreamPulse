@@ -6880,3 +6880,30 @@ html[data-theme='light'] .template-variable-popover {
 html[data-theme='light'] .cms-category-preview {
   background: #f7faf4;
 }
+
+.template-variants {
+  display: flex;
+  gap: 4px;
+  margin-top: 5px;
+}
+
+.template-variants button {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  font-size: 8.5px;
+}
+
+.template-variants button:hover {
+  color: var(--lime);
+  border-color: var(--lime-dim);
+}
+
+.template-variants button.active {
+  color: var(--lime);
+  border-color: var(--lime);
+  background: var(--lime-soft);
+}
