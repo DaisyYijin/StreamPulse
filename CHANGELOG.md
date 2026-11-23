@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.30.2] - 2026-11-23
+
+### Changed
+
+- Live logs are localized to Chinese: API operations use 读取/提交/更新/删除,
+  module names and service prefixes are translated, and common English log
+  phrases are replaced.
+
 ## [1.30.1] - 2026-11-23
 
 ### Fixed
