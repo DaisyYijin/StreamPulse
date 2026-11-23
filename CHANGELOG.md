@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.34.2] - 2026-11-23
+
+### Fixed
+
+- Clicking a rename-field label no longer opens the variable picker; only
+  clicking/focusing the input does.
+
 ## [1.34.1] - 2026-11-23
 
 ### Fixed

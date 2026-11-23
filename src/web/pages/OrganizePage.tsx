@@ -188,7 +188,8 @@ function RenameTemplateField({
   };
 
   return (
-    <Field label={label} hint={hint}>
+    <div className="field">
+      <span className="field-label">{label}</span>
       <div className="template-field">
         <input
           ref={inputRef}
@@ -214,7 +215,8 @@ function RenameTemplateField({
         ) : null}
       </div>
       <div className="template-example">示例：<code>{templatePreview(value, samples)}</code></div>
-    </Field>
+      <span className="field-hint">{hint}</span>
+    </div>
   );
 }
 
