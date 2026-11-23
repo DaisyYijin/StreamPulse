@@ -222,6 +222,11 @@ export const embyServerSchema = z.object({
   refreshAfterRun: z.boolean().default(false),
 });
 
+const tmdbSchema = z.object({
+  apiKey: z.string().trim().max(500).default(''),
+  language: z.string().trim().min(2).max(20).default('zh-CN'),
+});
+
 const metaTubeSchema = z.object({
   baseUrl: z.string().trim().max(2000).default(''),
   token: z.string().trim().max(2000).default(''),
@@ -316,6 +321,7 @@ export const settingsUpdateSchema = z.object({
   subscriptions: subscriptionSettingsSchema.optional(),
   cloudDrive: cloudDriveSchema.optional(),
   metaTube: metaTubeSchema.optional(),
+  tmdb: tmdbSchema.optional(),
   notifications: notificationsSchema.optional(),
   outputDir: z.string().trim().min(1).max(2000).optional(),
   timezone: z.string().trim().min(1).max(80).optional(),

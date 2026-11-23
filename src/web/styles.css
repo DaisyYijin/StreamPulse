@@ -6527,3 +6527,16 @@ html[data-theme='light'] .live-log-line.warn .live-log-level {
 html[data-theme='light'] .live-log-line.error .live-log-level {
   color: var(--red);
 }
+
+.form-callout-inline {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.5;
+}

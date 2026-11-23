@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.31.0';
+export const APP_VERSION = '1.32.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -251,6 +251,11 @@ export interface HdhiveSettings {
   userToken: string;
 }
 
+export interface TmdbSettings {
+  apiKey: string;
+  language: string;
+}
+
 export interface MetaTubeSettings {
   baseUrl: string;
   token: string;
@@ -300,6 +305,7 @@ export interface Settings {
   subscriptions: SubscriptionSettings;
   cloudDrive: CloudDriveSettings;
   metaTube: MetaTubeSettings;
+  tmdb: TmdbSettings;
   notifications: NotificationSettings;
 }
 

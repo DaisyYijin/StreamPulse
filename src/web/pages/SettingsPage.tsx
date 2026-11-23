@@ -21,7 +21,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { useEffect, useState, type FormEvent } from 'react';
-import type { AuthStatus, CloudDriveSettings, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, MetaTubeSettings, NotificationSettings, Settings, SystemInfo } from '../../shared/types';
+import type { AuthStatus, CloudDriveSettings, EmbyLibrary, EmbyServer, GuanyingSettings, HdhiveSettings, MetaTubeSettings, NotificationSettings, Settings, SystemInfo, TmdbSettings } from '../../shared/types';
 import { api } from '../api';
 import {
   Badge,
@@ -48,7 +48,7 @@ const TIMEZONES = [
 ];
 
 export function SettingsPage() {
-  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security' | 'integrations'>('runtime');
+  const [settingsTab, setSettingsTab] = useState<'runtime' | 'security' | 'integrations' | 'tmdb'>('runtime');
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [outputDir, setOutputDir] = useState('');
@@ -77,6 +77,8 @@ export function SettingsPage() {
   const [cloudDrive, setCloudDrive] = useState<CloudDriveSettings>({ webhookToken: '' });
   const [metaTube, setMetaTube] = useState<MetaTubeSettings>({ baseUrl: '', token: '' });
   const [metaTubeBusy, setMetaTubeBusy] = useState(false);
+  const [tmdb, setTmdb] = useState<TmdbSettings>({ apiKey: '', language: 'zh-CN' });
+  const [tmdbBusy, setTmdbBusy] = useState(false);
   const [metaTubeQuery, setMetaTubeQuery] = useState('SSIS-001');
   const [metaTubeResult, setMetaTubeResult] = useState<string>('');
   const [hdhiveBusy, setHdhiveBusy] = useState(false);
@@ -109,6 +111,7 @@ export function SettingsPage() {
       if (data.settings.guanying) setGuanying(data.settings.guanying);
       if (data.settings.cloudDrive) setCloudDrive(data.settings.cloudDrive);
       if (data.settings.metaTube) setMetaTube(data.settings.metaTube);
+      if (data.settings.tmdb) setTmdb(data.settings.tmdb);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '加载失败');
     }
@@ -289,6 +292,19 @@ export function SettingsPage() {
     }
   };
 
+  const saveTmdb = async (event: FormEvent) => {
+    event.preventDefault();
+    setTmdbBusy(true);
+    try {
+      await api.patch('/api/settings', { tmdb });
+      toast.success('TMDb 设置已保存');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '保存失败');
+    } finally {
+      setTmdbBusy(false);
+    }
+  };
+
   const testNotify = async () => {
     try {
       await api.post('/api/integrations/notify/test');
@@ -330,6 +346,7 @@ export function SettingsPage() {
         <button role="tab" className={settingsTab === 'runtime' ? 'active' : ''} onClick={() => setSettingsTab('runtime')}>运行设置</button>
         <button role="tab" className={settingsTab === 'security' ? 'active' : ''} onClick={() => setSettingsTab('security')}>账号与安全</button>
         <button role="tab" className={settingsTab === 'integrations' ? 'active' : ''} onClick={() => setSettingsTab('integrations')}>Emby 与通知</button>
+        <button role="tab" className={settingsTab === 'tmdb' ? 'active' : ''} onClick={() => setSettingsTab('tmdb')}>TMDb</button>
       </div>
 
       <div className="settings-layout">
@@ -670,6 +687,19 @@ export function SettingsPage() {
               <div className="settings-actions"><Button type="submit" variant="primary" icon={<Send size={16} />} loading={integrationBusy}>保存集成设置</Button></div>
             </form>
           ) : null}
+          {settingsTab === 'tmdb' ? (
+            <form className="panel settings-panel" onSubmit={saveTmdb}>
+              <div className="settings-head">
+                <span className="settings-icon"><Database size={18} /></span>
+                <div><h2>TMDb</h2><p>整理识别、影巢搜索和订阅匹配共用这里的 TMDb 配置。</p></div>
+              </div>
+              <div className="form-grid form-grid-2">
+                <Field label="TMDb API Key"><Input type="password" value={tmdb.apiKey} onChange={(event) => setTmdb((current) => ({ ...current, apiKey: event.target.value }))} autoComplete="off" /></Field>
+                <Field label="TMDb 语言"><Input value={tmdb.language} onChange={(event) => setTmdb((current) => ({ ...current, language: event.target.value }))} placeholder="zh-CN" /></Field>
+              </div>
+              <div className="settings-actions"><Button type="submit" variant="primary" loading={tmdbBusy}>保存 TMDb 设置</Button></div>
+            </form>
+          ) : null}
         </div>
 
         <aside className="settings-side">
@@ -796,7 +826,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.31.0'}</span>
+            <span>v{system?.version ?? '1.32.0'}</span>
           </section>
         </aside>
       </div>

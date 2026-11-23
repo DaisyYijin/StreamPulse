@@ -81,8 +81,8 @@ export class Scheduler {
         void syncDoubanSubscriptions(
           this.store.stateDir,
           this.store.snapshot.settings.subscriptions,
-          this.store.snapshot.settings.organizer.tmdbApiKey,
-          this.store.snapshot.settings.organizer.tmdbLanguage,
+          this.store.snapshot.settings.tmdb.apiKey,
+          this.store.snapshot.settings.tmdb.language,
         ).catch((error) => {
           console.warn(`[subscriptions] ${error instanceof Error ? error.message : String(error)}`);
         });

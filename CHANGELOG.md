@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.32.0] - 2026-11-23
+
+### Changed
+
+- Organizer directory fields now start blank and require selecting cloud
+  directories before saving/scanning.
+- TMDb API key and language moved to Settings → TMDb and shared by organizer,
+  HDHive search and subscriptions.
+- Removed the organizer “sync library” selector. A matching media library is
+  now required and synced automatically after organizing.
+
 ## [1.31.0] - 2026-11-23
 
 ### Added

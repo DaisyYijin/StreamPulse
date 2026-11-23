@@ -75,6 +75,21 @@ interface ApiDeps {
   scheduler: Scheduler;
 }
 
+function organizerWithTmdb(store: Store) {
+  const settings = store.snapshot.settings;
+  return {
+    ...settings.organizer,
+    tmdbApiKey: settings.tmdb.apiKey,
+    tmdbLanguage: settings.tmdb.language,
+  };
+}
+
+function organizerLibrary(store: Store, organizer: ReturnType<typeof organizerWithTmdb>) {
+  const candidates = store.snapshot.libraries.filter((library) => library.sourceId === organizer.sourceId);
+  const target = normalizeSourcePath(organizer.libraryPath);
+  return candidates.find((library) => normalizeSourcePath(library.sourcePath) === target) ?? candidates[0] ?? null;
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
@@ -686,13 +701,12 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
   });
 
   router.post('/subscriptions/sync', async (_req, res) => {
-    const organizer = store.snapshot.settings.organizer;
     try {
       const result = await syncDoubanSubscriptions(
         store.stateDir,
         store.snapshot.settings.subscriptions,
-        organizer.tmdbApiKey,
-        organizer.tmdbLanguage,
+        store.snapshot.settings.tmdb.apiKey,
+        store.snapshot.settings.tmdb.language,
       );
       res.json(result);
     } catch (error) {
@@ -776,15 +790,14 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/hdhive/search', async (req, res) => {
     const body = parseBody(hdhiveSearchSchema, req.body);
-    const organizer = store.snapshot.settings.organizer;
     try {
       const result = await searchHdhive({
         keyword: body.keyword,
         mediaType: body.mediaType,
         year: body.year,
         settings: store.snapshot.settings.hdhive,
-        tmdbApiKey: organizer.tmdbApiKey,
-        tmdbLanguage: organizer.tmdbLanguage,
+        tmdbApiKey: store.snapshot.settings.tmdb.apiKey,
+        tmdbLanguage: store.snapshot.settings.tmdb.language,
       });
       res.json(result);
     } catch (error) {
@@ -987,7 +1000,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/organize/recognize', async (req, res) => {
     const body = parseBody(recognizeSchema, req.body);
-    const organizer = store.snapshot.settings.organizer;
+    const organizer = organizerWithTmdb(store);
     const parsed = parseName(body.filename);
     const info = await searchTmdb({
       mediaType: parsed.mediaType,
@@ -1012,12 +1025,13 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
   });
 
   router.post('/organize/scan', async (_req, res) => {
-    const organizer = store.snapshot.settings.organizer;
+    const organizer = organizerWithTmdb(store);
     const source = store.source(organizer.sourceId);
     if (!source) throw new HttpError(400, '请选择用于整理的 115/123 来源账号');
     if (source.type !== '115' && source.type !== '123') {
       throw new HttpError(400, '网盘整理仅支持 115 或 123 原生账号');
     }
+    if (!organizerLibrary(store, organizer)) throw new HttpError(400, '请先创建同来源的媒体库，整理后必须同步 STRM');
     try {
       const batch = await scanCloudOrganizer(organizer, clientForSource(source));
       res.json(batch);
@@ -1029,20 +1043,20 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/organize/execute', async (req, res) => {
     const body = parseBody(organizeExecuteSchema, req.body);
-    const organizer = store.snapshot.settings.organizer;
+    const organizer = organizerWithTmdb(store);
     const source = store.source(organizer.sourceId);
     if (!source) throw new HttpError(400, '整理来源账号不存在');
+    const library = organizerLibrary(store, organizer);
+    if (!library) throw new HttpError(400, '请先创建同来源的媒体库，整理后必须同步 STRM');
     try {
       const result = await executeCloudOrganizerBatch(body.batchId, clientForSource(source), organizer);
       let runId: string | null = null;
       let syncError = '';
-      if (organizer.libraryId) {
-        try {
-          const run = await runner.start(organizer.libraryId, 'manual');
-          runId = run.id;
-        } catch (error) {
-          syncError = error instanceof Error ? error.message : String(error);
-        }
+      try {
+        const run = await runner.start(library.id, 'manual');
+        runId = run.id;
+      } catch (error) {
+        syncError = error instanceof Error ? error.message : String(error);
       }
       res.json({ ...result, runId, syncError });
     } catch (error) {
@@ -1100,6 +1114,7 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       if (body.subscriptions !== undefined) db.settings.subscriptions = body.subscriptions;
       if (body.cloudDrive !== undefined) db.settings.cloudDrive = body.cloudDrive;
       if (body.metaTube !== undefined) db.settings.metaTube = body.metaTube;
+      if (body.tmdb !== undefined) db.settings.tmdb = body.tmdb;
       if (body.notifications !== undefined) db.settings.notifications = body.notifications;
     });
     store.trimRuns();

@@ -326,7 +326,11 @@ async function existingFor(client: StorageClient, dir: string, mediaType: 'movie
 
 export async function scanCloudOrganizer(settings: OrganizerSettings, client: StorageClient): Promise<OrganizeBatch> {
   if (!settings.sourceId) throw new Error('请先选择来源账号');
-  if (!settings.tmdbApiKey.trim()) throw new Error('请先填写 TMDb API Key');
+  if (!settings.sourcePath.trim()) throw new Error('请选择网盘待整理目录');
+  if (!settings.failedPath.trim()) throw new Error('请选择识别失败目录');
+  if (!settings.redundantPath.trim()) throw new Error('请选择冗余文件目录');
+  if (!settings.libraryPath.trim()) throw new Error('请选择网盘媒体库根目录');
+  if (!settings.tmdbApiKey.trim()) throw new Error('请先在设置中填写 TMDb API Key');
   if (!client.mkdir || !client.move || !client.rename || !client.remove) {
     throw new Error('当前来源不支持网盘整理，请使用 115 或 123 原生账号');
   }

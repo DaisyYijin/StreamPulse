@@ -45,10 +45,10 @@ function createDefaultDatabase(): Database {
       runRetention: config.runRetentionDefault,
       organizer: {
         sourceId: '',
-        sourcePath: '/Inbox',
-        failedPath: '/Failed',
-        redundantPath: '/Redundant',
-        libraryPath: '/Media',
+        sourcePath: '',
+        failedPath: '',
+        redundantPath: '',
+        libraryPath: '',
         libraryId: '',
         mode: 'move',
         upgradeStrategy: 'better',
@@ -80,6 +80,10 @@ function createDefaultDatabase(): Database {
       metaTube: {
         baseUrl: '',
         token: '',
+      },
+      tmdb: {
+        apiKey: '',
+        language: 'zh-CN',
       },
       subscriptions: {
         doubanUserId: '',
@@ -197,6 +201,12 @@ function normalizeDatabase(raw: unknown): Database {
       metaTube: {
         ...base.settings.metaTube,
         ...(input.settings?.metaTube ?? {}),
+      },
+      tmdb: {
+        ...base.settings.tmdb,
+        ...(input.settings?.tmdb ?? {}),
+        apiKey: input.settings?.tmdb?.apiKey || input.settings?.organizer?.tmdbApiKey || base.settings.tmdb.apiKey,
+        language: input.settings?.tmdb?.language || input.settings?.organizer?.tmdbLanguage || base.settings.tmdb.language,
       },
       hdhive: {
         ...base.settings.hdhive,
@@ -369,6 +379,12 @@ export class Store {
         metaTube: {
           ...base.settings.metaTube,
           ...(settings.settings?.metaTube ?? {}),
+        },
+        tmdb: {
+          ...base.settings.tmdb,
+          ...(settings.settings?.tmdb ?? {}),
+          apiKey: settings.settings?.tmdb?.apiKey || settings.settings?.organizer?.tmdbApiKey || base.settings.tmdb.apiKey,
+          language: settings.settings?.tmdb?.language || settings.settings?.organizer?.tmdbLanguage || base.settings.tmdb.language,
         },
         hdhive: {
           ...base.settings.hdhive,

@@ -1,7 +1,7 @@
 import { ArrowRight, FileCode2, FolderInput, FolderOpen, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 import { DirectoryPicker } from '../components/DirectoryPicker';
@@ -25,10 +25,10 @@ interface Batch { id: string; items: OrganizeItem[] }
 
 const EMPTY: OrganizerSettings = {
   sourceId: '',
-  sourcePath: '/Inbox',
-  failedPath: '/Failed',
-  redundantPath: '/Redundant',
-  libraryPath: '/Media',
+  sourcePath: '',
+  failedPath: '',
+  redundantPath: '',
+  libraryPath: '',
   libraryId: '',
   mode: 'move',
   upgradeStrategy: 'better',
@@ -137,7 +137,6 @@ export function OrganizePage() {
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | 'libraryPath' | null>(null);
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
-  const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -159,8 +158,7 @@ export function OrganizePage() {
     void Promise.all([
       api.get<{ settings: Settings }>('/api/settings'),
       api.get<Source[]>('/api/sources'),
-      api.get<Library[]>('/api/libraries'),
-    ]).then(([data, list, libraryList]) => {
+    ]).then(([data, list]) => {
       const organizer = {
         ...EMPTY,
         ...(data.settings.organizer ?? {}),
@@ -170,7 +168,6 @@ export function OrganizePage() {
       setCategoryYaml(toCategoryYaml(organizer.categories));
       setWashYaml(toWashYaml(organizer.washing ?? EMPTY.washing));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
-      setLibraries(libraryList);
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
       .finally(() => setLoading(false));
   }, []);
@@ -252,7 +249,6 @@ export function OrganizePage() {
   const recognize = async () => {
     setRecognizeBusy(true);
     try {
-      await save();
       const result = await api.post<{ parsed: { title: string; year: string; mediaType: string; season: number; episode: number }; tmdb: { id: number } | null }>('/api/organize/recognize', { filename: recognizeName });
       setRecognizeResult({ title: result.parsed.title, year: result.parsed.year, mediaType: result.parsed.mediaType, tmdbId: result.tmdb?.id ?? null });
     } catch (error) {
@@ -277,11 +273,20 @@ export function OrganizePage() {
     }
   };
 
+  const validatePaths = () => {
+    if (!form.sourceId) throw new Error('请选择来源账号');
+    if (!form.sourcePath.trim()) throw new Error('请选择网盘待整理目录');
+    if (!form.failedPath.trim()) throw new Error('请选择识别失败目录');
+    if (!form.redundantPath.trim()) throw new Error('请选择冗余文件目录');
+    if (!form.libraryPath.trim()) throw new Error('请选择网盘媒体库根目录');
+  };
+
   const save = async () => {
     if (categoryError || washError) {
       toast.error('YAML 有错误，修正后才能保存');
       throw new Error('YAML 有错误');
     }
+    validatePaths();
     setSaving(true);
     try {
       await api.patch('/api/settings', { organizer: form });
@@ -298,7 +303,6 @@ export function OrganizePage() {
     setScanning(true);
     setBatch(null);
     try {
-      if (!form.tmdbApiKey.trim()) throw new Error('请填写 TMDb API Key');
       await save();
       const result = await api.post<Batch>('/api/organize/scan');
       setBatch(result);
@@ -383,14 +387,9 @@ export function OrganizePage() {
                 <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('libraryPath')}>选择</Button>
               </div>
             </Field>
-            <Field label="整理后同步媒体库" hint="整理成功后自动触发这个媒体库生成 STRM">
-              <Select value={form.libraryId} onChange={(event) => update('libraryId', event.target.value)}>
-                <option value="">暂不自动同步</option>
-                {libraries.filter((library) => !form.sourceId || library.sourceId === form.sourceId).map((library) => <option key={library.id} value={library.id}>{library.name}</option>)}
-              </Select>
+            <Field label="整理后同步" hint="整理成功后自动同步匹配的媒体库并生成 STRM，无法关闭">
+              <div className="form-callout-inline">自动同步同来源、同一媒体库根目录的媒体库</div>
             </Field>
-            <Field label="TMDb API Key" hint="只保存在 /config/settings.json"><Input type="password" value={form.tmdbApiKey} onChange={(event) => update('tmdbApiKey', event.target.value)} placeholder="TMDb API Key" autoComplete="off" /></Field>
-            <Field label="TMDb 语言"><Input value={form.tmdbLanguage} onChange={(event) => update('tmdbLanguage', event.target.value)} placeholder="zh-CN" /></Field>
             <Field label="识别测试" hint="输入实际文件名，不移动文件">
               <div className="input-with-icon">
                 <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
