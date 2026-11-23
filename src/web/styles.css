@@ -6540,3 +6540,88 @@ html[data-theme='light'] .live-log-line.error .live-log-level {
   font-size: 10px;
   line-height: 1.5;
 }
+
+.tab-help {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+
+.tab-help-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.tab-help-title svg {
+  color: var(--lime);
+}
+
+.tab-help-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px 16px;
+}
+
+.tab-help-grid > div {
+  display: grid;
+  gap: 2px;
+}
+
+.tab-help-grid strong {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.tab-help-grid p,
+.tab-help-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.6;
+}
+
+.tab-help code {
+  color: var(--lime);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.tab-help-vars {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.tab-help-vars > span {
+  margin-right: 3px;
+  color: var(--dim);
+  font-size: 9px;
+}
+
+.tab-help-vars code {
+  padding: 2px 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 8.5px;
+}
+
+html[data-theme='light'] .tab-help {
+  background: #f7faf4;
+}
+
+@media (max-width: 900px) {
+  .tab-help-grid {
+    grid-template-columns: 1fr;
+  }
+}

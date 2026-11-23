@@ -403,6 +403,31 @@ export function OrganizePage() {
           <div className="panel-head">
             <div><h2>重命名规则</h2><p>先按规则生成文件夹和文件名，再移动到媒体库；文件夹不存在会自动创建。</p></div>
           </div>
+          <div className="tab-help">
+            <div className="tab-help-title"><HelpCircle size={15} /> 重命名说明</div>
+            <div className="tab-help-grid">
+              <div>
+                <strong>文件夹模板</strong>
+                <p>决定媒体库里的目标文件夹。可以用 <code>/</code> 多级目录，例如剧集按季分目录。</p>
+              </div>
+              <div>
+                <strong>文件模板</strong>
+                <p>决定最终文件名；模板没写扩展名时自动补原文件扩展名。</p>
+              </div>
+              <div>
+                <strong>条件块</strong>
+                <p><code>&lt;.&#123;resource_pix&#125;&gt;</code> 只有在变量非空时才输出，适合可选画质/编码/小组。</p>
+              </div>
+              <div>
+                <strong>执行顺序</strong>
+                <p>创建目标文件夹 → 重命名文件 → 移动到媒体库 → 生成 STRM。</p>
+              </div>
+            </div>
+            <div className="tab-help-vars">
+              <span>可用变量</span>
+              {['{title}', '{year}', '{season}', '{episode}', '{quality}', '{category}', '{ext}', '{resource_pix}', '{resource_type}', '{resource_effect}', '{video_encode}', '{audio_encode}', '{resource_team}', '{first_letter}', '{fps}', '{resource_version}'].map((item) => <code key={item}>{item}</code>)}
+            </div>
+          </div>
           <div className="form-grid two-col">
             <Field label="电影文件夹" hint="支持 / 多级目录；例如 {title} ({year})"><Input value={form.movieFolderTemplate} onChange={(event) => update('movieFolderTemplate', event.target.value)} className="mono-input" /></Field>
             <Field label="电影文件" hint="不带扩展名时自动补原扩展名"><Input value={form.movieFileTemplate} onChange={(event) => update('movieFileTemplate', event.target.value)} className="mono-input" /></Field>
@@ -427,6 +452,16 @@ export function OrganizePage() {
               <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => setCategoryMode('simple')}>简单表单</button>
               <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); setCategoryYaml(toCategoryYaml(form.categories)); }}>高级 YAML</button>
             </div>
+          </div>
+          <div className="tab-help">
+            <div className="tab-help-title"><HelpCircle size={15} /> 分类匹配说明</div>
+            <div className="tab-help-grid">
+              <div><strong>从上到下</strong><p>按列表顺序匹配，命中第一个分类就停止；最后应保留一个“其他”兜底。</p></div>
+              <div><strong>字段之间</strong><p>同一分类里的类型、国家、语言、关键词是 AND，需要同时满足。</p></div>
+              <div><strong>字段内部</strong><p>一个字段填多个值是 OR，例如类型填 <code>Action, Adventure</code>。</p></div>
+              <div><strong>目录</strong><p>分类目录会自动创建在媒体库根目录下，不需要填写云盘 CID。</p></div>
+            </div>
+            <p className="tab-help-note">例如“国产剧”可以设置：类型=剧集，国家=CN, TW, HK。没有命中任何条件时进入“其他”。</p>
           </div>
           {categoryMode === 'simple' ? (
             <div className="simple-category-list">
@@ -491,6 +526,16 @@ export function OrganizePage() {
               <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单表单</button>
               <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => { setWashMode('yaml'); setWashYaml(toWashYaml(form.washing)); }}>高级 YAML</button>
             </div>
+          </div>
+          <div className="tab-help">
+            <div className="tab-help-title"><HelpCircle size={15} /> 洗版说明</div>
+            <div className="tab-help-grid">
+              <div><strong>关闭 / 更好 / 总是</strong><p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。</p></div>
+              <div><strong>按体积</strong><p><code>max_size</code> 保留更大版本，<code>min_size</code> 保留更小版本。</p></div>
+              <div><strong>权重洗版</strong><p>按分辨率、片源、HDR、编码、体积打分；分差达到阈值才替换。</p></div>
+              <div><strong>保护条件</strong><p>最低覆盖率避免信息不足误判；必须/排除条件用于字幕、DV、片源等硬性要求。</p></div>
+            </div>
+            <p className="tab-help-note">高级 YAML 右侧可以输入现有/候选文件名做模拟比较，结果不会移动任何文件。</p>
           </div>
           {washMode === 'simple' ? (
             <div className="simple-wash">

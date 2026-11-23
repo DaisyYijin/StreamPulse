@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.33.0] - 2026-11-23
+
+### Added
+
+- Inline help panels on the rename, secondary-category and wash tabs, including
+  variable lists, matching rules and wash-mode explanations.
+
 ## [1.32.2] - 2026-11-23
 
 ### Fixed
