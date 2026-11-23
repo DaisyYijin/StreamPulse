@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.36.1] - 2026-11-23
+
+### Changed
+
+- Organizer settings can be saved before choosing a source account or directories.
+  Source and directory validation now happens only when starting a scan.
+
 ## [1.36.0] - 2026-11-23
 
 ### Changed

@@ -475,25 +475,18 @@ export function OrganizePage() {
     }
   };
 
-  const validatePaths = () => {
-    if (!form.sourceId) throw new Error('请选择来源账号');
-    if (!form.sourcePath.trim()) throw new Error('请选择网盘待整理目录');
-    if (!form.failedPath.trim()) throw new Error('请选择识别失败目录');
-    if (!form.redundantPath.trim()) throw new Error('请选择冗余文件目录');
-    if (!form.libraryPath.trim()) throw new Error('请选择网盘媒体库根目录');
+  const validateForScan = () => {
+    if (!form.sourceId) throw new Error('扫描前请选择来源账号');
+    if (!form.sourcePath.trim()) throw new Error('扫描前请选择网盘待整理目录');
+    if (!form.failedPath.trim()) throw new Error('扫描前请选择识别失败目录');
+    if (!form.redundantPath.trim()) throw new Error('扫描前请选择冗余文件目录');
+    if (!form.libraryPath.trim()) throw new Error('扫描前请选择网盘媒体库根目录');
   };
 
   const save = async () => {
     if (categoryError || washError) {
       toast.error('YAML 有错误，修正后才能保存');
       throw new Error('YAML 有错误');
-    }
-    try {
-      validatePaths();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : '请先完成目录选择';
-      toast.error(message);
-      throw error;
     }
     setSaving(true);
     try {
@@ -517,6 +510,7 @@ export function OrganizePage() {
     setScanning(true);
     setBatch(null);
     try {
+      validateForScan();
       await save();
       const result = await api.post<Batch>('/api/organize/scan');
       setBatch(result);

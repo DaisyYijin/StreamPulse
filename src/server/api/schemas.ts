@@ -195,11 +195,11 @@ const washSchema = z.object({
 });
 
 const organizerSchema = z.object({
-  sourceId: z.string().trim().min(1, '请选择来源账号'),
-  sourcePath: z.string().trim().min(1).max(2000),
-  failedPath: z.string().trim().min(1).max(2000),
-  redundantPath: z.string().trim().min(1).max(2000),
-  libraryPath: z.string().trim().min(1).max(2000),
+  sourceId: z.string().trim().max(120).default(''),
+  sourcePath: z.string().trim().max(2000).default(''),
+  failedPath: z.string().trim().max(2000).default(''),
+  redundantPath: z.string().trim().max(2000).default(''),
+  libraryPath: z.string().trim().max(2000).default(''),
   libraryId: z.string().trim().max(120).optional().default(''),
   mode: z.literal('move'),
   upgradeStrategy: z.enum(['off', 'better', 'always', 'max_size', 'min_size']),
