@@ -5,6 +5,7 @@ import { normalizeSourcePath } from './core/paths.js';
 import type { StorageClient, StorageEntry } from './storage.js';
 import { searchTmdb, TmdbError, type TmdbInfo } from './tmdb.js';
 import { matchCmsCategory, parseCmsCategories, type CmsCategoryConfig } from './cms-categories.js';
+import { GENRE_NAME_TO_ID } from './genres.js';
 import { makeId } from './types.js';
 
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.ts', '.m2ts', '.flv', '.webm', '.rmvb']);
@@ -191,7 +192,10 @@ function categoryFor(info: TmdbInfo, categories: OrganizeCategory[], filename: s
   const lower = filename.toLowerCase();
   for (const category of categories.filter((item) => item.mediaType === info.mediaType)) {
     const checks: boolean[] = [];
-    if (category.genres.length) checks.push(category.genres.some((genre) => info.genres.some((value) => value.toLowerCase() === genre.toLowerCase())));
+    if (category.genres.length) checks.push(category.genres.some((genre) => {
+      const id = GENRE_NAME_TO_ID[genre] ?? GENRE_NAME_TO_ID[Object.keys(GENRE_NAME_TO_ID).find((name) => name.toLowerCase() === genre.toLowerCase()) ?? ''];
+      return Boolean(id && info.genreIds.includes(id)) || info.genres.some((value) => value.toLowerCase() === genre.toLowerCase());
+    }));
     if (category.countries.length) checks.push(category.countries.some((country) => info.countries.some((value) => value.toUpperCase() === country.toUpperCase())));
     if (category.languages.length) checks.push(category.languages.some((language) => info.languages.some((value) => value.toLowerCase() === language.toLowerCase())));
     if (category.keywords.length) checks.push(category.keywords.some((keyword) => lower.includes(keyword.toLowerCase()) || info.title.toLowerCase().includes(keyword.toLowerCase())));

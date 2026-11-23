@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { renderTemplate } from './organizer.js';
+import { GENRE_NAME_TO_ID } from './genres.js';
 
 describe('organizer rename template', () => {
   it('renders variables', () => {
@@ -24,5 +25,12 @@ describe('rename template syntax', () => {
   it('cleans repeated and trailing separators', () => {
     expect(renderTemplate('{title}.{year}', { title: 'Iron Man', year: '' })).toBe('Iron Man');
     expect(renderTemplate('{title}..-{year}', { title: 'Iron Man', year: '2008' })).toBe('Iron Man-2008');
+  });
+});
+
+describe('simple genre matching', () => {
+  it('maps English genre names to TMDb IDs', () => {
+    expect(GENRE_NAME_TO_ID.Animation).toBe(16);
+    expect(GENRE_NAME_TO_ID['Science Fiction']).toBe(878);
   });
 });

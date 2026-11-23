@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.42.1] - 2026-11-23
+
+### Fixed
+
+- Simple category genre matching now maps English TMDb genre names such as
+  `Animation` to genre IDs, so localized TMDb responses cannot break matching.
+
 ## [1.42.0] - 2026-11-23
 
 ### Changed
