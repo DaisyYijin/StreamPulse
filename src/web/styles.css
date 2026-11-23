@@ -6791,3 +6791,49 @@ html[data-theme='light'] .template-variable-popover {
   font-family: var(--mono);
   font-size: 9px;
 }
+
+.template-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+}
+
+.template-presets > span {
+  margin-right: 3px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.template-presets button {
+  padding: 4px 9px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 9.5px;
+}
+
+.template-presets button:hover {
+  color: var(--lime);
+  border-color: var(--lime-dim);
+}
+
+.template-presets button.active {
+  border-color: var(--lime);
+  background: var(--lime-soft);
+  color: var(--lime);
+}
+
+.template-presets em {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 8.5px;
+  font-style: normal;
+}

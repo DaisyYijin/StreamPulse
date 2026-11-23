@@ -43,6 +43,30 @@ const EMPTY: OrganizerSettings = {
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
 };
 
+const RENAME_PRESETS = {
+  compact: {
+    label: '精简',
+    movieFolderTemplate: '{title}',
+    movieFileTemplate: '{title}',
+    tvFolderTemplate: '{title}/Season {season}',
+    tvFileTemplate: '{title}.S{season}E{episode}',
+  },
+  standard: {
+    label: '标准',
+    movieFolderTemplate: '{title} ({year})',
+    movieFileTemplate: '{title} ({year}){quality}',
+    tvFolderTemplate: '{title} ({year})/Season {season}',
+    tvFileTemplate: '{title}.S{season}E{episode}{quality}',
+  },
+  detailed: {
+    label: '详细',
+    movieFolderTemplate: '{first_letter}/{title} ({year})',
+    movieFileTemplate: '{title}.{year}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>',
+    tvFolderTemplate: '{first_letter}/{title} ({year})/Season {season}',
+    tvFileTemplate: '{title}.S{season}E{episode}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>',
+  },
+} as const;
+
 const ACTION_LABEL: Record<OrganizeItem['action'], string> = {
   create: '新增', upgrade: '洗版', skip: '跳过', error: '失败',
 };
@@ -340,6 +364,7 @@ export function OrganizePage() {
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTopic, setHelpTopic] = useState<'rename' | 'categories' | 'upgrade' | null>(null);
+  const [renamePreset, setRenamePreset] = useState<keyof typeof RENAME_PRESETS>('standard');
   const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
   const [categoryError, setCategoryError] = useState('');
   const [washYaml, setWashYaml] = useState(toWashYaml(EMPTY.washing));
@@ -483,6 +508,19 @@ export function OrganizePage() {
     if (!form.libraryPath.trim()) throw new Error('扫描前请选择网盘媒体库根目录');
   };
 
+  const applyRenamePreset = (key: keyof typeof RENAME_PRESETS) => {
+    const preset = RENAME_PRESETS[key];
+    setRenamePreset(key);
+    setForm((previous) => ({
+      ...previous,
+      movieFolderTemplate: preset.movieFolderTemplate,
+      movieFileTemplate: preset.movieFileTemplate,
+      tvFolderTemplate: preset.tvFolderTemplate,
+      tvFileTemplate: preset.tvFileTemplate,
+    }));
+    toast.success(`已应用${preset.label}模板，保存后生效`);
+  };
+
   const save = async () => {
     if (categoryError || washError) {
       toast.error('YAML 有错误，修正后才能保存');
@@ -612,7 +650,16 @@ export function OrganizePage() {
             <div><h2>重命名规则</h2><p>先按规则生成文件夹和文件名，再移动到媒体库；文件夹不存在会自动创建。</p></div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'rename' ? null : 'rename')}>填写说明</Button>
           </div>
-                    <div className="form-grid two-col">
+          <div className="template-presets">
+            <span>快速模板</span>
+            {(Object.keys(RENAME_PRESETS) as Array<keyof typeof RENAME_PRESETS>).map((key) => (
+              <button key={key} type="button" className={renamePreset === key ? 'active' : ''} onClick={() => applyRenamePreset(key)}>
+                {RENAME_PRESETS[key].label}
+              </button>
+            ))}
+            <em>点击后替换四组模板；仍需保存</em>
+          </div>
+          <div className="form-grid two-col">
             <RenameTemplateField label="电影文件夹" hint="支持 / 多级目录；点击输入框可选择变量" value={form.movieFolderTemplate} onChange={(value) => update('movieFolderTemplate', value)} sampleType="movie" />
             <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" />
             <RenameTemplateField label="剧集文件夹" hint="支持 / 分季；例如 {title} ({year})/Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" />

@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.37.0] - 2026-11-23
+
+### Added
+
+- Rename rule presets: 精简 / 标准 / 详细. One click fills all four movie/TV
+  folder and file templates; save is still required.
+
 ## [1.36.2] - 2026-11-23
 
 ### Removed
