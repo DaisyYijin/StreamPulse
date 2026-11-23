@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.32.1] - 2026-11-23
+
+### Changed
+
+- Removed the remaining “整理后同步” row from the organizer page. Automatic
+  library sync after organizing remains mandatory and runs in the background.
+
 ## [1.32.0] - 2026-11-23
 
 ### Changed

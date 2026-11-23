@@ -387,9 +387,6 @@ export function OrganizePage() {
                 <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('libraryPath')}>选择</Button>
               </div>
             </Field>
-            <Field label="整理后同步" hint="整理成功后自动同步匹配的媒体库并生成 STRM，无法关闭">
-              <div className="form-callout-inline">自动同步同来源、同一媒体库根目录的媒体库</div>
-            </Field>
             <Field label="识别测试" hint="输入实际文件名，不移动文件">
               <div className="input-with-icon">
                 <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
