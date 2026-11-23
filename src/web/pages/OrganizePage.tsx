@@ -1,9 +1,10 @@
-import { ArrowRight, FileCode2, FolderInput, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
+import { ArrowRight, FileCode2, FolderInput, FolderOpen, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type Library, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
+import { DirectoryPicker } from '../components/DirectoryPicker';
 
 type Tab = 'settings' | 'rename' | 'categories' | 'upgrade' | 'results';
 
@@ -133,6 +134,7 @@ export function OrganizePage() {
   const [tab, setTab] = useState<Tab>('settings');
   const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
+  const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | 'libraryPath' | null>(null);
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
   const [libraries, setLibraries] = useState<Library[]>([]);
@@ -357,10 +359,30 @@ export function OrganizePage() {
                 {sources.map((source) => <option key={source.id} value={source.id}>{source.name} · {source.type === '115' ? '115' : '123'}</option>)}
               </Select>
             </Field>
-            <Field label="网盘待整理目录" hint="例如 /Inbox 或 /下载"><Input value={form.sourcePath} onChange={(event) => update('sourcePath', event.target.value)} placeholder="/Inbox" /></Field>
-            <Field label="识别失败目录" hint="TMDb 识别失败的视频会移到这里"><Input value={form.failedPath} onChange={(event) => update('failedPath', event.target.value)} placeholder="/Failed" /></Field>
-            <Field label="冗余文件目录" hint="目标已有更好版本时，源文件会移到这里"><Input value={form.redundantPath} onChange={(event) => update('redundantPath', event.target.value)} placeholder="/Redundant" /></Field>
-            <Field label="网盘媒体库根目录" hint="例如 /Media；分类会建在它下面"><Input value={form.libraryPath} onChange={(event) => update('libraryPath', event.target.value)} placeholder="/Media" /></Field>
+            <Field label="网盘待整理目录" hint="从网盘目录中选择，也可以手动修改">
+              <div className="path-input">
+                <Input value={form.sourcePath} onChange={(event) => update('sourcePath', event.target.value)} placeholder="/Inbox" />
+                <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('sourcePath')}>选择</Button>
+              </div>
+            </Field>
+            <Field label="识别失败目录" hint="TMDb 识别失败的视频会移到这里">
+              <div className="path-input">
+                <Input value={form.failedPath} onChange={(event) => update('failedPath', event.target.value)} placeholder="/Failed" />
+                <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('failedPath')}>选择</Button>
+              </div>
+            </Field>
+            <Field label="冗余文件目录" hint="目标已有更好版本时，源文件会移到这里">
+              <div className="path-input">
+                <Input value={form.redundantPath} onChange={(event) => update('redundantPath', event.target.value)} placeholder="/Redundant" />
+                <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('redundantPath')}>选择</Button>
+              </div>
+            </Field>
+            <Field label="网盘媒体库根目录" hint="例如 /Media；分类会建在它下面">
+              <div className="path-input">
+                <Input value={form.libraryPath} onChange={(event) => update('libraryPath', event.target.value)} placeholder="/Media" />
+                <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('libraryPath')}>选择</Button>
+              </div>
+            </Field>
             <Field label="整理后同步媒体库" hint="整理成功后自动触发这个媒体库生成 STRM">
               <Select value={form.libraryId} onChange={(event) => update('libraryId', event.target.value)}>
                 <option value="">暂不自动同步</option>
@@ -578,6 +600,18 @@ export function OrganizePage() {
           ) : null}
         </div>
       ) : null}
+
+      <DirectoryPicker
+        open={pickerField !== null}
+        sourceId={form.sourceId}
+        sourceName={sources.find((source) => source.id === form.sourceId)?.name ?? ''}
+        initialPath={pickerField ? form[pickerField] || '/' : '/'}
+        onClose={() => setPickerField(null)}
+        onSelect={(path) => {
+          if (pickerField) update(pickerField, path);
+          setPickerField(null);
+        }}
+      />
 
       <Modal open={helpOpen} onClose={() => setHelpOpen(false)} title="整理规则说明" description="二级分类、洗版策略和目录规范。" footer={<Button variant="secondary" onClick={() => setHelpOpen(false)}>关闭</Button>}>
         <div className="rule-help">

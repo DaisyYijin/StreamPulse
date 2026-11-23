@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.31.0] - 2026-11-23
+
+### Added
+
+- Directory picker buttons for the organizer source, failed, redundant and
+  media library paths. The selected source account is used for browsing.
+
 ## [1.30.2] - 2026-11-23
 
 ### Changed
