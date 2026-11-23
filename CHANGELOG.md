@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.48.0] - 2026-11-24
+
+### Changed
+
+- Organizer source accounts are now tabs instead of a dropdown.
+- Removed the organizer target-library selector and recognition test.
+- AV detailed rename templates no longer insert dots and keep the AV title.
+
 ## [1.47.0] - 2026-11-23
 
 ### Added

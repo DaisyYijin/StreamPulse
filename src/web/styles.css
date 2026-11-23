@@ -7179,3 +7179,50 @@ html[data-theme='light'] .genre-picker-menu {
   color: #f0b3ff;
   border-color: rgba(240, 179, 255, 0.3);
 }
+
+.source-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.source-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  text-align: left;
+}
+
+.source-tabs button strong {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.source-tabs button span {
+  color: var(--dim);
+  font-size: 8px;
+}
+
+.source-tabs button:hover {
+  border-color: var(--lime-dim);
+  color: var(--text-soft);
+}
+
+.source-tabs button.active {
+  border-color: var(--lime);
+  background: var(--lime-soft);
+  color: var(--lime);
+}
+
+.source-tabs button.active span {
+  color: var(--lime);
+}

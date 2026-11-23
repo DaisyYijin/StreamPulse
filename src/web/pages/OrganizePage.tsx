@@ -303,7 +303,7 @@ const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile
   avFile: [
     { label: '精简', value: '{title}' },
     { label: '标准', value: '{title}-{resource_pix}' },
-    { label: '详细', value: '{title}-{resource_pix}<.-{resource_team}>' },
+    { label: '详细', value: '{title}-{resource_pix}<{-resource_team}>' },
   ],
   tvFile: [
     { label: '精简', value: '{title}.S{season}E{episode}' },
@@ -632,9 +632,6 @@ export function OrganizePage() {
   const [washError, setWashError] = useState('');
   const [simExisting, setSimExisting] = useState('Movie.2024.1080p.WEB-DL.mkv');
   const [simCandidate, setSimCandidate] = useState('Movie.2024.2160p.BluRay.HEVC.mkv');
-  const [recognizeName, setRecognizeName] = useState('Movie.2024.2160p.BluRay.HEVC.mkv');
-  const [recognizeBusy, setRecognizeBusy] = useState(false);
-  const [recognizeResult, setRecognizeResult] = useState<{ title: string; year: string; mediaType: string; tmdbId: number | null } | null>(null);
   const [simResult, setSimResult] = useState<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number } | null>(null);
 
   const changeTab = (next: Tab) => {
@@ -745,18 +742,6 @@ export function OrganizePage() {
     }
   };
 
-  const recognize = async () => {
-    setRecognizeBusy(true);
-    try {
-      const result = await api.post<{ parsed: { title: string; year: string; mediaType: string; season: number; episode: number }; tmdb: { id: number } | null }>('/api/organize/recognize', { filename: recognizeName });
-      setRecognizeResult({ title: result.parsed.title, year: result.parsed.year, mediaType: result.parsed.mediaType, tmdbId: result.tmdb?.id ?? null });
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '识别测试失败');
-    } finally {
-      setRecognizeBusy(false);
-    }
-  };
-
   const simulateWash = async () => {
     try {
       await save();
@@ -859,13 +844,26 @@ export function OrganizePage() {
       {tab === 'settings' ? (
         <div className="panel">
           <div className="panel-head"><div><h2>基本设置</h2><p>待整理目录和媒体库目录都在同一个 115 / 123 账号内。</p></div></div>
+          <div className="source-tabs" role="tablist" aria-label="选择网盘账号">
+            {sources.length === 0 ? <p className="settings-hint">还没有 115 / 123 账号，请先到“来源”添加。</p> : null}
+            {sources.map((source) => (
+              <button
+                key={source.id}
+                type="button"
+                role="tab"
+                aria-selected={form.sourceId === source.id}
+                className={form.sourceId === source.id ? 'active' : ''}
+                onClick={() => {
+                  const library = libraries.find((item) => item.id === form.libraryId);
+                  setForm((previous) => ({ ...previous, sourceId: source.id, ...(library && library.sourceId !== source.id ? { libraryId: '', libraryPath: '' } : {}) }));
+                }}
+              >
+                <strong>{source.name}</strong>
+                <span>{source.type === '115' ? '115' : '123'}</span>
+              </button>
+            ))}
+          </div>
           <div className="form-grid two-col">
-            <Field label="来源账号" hint="仅支持 115 / 123 原生账号">
-              <Select value={form.sourceId} onChange={(event) => { const sourceId = event.target.value; setForm((previous) => { const library = libraries.find((item) => item.id === previous.libraryId); return { ...previous, sourceId, ...(library && library.sourceId !== sourceId ? { libraryId: '', libraryPath: '' } : {}) }; }); }}>
-                <option value="">请选择账号</option>
-                {sources.map((source) => <option key={source.id} value={source.id}>{source.name} · {source.type === '115' ? '115' : '123'}</option>)}
-              </Select>
-            </Field>
             <Field label="网盘待整理目录" hint="从网盘目录中选择，也可以手动修改">
               <div className="path-input">
                 <Input value={form.sourcePath} onChange={(event) => update('sourcePath', event.target.value)} placeholder="/Inbox" />
@@ -882,27 +880,6 @@ export function OrganizePage() {
               <div className="path-input">
                 <Input value={form.redundantPath} onChange={(event) => update('redundantPath', event.target.value)} placeholder="/Redundant" />
                 <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('redundantPath')}>选择</Button>
-              </div>
-            </Field>
-            <Field label="目标媒体库" hint="根目录在“媒体库”里设置，这里只选择使用哪个库">
-              <Select
-                value={form.libraryId}
-                onChange={(event) => {
-                  const library = libraries.find((item) => item.id === event.target.value);
-                  setForm((previous) => ({ ...previous, libraryId: library?.id ?? '', libraryPath: library?.sourcePath ?? '' }));
-                }}
-              >
-                <option value="">自动选择同来源媒体库</option>
-                {libraries.filter((library) => library.sourceId === form.sourceId).map((library) => (
-                  <option key={library.id} value={library.id}>{library.name} · {library.sourcePath}</option>
-                ))}
-              </Select>
-            </Field>
-            <Field label="识别测试" hint="输入实际文件名，不移动文件">
-              <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
-              <div className="inline-action">
-                <Button type="button" variant="secondary" size="sm" loading={recognizeBusy} onClick={() => void recognize()}>测试识别</Button>
-                {recognizeResult ? <span>{recognizeResult.title} ({recognizeResult.year}) · {recognizeResult.mediaType} · TMDb {recognizeResult.tmdbId ?? '未匹配'}</span> : null}
               </div>
             </Field>
           </div>
@@ -1132,7 +1109,7 @@ export function OrganizePage() {
               <li><strong>待整理目录</strong>：扫描视频的来源，例如 /Inbox。</li>
               <li><strong>识别失败目录</strong>：TMDb 找不到或解析失败的视频移到这里。</li>
               <li><strong>冗余文件目录</strong>：目标已有更好版本时，源文件移到这里。</li>
-              <li><strong>媒体库根目录</strong>：在“媒体库”页面设置；整理页只选择目标媒体库。</li>
+              <li><strong>媒体库根目录</strong>：在“媒体库”页面设置；整理时自动使用同来源媒体库的根目录。</li>
             </ul>
           </section>
           <section>
