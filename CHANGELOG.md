@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.40.0] - 2026-11-23
+
+### Changed
+
+- Secondary categories now have only two modes: 简单模式 and YAML 模式.
+- YAML mode uses the CMS category syntax directly; the old intermediate
+  “简单分类 / CMS 语法” switch was removed.
+
 ## [1.39.0] - 2026-11-23
 
 ### Changed

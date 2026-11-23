@@ -72,33 +72,6 @@ const ACTION_LABEL: Record<OrganizeItem['action'], string> = {
   create: '新增', upgrade: '洗版', skip: '跳过', error: '失败',
 };
 
-function toCategoryYaml(categories: OrganizeCategory[]): string {
-  return stringifyYaml({ categories: categories.map(({ id: _id, ...rest }) => rest) }, { lineWidth: 0 });
-}
-
-function fromCategoryYaml(text: string): OrganizeCategory[] {
-  const document = parseYaml(text) as { categories?: unknown } | null;
-  if (!document || !Array.isArray(document.categories)) throw new Error('YAML 需要 categories 列表');
-  if (document.categories.length === 0) throw new Error('至少需要一个分类');
-  return document.categories.map((raw, index) => {
-    const item = (raw ?? {}) as Record<string, unknown>;
-    const name = String(item.name ?? '').trim();
-    if (!name) throw new Error(`第 ${index + 1} 个分类缺少 name`);
-    const mediaType = item.mediaType === 'tv' ? 'tv' : item.mediaType === 'movie' ? 'movie' : null;
-    if (!mediaType) throw new Error(`分类「${name}」的 mediaType 必须是 movie 或 tv`);
-    const strings = (value: unknown): string[] => Array.isArray(value) ? value.map(String).map((v) => v.trim()).filter(Boolean) : [];
-    return {
-      id: `cat_${index}_${name}`,
-      name,
-      mediaType,
-      genres: strings(item.genres),
-      countries: strings(item.countries),
-      languages: strings(item.languages),
-      keywords: strings(item.keywords),
-    };
-  });
-}
-
 function toWashYaml(washing: WashConfig): string {
   return stringifyYaml({
     mode: washing.mode,
@@ -381,10 +354,6 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
   );
 }
 
-function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
-  return <span className={`category-type ${type}`}>{type === 'movie' ? '电影' : '剧集'}</span>;
-}
-
 export function OrganizePage() {
   const [tab, setTab] = useState<Tab>(() => {
     try {
@@ -407,8 +376,6 @@ export function OrganizePage() {
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTopic, setHelpTopic] = useState<'rename' | 'categories' | 'upgrade' | null>(null);
-  const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
-  const [categoryError, setCategoryError] = useState('');
   const [washYaml, setWashYaml] = useState(toWashYaml(EMPTY.washing));
   const [washError, setWashError] = useState('');
   const [simExisting, setSimExisting] = useState('Movie.2024.1080p.WEB-DL.mkv');
@@ -434,8 +401,8 @@ export function OrganizePage() {
         categories: data.settings.organizer?.categories?.length ? data.settings.organizer.categories : DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       };
       setForm(organizer);
-      setCategoryYaml(toCategoryYaml(organizer.categories));
       setCmsYaml(organizer.cmsCategories ?? '');
+      setCategoryMode(organizer.categoryFormat === 'cms' ? 'yaml' : 'simple');
       setWashYaml(toWashYaml(organizer.washing ?? EMPTY.washing));
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
@@ -446,43 +413,27 @@ export function OrganizePage() {
     setForm((previous) => ({ ...previous, [key]: value }));
   };
 
-  const changeCategoryYaml = (text: string) => {
-    setCategoryYaml(text);
-    try {
-      const categories = fromCategoryYaml(text);
-      setForm((previous) => ({ ...previous, categories }));
-      setCategoryError('');
-    } catch (error) {
-      setCategoryError(error instanceof Error ? error.message : 'YAML 解析失败');
-    }
+  const updateCategory = (index: number, patch: Partial<OrganizeCategory>) => {
+    setForm((previous) => ({
+      ...previous,
+      categories: previous.categories.map((category, current) => current === index ? { ...category, ...patch } : category),
+    }));
   };
 
   const resetCategories = () => {
-    const categories = DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category }));
-    setForm((previous) => ({ ...previous, categories }));
-    setCategoryYaml(toCategoryYaml(categories));
-    setCategoryError('');
-    toast.success('已恢复默认二级分类，保存后生效');
+    setForm((previous) => ({ ...previous, categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })) }));
+    toast.success('已恢复默认简单分类');
   };
 
   const resetWashing = () => {
-    const washing = EMPTY.washing;
-    setForm((previous) => ({ ...previous, washing }));
-    setWashYaml(toWashYaml(washing));
-    setWashError('');
-    toast.success('已恢复默认洗版策略，保存后生效');
-  };
-
-  const updateCategory = (index: number, patch: Partial<OrganizeCategory>) => {
-    const categories = form.categories.map((category, current) => current === index ? { ...category, ...patch } : category);
-    setForm((previous) => ({ ...previous, categories }));
-    setCategoryYaml(toCategoryYaml(categories));
+    setForm((previous) => ({ ...previous, washing: EMPTY.washing }));
+    setWashYaml(toWashYaml(EMPTY.washing));
+    toast.success('已恢复默认洗版策略');
   };
 
   const addCategory = () => {
     const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: '新分类', mediaType: 'movie' as const, genres: [], countries: [], languages: [], keywords: [] }];
     setForm((previous) => ({ ...previous, categories }));
-    setCategoryYaml(toCategoryYaml(categories));
   };
 
   const removeCategory = (index: number) => {
@@ -492,7 +443,6 @@ export function OrganizePage() {
     }
     const categories = form.categories.filter((_, current) => current !== index);
     setForm((previous) => ({ ...previous, categories }));
-    setCategoryYaml(toCategoryYaml(categories));
   };
 
   const updateWash = (patch: Partial<WashConfig>) => {
@@ -552,7 +502,7 @@ export function OrganizePage() {
   };
 
   const save = async () => {
-    if (categoryError || washError) {
+    if (washError) {
       toast.error('YAML 有错误，修正后才能保存');
       throw new Error('YAML 有错误');
     }
@@ -562,7 +512,6 @@ export function OrganizePage() {
       const saved = response.settings.organizer;
       if (saved) {
         setForm(saved);
-        setCategoryYaml(toCategoryYaml(saved.categories));
         setWashYaml(toWashYaml(saved.washing));
       }
       toast.success('整理设置已保存');
@@ -693,21 +642,13 @@ export function OrganizePage() {
         <div className="panel">
           <div className="panel-head">
             <div><h2>二级分类</h2><p>按类型、国家、语言、关键词匹配；不匹配进入“其他”。</p></div>
-            <div className="category-format-switch">
-              <div className="editor-switch">
-                <button type="button" className={form.categoryFormat === 'simple' ? 'active' : ''} onClick={() => update('categoryFormat', 'simple')}>简单分类</button>
-                <button type="button" className={form.categoryFormat === 'cms' ? 'active' : ''} onClick={() => update('categoryFormat', 'cms')}>CMS 语法</button>
-              </div>
-              {form.categoryFormat === 'simple' ? (
-                <div className="editor-switch">
-                  <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => setCategoryMode('simple')}>表单</button>
-                  <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); setCategoryYaml(toCategoryYaml(form.categories)); }}>YAML</button>
-                </div>
-              ) : null}
+            <div className="editor-switch">
+              <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => { setCategoryMode('simple'); update('categoryFormat', 'simple'); }}>简单模式</button>
+              <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); update('categoryFormat', 'cms'); }}>YAML 模式</button>
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
           </div>
-                    {form.categoryFormat === 'cms' ? (
+                    {categoryMode === 'yaml' ? (
             <div className="cms-category-editor">
               <textarea
                 className="yaml-editor"
@@ -726,7 +667,7 @@ export function OrganizePage() {
                 <p>不写条件的分类作为兜底；没有命中时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</p>
               </div>
             </div>
-          ) : categoryMode === 'simple' ? (
+          ) : (
             <div className="simple-category-list">
               {form.categories.map((category, index) => (
                 <div className="simple-category-row" key={category.id}>
@@ -749,33 +690,6 @@ export function OrganizePage() {
                 <Button type="button" variant="ghost" size="sm" onClick={resetCategories}>恢复默认</Button>
               </div>
               <p className="settings-hint">同一分类内多个字段是 AND，字段内多个值是 OR；从上到下匹配，最后“其他”兜底。分类目录会自动创建，不需要填写云盘 CID。</p>
-            </div>
-          ) : (
-            <div className="yaml-layout">
-              <div className="yaml-editor-wrap">
-                <div className="yaml-editor-head"><FileCode2 size={14} />categories.yaml <button type="button" className="yaml-reset" onClick={resetCategories}>恢复默认</button></div>
-                <textarea className="yaml-editor" value={categoryYaml} onChange={(event) => changeCategoryYaml(event.target.value)} spellCheck={false} />
-                {categoryError ? <div className="yaml-error">{categoryError}</div> : <div className="yaml-ok">YAML 有效 · {form.categories.length} 个分类</div>}
-              </div>
-              <div className="yaml-preview">
-                <div className="yaml-preview-head">可视化分类</div>
-                {form.categories.length === 0 ? <p className="empty-note">暂无分类。</p> : null}
-                {form.categories.map((category) => (
-                  <div className="category-preview" key={category.id}>
-                    <div className="category-preview-top">
-                      <strong>{category.name}</strong>
-                      <BadgeCategory type={category.mediaType} />
-                    </div>
-                    <div className="category-chips">
-                      {category.genres.map((value) => <span key={`g-${value}`}>类型 · {value}</span>)}
-                      {category.countries.map((value) => <span key={`c-${value}`}>国家 · {value}</span>)}
-                      {category.languages.map((value) => <span key={`l-${value}`}>语言 · {value}</span>)}
-                      {category.keywords.map((value) => <span key={`k-${value}`}>关键词 · {value}</span>)}
-                      {!category.genres.length && !category.countries.length && !category.languages.length && !category.keywords.length ? <span className="muted">兜底分类</span> : null}
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
         </div>
