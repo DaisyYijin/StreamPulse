@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.42.0] - 2026-11-23
+
+### Changed
+
+- Simple category mode is now split into “电影分类” and “剧集分类” groups,
+  each with its own add button and count. The per-row type selector was removed.
+
 ## [1.41.0] - 2026-11-23
 
 ### Added

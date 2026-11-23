@@ -436,6 +436,7 @@ export function OrganizePage() {
     }
   });
   const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
+  const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv'>('movie');
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | 'libraryPath' | null>(null);
@@ -521,8 +522,8 @@ export function OrganizePage() {
     toast.success('已恢复默认洗版策略');
   };
 
-  const addCategory = () => {
-    const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: '新分类', mediaType: 'movie' as const, genres: [], countries: [], languages: [], keywords: [] }];
+  const addCategory = (mediaType: 'movie' | 'tv') => {
+    const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: mediaType === 'movie' ? '新电影分类' : '新剧集分类', mediaType, genres: [], countries: [], languages: [], keywords: [] }];
     applySimpleCategories(categories);
   };
 
@@ -756,14 +757,20 @@ export function OrganizePage() {
             </div>
           ) : (
             <div className="simple-category-list">
-              {form.categories.map((category, index) => (
+              <div className="simple-category-toolbar">
+                <div className="editor-switch">
+                  <button type="button" className={simpleCategoryType === 'movie' ? 'active' : ''} onClick={() => setSimpleCategoryType('movie')}>电影分类 <span>{form.categories.filter((category) => category.mediaType === 'movie').length}</span></button>
+                  <button type="button" className={simpleCategoryType === 'tv' ? 'active' : ''} onClick={() => setSimpleCategoryType('tv')}>剧集分类 <span>{form.categories.filter((category) => category.mediaType === 'tv').length}</span></button>
+                </div>
+                <Button type="button" variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => addCategory(simpleCategoryType)}>
+                  添加{simpleCategoryType === 'movie' ? '电影' : '剧集'}分类
+                </Button>
+              </div>
+              {form.categories.map((category, index) => category.mediaType !== simpleCategoryType ? null : (
                 <div className="simple-category-row" key={category.id}>
                   <div className="simple-category-name">
+                    <span className={`category-type ${category.mediaType}`}>{category.mediaType === 'movie' ? '电影' : '剧集'}</span>
                     <Input value={category.name} onChange={(event) => updateCategory(index, { name: event.target.value })} placeholder="分类名" />
-                    <Select value={category.mediaType} onChange={(event) => updateCategory(index, { mediaType: event.target.value as 'movie' | 'tv' })}>
-                      <option value="movie">电影</option>
-                      <option value="tv">剧集</option>
-                    </Select>
                   </div>
                   <Input value={category.genres.join(', ')} onChange={(event) => updateCategory(index, { genres: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="类型，如 Action, Adventure" />
                   <Input value={category.countries.join(', ')} onChange={(event) => updateCategory(index, { countries: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="国家，如 CN, US" />
@@ -772,11 +779,13 @@ export function OrganizePage() {
                   <button type="button" className="simple-remove" onClick={() => removeCategory(index)} aria-label="删除分类">×</button>
                 </div>
               ))}
+              {form.categories.filter((category) => category.mediaType === simpleCategoryType).length === 0 ? (
+                <p className="settings-hint">还没有{simpleCategoryType === 'movie' ? '电影' : '剧集'}分类，点击上方按钮添加。</p>
+              ) : null}
               <div className="simple-category-footer">
-                <Button type="button" variant="secondary" size="sm" icon={<Plus size={14} />} onClick={addCategory}>添加分类</Button>
-                <Button type="button" variant="ghost" size="sm" onClick={resetCategories}>恢复默认</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={resetCategories}>恢复默认分类</Button>
               </div>
-              <p className="settings-hint">同一分类内多个字段是 AND，字段内多个值是 OR；从上到下匹配，最后“其他”兜底。分类目录会自动创建，不需要填写云盘 CID。</p>
+              <p className="settings-hint">电影和剧集分类分开管理；同一分类内多个字段是 AND，字段内多个值是 OR；不命中时进入“其他”。</p>
             </div>
           )}
         </div>

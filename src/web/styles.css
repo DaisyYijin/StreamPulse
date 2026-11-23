@@ -6907,3 +6907,27 @@ html[data-theme='light'] .cms-category-preview {
   border-color: var(--lime);
   background: var(--lime-soft);
 }
+
+.simple-category-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.simple-category-toolbar .editor-switch button span {
+  margin-left: 4px;
+  font-size: 8px;
+  opacity: 0.7;
+}
+
+.simple-category-name {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+}
+
+.simple-category-name .category-type {
+  white-space: nowrap;
+}
