@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.34.3] - 2026-11-23
+
+### Fixed
+
+- Clicking a form field label no longer focuses or selects the input; only the
+  input itself receives focus.
+
 ## [1.34.2] - 2026-11-23
 
 ### Fixed

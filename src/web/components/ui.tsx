@@ -97,14 +97,14 @@ export function Field({
   optional?: boolean;
 }) {
   return (
-    <label className={cx('field', className)}>
+    <div className={cx('field', className)}>
       <span className="field-label">
         {label}
         {optional ? <em>可选</em> : null}
       </span>
       {children}
       {error ? <span className="field-error">{error}</span> : hint ? <span className="field-hint">{hint}</span> : null}
-    </label>
+    </div>
   );
 }
 
