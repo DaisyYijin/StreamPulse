@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.30.1] - 2026-11-23
+
+### Fixed
+
+- Light theme coverage for the sidebar pulse, dashboard onboarding/hero cards,
+  next/health cards, activity chart and the live log console.
+
 ## [1.30.0] - 2026-11-22
 
 ### Added

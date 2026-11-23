@@ -6415,3 +6415,115 @@ html[data-theme='light'] .emby-library-panel {
 .live-log-line.info .live-log-level {
   color: #c9ff57;
 }
+
+/* Light theme: dashboard, pulse and live console surfaces */
+html[data-theme='light'] .sidebar-pulse {
+  border-color: var(--line);
+  background:
+    radial-gradient(180px 110px at 20% 0%, rgba(79, 143, 0, 0.09), transparent 72%),
+    linear-gradient(145deg, #ffffff, #f2f7ed);
+}
+
+html[data-theme='light'] .sidebar-pulse-text strong {
+  color: var(--text-soft);
+}
+
+html[data-theme='light'] .sidebar-pulse-text small {
+  color: var(--muted);
+}
+
+html[data-theme='light'] .admin-presence {
+  border-color: #ffffff;
+}
+
+html[data-theme='light'] .onboarding-card {
+  border-color: var(--line);
+  background:
+    radial-gradient(540px 180px at 90% 0%, rgba(79, 143, 0, 0.07), transparent 65%),
+    linear-gradient(110deg, #ffffff, #f1f7ec);
+}
+
+html[data-theme='light'] .hero-card {
+  border-color: var(--line);
+  background:
+    radial-gradient(720px 320px at 78% 8%, rgba(79, 143, 0, 0.08), transparent 66%),
+    radial-gradient(340px 270px at 2% 106%, rgba(20, 122, 101, 0.04), transparent 70%),
+    linear-gradient(155deg, #ffffff 0%, #f3f8ee 70%);
+  box-shadow: var(--shadow);
+}
+
+html[data-theme='light'] .hero-card::before {
+  opacity: 0.55;
+  background-image:
+    linear-gradient(rgba(20, 50, 30, 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 50, 30, 0.045) 1px, transparent 1px);
+}
+
+html[data-theme='light'] .hero-footer {
+  border-top-color: var(--line);
+}
+
+html[data-theme='light'] .side-card {
+  border-color: var(--line);
+  background:
+    radial-gradient(260px 160px at 100% 0%, rgba(79, 143, 0, 0.05), transparent 70%),
+    #ffffff;
+  box-shadow: 0 10px 30px rgba(35, 60, 40, 0.06);
+}
+
+html[data-theme='light'] .next-item strong {
+  color: var(--text-soft);
+}
+
+html[data-theme='light'] .health-ring {
+  background: conic-gradient(var(--lime) var(--value, 100%), #e3ebdf 0);
+}
+
+html[data-theme='light'] .health-ring::before {
+  background: #ffffff;
+}
+
+html[data-theme='light'] .chart-axis {
+  color: var(--dim);
+}
+
+html[data-theme='light'] .activity-chart line {
+  stroke: rgba(20, 50, 30, 0.08);
+}
+
+html[data-theme='light'] .activity-chart circle {
+  fill: #ffffff;
+}
+
+html[data-theme='light'] .activity-chart circle:last-of-type {
+  fill: var(--lime);
+}
+
+html[data-theme='light'] .live-log-list {
+  background: #f7faf4;
+  border-color: var(--line);
+}
+
+html[data-theme='light'] .live-log-line {
+  color: var(--text-soft);
+}
+
+html[data-theme='light'] .live-log-line time {
+  color: var(--dim);
+}
+
+html[data-theme='light'] .live-log-level {
+  color: var(--muted);
+}
+
+html[data-theme='light'] .live-log-line.info .live-log-level {
+  color: var(--lime);
+}
+
+html[data-theme='light'] .live-log-line.warn .live-log-level {
+  color: var(--amber);
+}
+
+html[data-theme='light'] .live-log-line.error .live-log-level {
+  color: var(--red);
+}
