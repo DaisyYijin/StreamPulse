@@ -1,7 +1,7 @@
 import { ArrowRight, FileCode2, FolderInput, FolderOpen, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { DEFAULT_CMS_CATEGORIES, DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
+import { DEFAULT_CMS_CATEGORIES, DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type Library, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 import { DirectoryPicker } from '../components/DirectoryPicker';
@@ -599,9 +599,10 @@ export function OrganizePage() {
   const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv'>('movie');
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
-  const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | 'libraryPath' | null>(null);
+  const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | null>(null);
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
+  const [libraries, setLibraries] = useState<Library[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -627,12 +628,21 @@ export function OrganizePage() {
     void Promise.all([
       api.get<{ settings: Settings }>('/api/settings'),
       api.get<Source[]>('/api/sources'),
-    ]).then(([data, list]) => {
+      api.get<Library[]>('/api/libraries'),
+    ]).then(([data, list, libraryList]) => {
       const organizer = {
         ...EMPTY,
         ...(data.settings.organizer ?? {}),
         categories: data.settings.organizer?.categories?.length ? data.settings.organizer.categories : DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
       };
+      const selectedLibrary = libraryList.find((library) => library.id === organizer.libraryId)
+        ?? libraryList.find((library) => library.sourceId === organizer.sourceId && library.sourcePath === organizer.libraryPath)
+        ?? libraryList.find((library) => library.sourceId === organizer.sourceId);
+      if (selectedLibrary) {
+        organizer.libraryId = selectedLibrary.id;
+        organizer.libraryPath = selectedLibrary.sourcePath;
+      }
+      setLibraries(libraryList);
       setForm(organizer);
       const initialCms = organizer.cmsCategories || simpleCategoriesToCms(organizer.categories);
       organizer.cmsCategories = initialCms;
@@ -749,7 +759,6 @@ export function OrganizePage() {
     if (!form.sourcePath.trim()) throw new Error('扫描前请选择网盘待整理目录');
     if (!form.failedPath.trim()) throw new Error('扫描前请选择识别失败目录');
     if (!form.redundantPath.trim()) throw new Error('扫描前请选择冗余文件目录');
-    if (!form.libraryPath.trim()) throw new Error('扫描前请选择网盘媒体库根目录');
   };
 
   const save = async () => {
@@ -834,7 +843,7 @@ export function OrganizePage() {
           <div className="panel-head"><div><h2>基本设置</h2><p>待整理目录和媒体库目录都在同一个 115 / 123 账号内。</p></div></div>
           <div className="form-grid two-col">
             <Field label="来源账号" hint="仅支持 115 / 123 原生账号">
-              <Select value={form.sourceId} onChange={(event) => update('sourceId', event.target.value)}>
+              <Select value={form.sourceId} onChange={(event) => { const sourceId = event.target.value; setForm((previous) => { const library = libraries.find((item) => item.id === previous.libraryId); return { ...previous, sourceId, ...(library && library.sourceId !== sourceId ? { libraryId: '', libraryPath: '' } : {}) }; }); }}>
                 <option value="">请选择账号</option>
                 {sources.map((source) => <option key={source.id} value={source.id}>{source.name} · {source.type === '115' ? '115' : '123'}</option>)}
               </Select>
@@ -857,11 +866,19 @@ export function OrganizePage() {
                 <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('redundantPath')}>选择</Button>
               </div>
             </Field>
-            <Field label="网盘媒体库根目录" hint="例如 /Media；分类会建在它下面">
-              <div className="path-input">
-                <Input value={form.libraryPath} onChange={(event) => update('libraryPath', event.target.value)} placeholder="/Media" />
-                <Button type="button" variant="secondary" size="sm" icon={<FolderOpen size={14} />} disabled={!form.sourceId} onClick={() => setPickerField('libraryPath')}>选择</Button>
-              </div>
+            <Field label="目标媒体库" hint="根目录在“媒体库”里设置，这里只选择使用哪个库">
+              <Select
+                value={form.libraryId}
+                onChange={(event) => {
+                  const library = libraries.find((item) => item.id === event.target.value);
+                  setForm((previous) => ({ ...previous, libraryId: library?.id ?? '', libraryPath: library?.sourcePath ?? '' }));
+                }}
+              >
+                <option value="">自动选择同来源媒体库</option>
+                {libraries.filter((library) => library.sourceId === form.sourceId).map((library) => (
+                  <option key={library.id} value={library.id}>{library.name} · {library.sourcePath}</option>
+                ))}
+              </Select>
             </Field>
             <Field label="识别测试" hint="输入实际文件名，不移动文件">
               <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
@@ -956,8 +973,8 @@ export function OrganizePage() {
           <div className="panel-head">
             <div><h2>洗版策略</h2><p>简单模式直接选规则；高级模式支持权重、分差、覆盖率和排除条件。</p></div>
             <div className="editor-switch">
-              <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单表单</button>
-              <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => { setWashMode('yaml'); setWashYaml(toWashYaml(form.washing)); }}>高级 YAML</button>
+              <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单模式</button>
+              <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => { setWashMode('yaml'); setWashYaml(toWashYaml(form.washing)); }}>YAML 模式</button>
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'upgrade' ? null : 'upgrade')}>填写说明</Button>
           </div>
@@ -1094,7 +1111,7 @@ export function OrganizePage() {
               <li><strong>待整理目录</strong>：扫描视频的来源，例如 /Inbox。</li>
               <li><strong>识别失败目录</strong>：TMDb 找不到或解析失败的视频移到这里。</li>
               <li><strong>冗余文件目录</strong>：目标已有更好版本时，源文件移到这里。</li>
-              <li><strong>媒体库根目录</strong>：分类和媒体目录会建在它下面，例如 /Media。</li>
+              <li><strong>媒体库根目录</strong>：在“媒体库”页面设置；整理页只选择目标媒体库。</li>
             </ul>
           </section>
           <section>

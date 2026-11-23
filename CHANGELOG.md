@@ -2,6 +2,14 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.45.0] - 2026-11-23
+
+### Changed
+
+- Removed the organizer “网盘媒体库根目录” field. The organizer now selects a
+  configured media library and uses that library’s source path as its root.
+- Wash strategy modes are labelled 简单模式 / YAML 模式.
+
 ## [1.44.0] - 2026-11-23
 
 ### Added

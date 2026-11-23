@@ -87,6 +87,10 @@ function organizerWithTmdb(store: Store) {
 
 function organizerLibrary(store: Store, organizer: ReturnType<typeof organizerWithTmdb>) {
   const candidates = store.snapshot.libraries.filter((library) => library.sourceId === organizer.sourceId);
+  if (organizer.libraryId) {
+    const selected = candidates.find((library) => library.id === organizer.libraryId);
+    if (selected) return selected;
+  }
   const target = normalizeSourcePath(organizer.libraryPath);
   return candidates.find((library) => normalizeSourcePath(library.sourcePath) === target) ?? candidates[0] ?? null;
 }
@@ -1044,11 +1048,12 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
 
   router.post('/organize/execute', async (req, res) => {
     const body = parseBody(organizeExecuteSchema, req.body);
-    const organizer = organizerWithTmdb(store);
-    const source = store.source(organizer.sourceId);
+    const baseOrganizer = organizerWithTmdb(store);
+    const source = store.source(baseOrganizer.sourceId);
     if (!source) throw new HttpError(400, '整理来源账号不存在');
-    const library = organizerLibrary(store, organizer);
+    const library = organizerLibrary(store, baseOrganizer);
     if (!library) throw new HttpError(400, '请先创建同来源的媒体库，整理后必须同步 STRM');
+    const organizer = { ...baseOrganizer, libraryId: library.id, libraryPath: library.sourcePath };
     try {
       const result = await executeCloudOrganizerBatch(body.batchId, clientForSource(source), organizer);
       let runId: string | null = null;
