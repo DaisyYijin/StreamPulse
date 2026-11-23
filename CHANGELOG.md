@@ -2,6 +2,12 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.32.2] - 2026-11-23
+
+### Fixed
+
+- Removed an empty icon slot from the organizer recognition-test input.
+
 ## [1.32.1] - 2026-11-23
 
 ### Changed

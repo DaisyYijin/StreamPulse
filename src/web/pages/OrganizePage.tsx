@@ -388,9 +388,7 @@ export function OrganizePage() {
               </div>
             </Field>
             <Field label="识别测试" hint="输入实际文件名，不移动文件">
-              <div className="input-with-icon">
-                <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
-              </div>
+              <Input value={recognizeName} onChange={(event) => setRecognizeName(event.target.value)} />
               <div className="inline-action">
                 <Button type="button" variant="secondary" size="sm" loading={recognizeBusy} onClick={() => void recognize()}>测试识别</Button>
                 {recognizeResult ? <span>{recognizeResult.title} ({recognizeResult.year}) · {recognizeResult.mediaType} · TMDb {recognizeResult.tmdbId ?? '未匹配'}</span> : null}
