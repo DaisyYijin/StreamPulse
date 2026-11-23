@@ -7,6 +7,7 @@ import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 import { DirectoryPicker } from '../components/DirectoryPicker';
 
 type Tab = 'settings' | 'rename' | 'categories' | 'upgrade' | 'results';
+const ORGANIZE_TAB_KEY = 'sp-organize-tab';
 
 interface OrganizeItem {
   id: string;
@@ -234,7 +235,14 @@ function BadgeCategory({ type }: { type: 'movie' | 'tv' }) {
 }
 
 export function OrganizePage() {
-  const [tab, setTab] = useState<Tab>('settings');
+  const [tab, setTab] = useState<Tab>(() => {
+    try {
+      const stored = localStorage.getItem(ORGANIZE_TAB_KEY);
+      return stored === 'rename' || stored === 'categories' || stored === 'upgrade' || stored === 'results' ? stored : 'settings';
+    } catch {
+      return 'settings';
+    }
+  });
   const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | 'libraryPath' | null>(null);
@@ -246,6 +254,7 @@ export function OrganizePage() {
   const [batch, setBatch] = useState<Batch | null>(null);
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [helpTopic, setHelpTopic] = useState<'rename' | 'categories' | 'upgrade' | null>(null);
   const [categoryYaml, setCategoryYaml] = useState(toCategoryYaml(EMPTY.categories));
   const [categoryError, setCategoryError] = useState('');
   const [washYaml, setWashYaml] = useState(toWashYaml(EMPTY.washing));
@@ -256,6 +265,11 @@ export function OrganizePage() {
   const [recognizeBusy, setRecognizeBusy] = useState(false);
   const [recognizeResult, setRecognizeResult] = useState<{ title: string; year: string; mediaType: string; tmdbId: number | null } | null>(null);
   const [simResult, setSimResult] = useState<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number } | null>(null);
+
+  const changeTab = (next: Tab) => {
+    setTab(next);
+    try { localStorage.setItem(ORGANIZE_TAB_KEY, next); } catch { /* ignore */ }
+  };
 
   useEffect(() => {
     void Promise.all([
@@ -392,7 +406,13 @@ export function OrganizePage() {
     validatePaths();
     setSaving(true);
     try {
-      await api.patch('/api/settings', { organizer: form });
+      const response = await api.patch<{ settings: Settings }>('/api/settings', { organizer: form });
+      const saved = response.settings.organizer;
+      if (saved) {
+        setForm(saved);
+        setCategoryYaml(toCategoryYaml(saved.categories));
+        setWashYaml(toWashYaml(saved.washing));
+      }
       toast.success('整理设置已保存');
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '保存失败');
@@ -409,7 +429,7 @@ export function OrganizePage() {
       await save();
       const result = await api.post<Batch>('/api/organize/scan');
       setBatch(result);
-      setTab('results');
+      changeTab('results');
       toast.success(`扫描完成，共 ${result.items.length} 个视频`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '扫描失败');
@@ -449,11 +469,11 @@ export function OrganizePage() {
       </header>
 
       <div className="settings-tabs" role="tablist" aria-label="整理设置分类">
-        <button role="tab" className={tab === 'settings' ? 'active' : ''} onClick={() => setTab('settings')}><SlidersHorizontal size={15} />基本设置</button>
-        <button role="tab" className={tab === 'rename' ? 'active' : ''} onClick={() => setTab('rename')}><Pencil size={15} />重命名规则</button>
-        <button role="tab" className={tab === 'categories' ? 'active' : ''} onClick={() => setTab('categories')}><Tags size={15} />二级分类 <span>{form.categories.length}</span></button>
-        <button role="tab" className={tab === 'upgrade' ? 'active' : ''} onClick={() => setTab('upgrade')}><WandSparkles size={15} />洗版策略</button>
-        <button role="tab" className={tab === 'results' ? 'active' : ''} onClick={() => setTab('results')}><ScanLine size={15} />扫描结果 {batch ? <span>{batch.items.length}</span> : null}</button>
+        <button role="tab" className={tab === 'settings' ? 'active' : ''} onClick={() => changeTab('settings')}><SlidersHorizontal size={15} />基本设置</button>
+        <button role="tab" className={tab === 'rename' ? 'active' : ''} onClick={() => changeTab('rename')}><Pencil size={15} />重命名规则</button>
+        <button role="tab" className={tab === 'categories' ? 'active' : ''} onClick={() => changeTab('categories')}><Tags size={15} />二级分类 <span>{form.categories.length}</span></button>
+        <button role="tab" className={tab === 'upgrade' ? 'active' : ''} onClick={() => changeTab('upgrade')}><WandSparkles size={15} />洗版策略</button>
+        <button role="tab" className={tab === 'results' ? 'active' : ''} onClick={() => changeTab('results')}><ScanLine size={15} />扫描结果 {batch ? <span>{batch.items.length}</span> : null}</button>
       </div>
 
       {tab === 'settings' ? (
@@ -505,8 +525,9 @@ export function OrganizePage() {
         <div className="panel">
           <div className="panel-head">
             <div><h2>重命名规则</h2><p>先按规则生成文件夹和文件名，再移动到媒体库；文件夹不存在会自动创建。</p></div>
+            <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'rename' ? null : 'rename')}>填写说明</Button>
           </div>
-          <div className="tab-help">
+          {helpTopic === 'rename' ? (<div className="tab-help">
             <div className="tab-help-title"><HelpCircle size={15} /> 重命名说明</div>
             <div className="tab-help-grid">
               <div>
@@ -528,9 +549,26 @@ export function OrganizePage() {
             </div>
             <div className="tab-help-vars">
               <span>可用变量</span>
-              {['{title}', '{year}', '{season}', '{episode}', '{quality}', '{category}', '{ext}', '{resource_pix}', '{resource_type}', '{resource_effect}', '{video_encode}', '{audio_encode}', '{resource_team}', '{first_letter}', '{fps}', '{resource_version}'].map((item) => <code key={item}>{item}</code>)}
+              {['{title}', '{year}', '{season}', '{episode}', '{quality}', '{category}', '{ext}', '{resource_pix}', '{resource_type}', '{resource_effect}', '{video_encode}', '{audio_encode}', '{resource_team}', '{first_letter}', '{fps}', '{resource_version}', '{en_title}', '{tmdb_id}', '{original_name}', '{season_episode}', '{season_num}', '{episode_num}', '{resource_source}'].map((item) => <code key={item}>{item}</code>)}
             </div>
-          </div>
+            <div className="tab-help-syntax">
+              <strong>模板语法</strong>
+              <ul>
+                <li><code>{'{变量名}'}</code> 取变量值；认不出的变量名会原样保留。</li>
+                <li><code>&lt;...{'{变量}'}...&gt;</code> 条件块：块内变量都有值才输出整块。</li>
+                <li><code>[[ ]]</code> 输出真正的花括号。</li>
+                <li><code>/</code> 在文件夹规则里分隔层级，可建多级目录。</li>
+                <li><code>{"{变量.replace('.', ' ')}"}</code> 替换字符；<code>{'{变量.lower()}'}</code> / <code>{'{变量.upper()}'}</code> 转大小写。</li>
+                <li>输出会自动清理连续 <code>.</code> <code>/</code> <code>-</code> 和首尾分隔符，年份为空时不会留下尾巴。</li>
+              </ul>
+            </div>
+            <div className="tab-help-table">
+              <div><strong>基本信息</strong><span><code>{'{title}'}</code> TMDB 标题 / <code>{'{en_title}'}</code> 英文标题 / <code>{'{year}'}</code> 年份 / <code>{'{tmdb_id}'}</code> TMDB ID</span></div>
+              <div><strong>通用</strong><span><code>{'{first_letter}'}</code> 拼音首字母 / <code>{'{ext}'}</code> 扩展名 / <code>{'{original_name}'}</code> 原文件名 / <code>{'{custom_regex_match}'}</code> 自定义正则（可空）</span></div>
+              <div><strong>剧集</strong><span><code>{'{season_episode}'}</code> SxxExx / <code>{'{season_num}'}</code> 季号 / <code>{'{episode_num}'}</code> 集号 / <code>{'{season_name}'}</code> 季名 / <code>{'{season_year}'}</code> 季年份 / <code>{'{episode_name}'}</code> 集名 / <code>{'{disc_num}'}</code> 盘号</span></div>
+              <div><strong>资源信息</strong><span><code>{'{resource_pix}'}</code> 分辨率 / <code>{'{fps}'}</code> 帧率 / <code>{'{resource_version}'}</code> 版本 / <code>{'{resource_source}'}</code> 来源 / <code>{'{resource_type}'}</code> 质量 / <code>{'{resource_effect}'}</code> 特效 / <code>{'{video_encode}'}</code> 视频编码 / <code>{'{audio_encode}'}</code> 音频编码 / <code>{'{resource_team}'}</code> 发布组</span></div>
+            </div>
+          </div>) : null}
           <div className="form-grid two-col">
             <RenameTemplateField label="电影文件夹" hint="支持 / 多级目录；点击输入框可选择变量" value={form.movieFolderTemplate} onChange={(value) => update('movieFolderTemplate', value)} sampleType="movie" />
             <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" />
@@ -555,8 +593,9 @@ export function OrganizePage() {
               <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => setCategoryMode('simple')}>简单表单</button>
               <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); setCategoryYaml(toCategoryYaml(form.categories)); }}>高级 YAML</button>
             </div>
+            <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
           </div>
-          <div className="tab-help">
+          {helpTopic === 'categories' ? (<div className="tab-help">
             <div className="tab-help-title"><HelpCircle size={15} /> 分类匹配说明</div>
             <div className="tab-help-grid">
               <div><strong>从上到下</strong><p>按列表顺序匹配，命中第一个分类就停止；最后应保留一个“其他”兜底。</p></div>
@@ -565,7 +604,7 @@ export function OrganizePage() {
               <div><strong>目录</strong><p>分类目录会自动创建在媒体库根目录下，不需要填写云盘 CID。</p></div>
             </div>
             <p className="tab-help-note">例如“国产剧”可以设置：类型=剧集，国家=CN, TW, HK。没有命中任何条件时进入“其他”。</p>
-          </div>
+          </div>) : null}
           {categoryMode === 'simple' ? (
             <div className="simple-category-list">
               {form.categories.map((category, index) => (
@@ -629,8 +668,9 @@ export function OrganizePage() {
               <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单表单</button>
               <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => { setWashMode('yaml'); setWashYaml(toWashYaml(form.washing)); }}>高级 YAML</button>
             </div>
+            <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'upgrade' ? null : 'upgrade')}>填写说明</Button>
           </div>
-          <div className="tab-help">
+          {helpTopic === 'upgrade' ? (<div className="tab-help">
             <div className="tab-help-title"><HelpCircle size={15} /> 洗版说明</div>
             <div className="tab-help-grid">
               <div><strong>关闭 / 更好 / 总是</strong><p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。</p></div>
@@ -639,7 +679,7 @@ export function OrganizePage() {
               <div><strong>保护条件</strong><p>最低覆盖率避免信息不足误判；必须/排除条件用于字幕、DV、片源等硬性要求。</p></div>
             </div>
             <p className="tab-help-note">高级 YAML 右侧可以输入现有/候选文件名做模拟比较，结果不会移动任何文件。</p>
-          </div>
+          </div>) : null}
           {washMode === 'simple' ? (
             <div className="simple-wash">
               <div className="form-grid form-grid-2">

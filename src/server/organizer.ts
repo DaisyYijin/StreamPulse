@@ -228,14 +228,41 @@ async function scanCloud(client: StorageClient, sourcePath: string): Promise<Arr
 }
 
 export function renderTemplate(template: string, variables: Record<string, string>): string {
-  const render = (value: string): string => value.replace(/\{([a-z_]+)\}/gi, (_match, key: string) => variables[key.toLowerCase()] ?? '');
-  return template.replace(/<([^<>]+)>/g, (_match, inner: string) => {
-    const keys = Array.from(inner.matchAll(/\{([a-z_]+)\}/gi)).map((match) => match[1].toLowerCase());
-    return keys.every((key) => Boolean(variables[key])) ? render(inner) : '';
-  }).replace(/\{([a-z_]+)\}/gi, (_match, key: string) => variables[key.toLowerCase()] ?? '');
+  const literalOpen = '\u0000OPEN\u0000';
+  const literalClose = '\u0000CLOSE\u0000';
+  const protectedTemplate = template.replace(/\[\[/g, literalOpen).replace(/\]\]/g, literalClose);
+  const valueOf = (expression: string): string | null => {
+    const match = /^([a-z_]+)(.*)$/i.exec(expression.trim());
+    if (!match) return null;
+    const [, name, operations] = match;
+    if (!(name.toLowerCase() in variables)) return null;
+    let value = variables[name.toLowerCase()];
+    for (const op of operations.matchAll(/\.([a-z]+)\((.*?)\)/gi)) {
+      const method = op[1].toLowerCase();
+      if (method === 'lower') value = value.toLowerCase();
+      else if (method === 'upper') value = value.toUpperCase();
+      else if (method === 'replace') {
+        const args = op[2].match(/^(['"])(.*?)\1\s*,\s*(['"])(.*?)\3$/);
+        if (args) value = value.split(args[2]).join(args[4]);
+      }
+    }
+    return value;
+  };
+  const rendered = protectedTemplate.replace(/<([^<>]+)>/g, (_match, inner: string) => {
+    const keys = Array.from(inner.matchAll(/\{([^{}]+)\}/g))
+      .map((match) => /^([a-z_]+)/i.exec(match[1].trim())?.[1].toLowerCase())
+      .filter((key): key is string => Boolean(key));
+    return keys.every((key) => Boolean(variables[key])) ? inner : '';
+  }).replace(/\{([^{}]+)\}/g, (match, expression: string) => {
+    const value = valueOf(expression);
+    return value === null ? match : value;
+  }).replace(new RegExp(literalOpen, 'g'), '{').replace(new RegExp(literalClose, 'g'), '}');
+  return rendered
+    .replace(/[.\-/]{2,}/g, (match) => match.includes('-') ? '-' : match.includes('/') ? '/' : '.')
+    .replace(/^[.\-/]+|[.\-/]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
-
-
 function templateSegments(template: string): string[] {
   return template.split('/').map((segment) => safeComponent(segment)).filter(Boolean);
 }
@@ -306,7 +333,19 @@ function targetFor(
     ext: extension,
     category,
     first_letter: firstLetterOf(info.title || parsed.title || ''),
+    en_title: info.originalTitle || '',
+    tmdb_id: String(info.id),
+    original_name: filename,
+    custom_regex_match: '',
+    season_episode: `S${season}E${episode}`,
+    season_num: String(parsed.season || 1),
+    episode_num: String(parsed.episode || 1),
+    season_name: '',
+    season_year: '',
+    episode_name: '',
+    disc_num: '',
     ...qualityTokens(filename),
+    resource_source: qualityTokens(filename).resource_type,
   };
   if (parsed.mediaType === 'tv') {
     const folder = templateSegments(renderTemplate(settings.tvFolderTemplate, variables));

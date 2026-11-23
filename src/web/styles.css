@@ -6735,3 +6735,59 @@ html[data-theme='light'] .template-variable-popover {
     max-height: 200px;
   }
 }
+
+.tab-help-syntax {
+  display: grid;
+  gap: 4px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.tab-help-syntax strong {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.tab-help-syntax ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding-left: 16px;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.55;
+}
+
+.tab-help-syntax code {
+  color: var(--lime);
+  font-family: var(--mono);
+  font-size: 9px;
+}
+
+.tab-help-table {
+  display: grid;
+  gap: 5px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.tab-help-table > div {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  color: var(--muted);
+  font-size: 9.5px;
+  line-height: 1.55;
+}
+
+.tab-help-table strong {
+  color: var(--text-soft);
+  font-size: 9.5px;
+}
+
+.tab-help-table code {
+  color: var(--lime);
+  font-family: var(--mono);
+  font-size: 9px;
+}

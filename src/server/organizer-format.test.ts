@@ -12,3 +12,17 @@ describe('organizer rename template', () => {
     expect(renderTemplate(template, { title: 'Movie', resource_pix: '', resource_effect: 'DV' })).toBe('Movie.DV');
   });
 });
+
+describe('rename template syntax', () => {
+  it('supports transformations, literal braces and unknown variables', () => {
+    expect(renderTemplate("{title.replace('.', ' ')}", { title: 'Iron.Man' })).toBe('Iron Man');
+    expect(renderTemplate('{title.upper()}', { title: 'dune' })).toBe('DUNE');
+    expect(renderTemplate('[[{title}]]', { title: 'Dune' })).toBe('{Dune}');
+    expect(renderTemplate('{unknown}', {})).toBe('{unknown}');
+  });
+
+  it('cleans repeated and trailing separators', () => {
+    expect(renderTemplate('{title}.{year}', { title: 'Iron Man', year: '' })).toBe('Iron Man');
+    expect(renderTemplate('{title}..-{year}', { title: 'Iron Man', year: '2008' })).toBe('Iron Man-2008');
+  });
+});

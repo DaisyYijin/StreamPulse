@@ -2,6 +2,23 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.35.0] - 2026-11-23
+
+### Added
+
+- Rule explanations are now toggled by a “填写说明” button on each organizer tab
+  instead of always occupying space.
+- Organizer tab, category editor mode and wash editor mode persist across page
+  refreshes.
+- Rename help documents conditional blocks, literal braces, transformations and
+  the full variable table.
+
+### Fixed
+
+- Organizer form reloads the persisted values from the save response.
+- Rename templates support literal `[[ ]]`, `.lower()`, `.upper()`,
+  `.replace(...)`, unknown-variable preservation and separator cleanup.
+
 ## [1.34.3] - 2026-11-23
 
 ### Fixed

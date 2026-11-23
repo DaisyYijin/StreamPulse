@@ -17,6 +17,7 @@ export interface TmdbInfo {
   id: number;
   mediaType: 'movie' | 'tv';
   title: string;
+  originalTitle?: string;
   year: string;
   genres: string[];
   countries: string[];
@@ -28,6 +29,7 @@ export interface TmdbCandidate {
   id: number;
   mediaType: 'movie' | 'tv';
   title: string;
+  originalTitle?: string;
   year: string;
   popularity: number;
 }
@@ -88,6 +90,7 @@ export async function searchTmdbCandidates(options: {
 export async function searchTmdb(options: {
   mediaType: 'movie' | 'tv';
   title: string;
+  originalTitle?: string;
   year: string;
   apiKey: string;
   language: string;
@@ -113,6 +116,7 @@ async function details(mediaType: 'movie' | 'tv', id: number, apiKey: string, la
     id,
     mediaType,
     title: payload.title || payload.name || '',
+    originalTitle: payload.original_title || payload.original_name || '',
     year: String(payload.release_date || payload.first_air_date || '').slice(0, 4),
     genres: genres.length ? genres : (payload.genre_ids ?? []).map((genre: number) => (mediaType === 'movie' ? MOVIE_GENRES : TV_GENRES)[genre]).filter(Boolean),
     countries: payload.origin_country ?? payload.production_countries?.map((item: { iso_3166_1: string }) => item.iso_3166_1) ?? [],
