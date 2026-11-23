@@ -826,7 +826,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.42.1'}</span>
+            <span>v{system?.version ?? '1.43.0'}</span>
           </section>
         </aside>
       </div>

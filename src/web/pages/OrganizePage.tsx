@@ -117,6 +117,75 @@ function cmsToSimpleCategories(yamlText: string): { categories: OrganizeCategory
   return { categories, skipped };
 }
 
+const GENRE_OPTIONS: Record<'movie' | 'tv', Array<{ name: string; label: string }>> = {
+  movie: [
+    { name: 'Action', label: '动作' }, { name: 'Adventure', label: '冒险' },
+    { name: 'Animation', label: '动画' }, { name: 'Comedy', label: '喜剧' },
+    { name: 'Crime', label: '犯罪' }, { name: 'Documentary', label: '纪录片' },
+    { name: 'Drama', label: '剧情' }, { name: 'Family', label: '家庭' },
+    { name: 'Fantasy', label: '奇幻' }, { name: 'History', label: '历史' },
+    { name: 'Horror', label: '恐怖' }, { name: 'Music', label: '音乐' },
+    { name: 'Mystery', label: '悬疑' }, { name: 'Romance', label: '爱情' },
+    { name: 'Science Fiction', label: '科幻' }, { name: 'TV Movie', label: '电视电影' },
+    { name: 'Thriller', label: '惊悚' }, { name: 'War', label: '战争' }, { name: 'Western', label: '西部' },
+  ],
+  tv: [
+    { name: 'Action & Adventure', label: '动作冒险' }, { name: 'Animation', label: '动画' },
+    { name: 'Comedy', label: '喜剧' }, { name: 'Crime', label: '犯罪' },
+    { name: 'Documentary', label: '纪录片' }, { name: 'Drama', label: '剧情' },
+    { name: 'Family', label: '家庭' }, { name: 'Kids', label: '儿童' },
+    { name: 'Mystery', label: '悬疑' }, { name: 'News', label: '新闻' },
+    { name: 'Reality', label: '真人秀' }, { name: 'Sci-Fi & Fantasy', label: '科幻奇幻' },
+    { name: 'Soap', label: '肥皂剧' }, { name: 'Talk', label: '脱口秀' },
+    { name: 'War & Politics', label: '战争政治' }, { name: 'Western', label: '西部' },
+  ],
+};
+const GENRE_LABELS: Record<string, string> = Object.fromEntries(
+  [...GENRE_OPTIONS.movie, ...GENRE_OPTIONS.tv].map((genre) => [genre.name, genre.label]),
+);
+
+function GenrePicker({ value, mediaType, onChange }: {
+  value: string[];
+  mediaType: 'movie' | 'tv';
+  onChange: (value: string[]) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+  const toggle = (name: string) => {
+    onChange(value.includes(name) ? value.filter((item) => item !== name) : [...value, name]);
+  };
+  return (
+    <div className="genre-picker" ref={ref}>
+      <button type="button" className="input genre-picker-trigger" onClick={() => setOpen((current) => !current)}>
+        {value.length ? value.map((name) => <span className="genre-chip" key={name}>{GENRE_LABELS[name] ?? name}</span>) : <span className="genre-placeholder">选择类型</span>}
+        <span className="genre-arrow">▾</span>
+      </button>
+      {open ? (
+        <div className="genre-picker-menu">
+          <div className="genre-picker-head"><span>选择类型</span><button type="button" onClick={() => onChange([])}>清空</button></div>
+          <div className="genre-picker-list">
+            {GENRE_OPTIONS[mediaType].map((genre) => (
+              <button key={genre.name} type="button" className={value.includes(genre.name) ? 'active' : ''} onClick={() => toggle(genre.name)}>
+                <span className="genre-check">{value.includes(genre.name) ? '✓' : ''}</span>
+                <span>{genre.label}</span>
+                <em>{genre.name}</em>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile', Array<{ label: string; value: string }>> = {
   movieFolder: [
     { label: '精简', value: '{title}' },
@@ -772,7 +841,7 @@ export function OrganizePage() {
                     <span className={`category-type ${category.mediaType}`}>{category.mediaType === 'movie' ? '电影' : '剧集'}</span>
                     <Input value={category.name} onChange={(event) => updateCategory(index, { name: event.target.value })} placeholder="分类名" />
                   </div>
-                  <Input value={category.genres.join(', ')} onChange={(event) => updateCategory(index, { genres: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="类型，如 Action, Adventure" />
+                  <GenrePicker value={category.genres} mediaType={category.mediaType} onChange={(genres) => updateCategory(index, { genres })} />
                   <Input value={category.countries.join(', ')} onChange={(event) => updateCategory(index, { countries: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="国家，如 CN, US" />
                   <Input value={category.languages.join(', ')} onChange={(event) => updateCategory(index, { languages: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="语言，如 zh, en" />
                   <Input value={category.keywords.join(', ')} onChange={(event) => updateCategory(index, { keywords: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="关键词（可选）" />

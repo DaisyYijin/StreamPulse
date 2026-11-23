@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.43.0] - 2026-11-23
+
+### Added
+
+- Simple-category genre field is now a multi-select picker with Chinese labels
+  for movie and TV genres, while storing the TMDb English names internally.
+
 ## [1.42.1] - 2026-11-23
 
 ### Fixed
