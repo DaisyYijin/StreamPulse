@@ -92,10 +92,8 @@ export function SettingsPage() {
   const [system, setSystem] = useState<SystemInfo | null>(null);
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [outputDir, setOutputDir] = useState('');
-  const [defaultUrlTemplate, setDefaultUrlTemplate] = useState('');
   const [streamBaseUrl, setStreamBaseUrl] = useState('');
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(2);
-  const [runRetention, setRunRetention] = useState(80);
   const [saving, setSaving] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
   const [adminUsername, setAdminUsername] = useState('admin');
@@ -119,8 +117,6 @@ export function SettingsPage() {
   const [metaTubeBusy, setMetaTubeBusy] = useState(false);
   const [tmdb, setTmdb] = useState<TmdbSettings>({ apiKey: '', language: 'zh-CN' });
   const [tmdbBusy, setTmdbBusy] = useState(false);
-  const [metaTubeQuery, setMetaTubeQuery] = useState('SSIS-001');
-  const [metaTubeResult, setMetaTubeResult] = useState<string>('');
   const [hdhiveBusy, setHdhiveBusy] = useState(false);
   const [embyManageId, setEmbyManageId] = useState('');
   const [embyLibraries, setEmbyLibraries] = useState<EmbyLibrary[]>([]);
@@ -139,10 +135,8 @@ export function SettingsPage() {
       setAuth(authData);
       setAdminUsername(authData.username);
       setOutputDir(data.settings.outputDir);
-      setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
       setStreamBaseUrl(data.settings.streamBaseUrl);
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
-      setRunRetention(data.settings.runRetention);
       setEmbyServers(data.settings.embyServers ?? []);
       setEmbyManageId((current) => current || data.settings.embyServers?.[0]?.id || '');
       setNotifications({ ...notifications, ...(data.settings.notifications ?? {}) });
@@ -167,17 +161,13 @@ export function SettingsPage() {
     try {
       const data = await api.patch<{ settings: Settings; system: SystemInfo }>('/api/settings', {
         outputDir,
-        defaultUrlTemplate,
         streamBaseUrl,
         maxConcurrentRuns,
-        runRetention,
       });
       setSystem(data.system);
       setOutputDir(data.settings.outputDir);
-      setDefaultUrlTemplate(data.settings.defaultUrlTemplate);
       setStreamBaseUrl(data.settings.streamBaseUrl);
       setMaxConcurrentRuns(data.settings.maxConcurrentRuns);
-      setRunRetention(data.settings.runRetention);
       toast.success('设置已保存');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : '保存失败');
@@ -317,18 +307,6 @@ export function SettingsPage() {
     }
   };
 
-  const searchMetaTube = async () => {
-    setMetaTubeBusy(true);
-    try {
-      const result = await api.post<{ results: Array<{ number: string; title: string; actors: string[] }> }>('/api/metatube/search', { keyword: metaTubeQuery, settings: metaTube });
-      setMetaTubeResult(result.results[0] ? `${result.results[0].number || metaTubeQuery} · ${result.results[0].title}` : '没有匹配结果');
-    } catch (caught) {
-      setMetaTubeResult(caught instanceof Error ? caught.message : '识别失败');
-    } finally {
-      setMetaTubeBusy(false);
-    }
-  };
-
   const saveTmdb = async (event: FormEvent) => {
     event.preventDefault();
     setTmdbBusy(true);
@@ -446,41 +424,19 @@ export function SettingsPage() {
                 </Field>
               </div>
               <Field
-                label="302 服务公开地址"
-                hint={`Emby 访问的地址，例如 http://192.168.1.10:${system?.streamPort ?? 2048}；留空时会在创建媒体库时按当前访问地址自动推断。`}
+                label="STRM 地址生成"
+                hint="填写 Emby 访问 StreamPulse 的地址，例如 http://172.17.0.1:1024；系统会在后面拼接 /r/{streamToken}{encodedPath}。"
               >
                 <div className="input-with-icon">
                   <Link2 size={16} />
                   <Input
                     value={streamBaseUrl}
                     onChange={(event) => setStreamBaseUrl(event.target.value)}
-                    placeholder={`http://192.168.1.10:${system?.streamPort ?? 2048}`}
+                    placeholder="http://172.17.0.1:1024"
                     spellCheck={false}
                   />
                 </div>
-              </Field>
-              <Field label="STRM 地址生成" hint="用于生成 STRM 内的播放地址；{streamBase} 为 302 服务地址，{streamToken} 为文件令牌，{encodedPath} 为文件路径。">
-                <Input
-                  value={defaultUrlTemplate}
-                  onChange={(event) => setDefaultUrlTemplate(event.target.value)}
-                  className="mono-input"
-                  placeholder="{streamBase}/r/{streamToken}{encodedPath}"
-                  spellCheck={false}
-                />
-                <code className="strm-example">示例：{defaultUrlTemplate
-                  .replaceAll('{streamBase}', streamBaseUrl || `http://192.168.1.10:${system?.streamPort ?? 2048}`)
-                  .replaceAll('{streamToken}', 'a1b2c3d4')
-                  .replaceAll('{encodedPath}', '/%E7%94%B5%E5%BD%B1/%E6%B2%99%E4%B8%982%20(2024)/%E6%B2%99%E4%B8%982%20(2024).strm')
-                  .replaceAll('{sourceUrl}', 'https://example.com/video.mkv')}</code>
-              </Field>
-              <Field label="运行记录保留数量" hint="超过数量的旧记录会自动清理">
-                <Input
-                  type="number"
-                  min={10}
-                  max={500}
-                  value={runRetention}
-                  onChange={(event) => setRunRetention(Number(event.target.value))}
-                />
+                <code className="strm-example">示例：{(streamBaseUrl || 'http://172.17.0.1:1024').replace(/\/+$/, '')}/r/a1b2c3d4/%E7%94%B5%E5%BD%B1/%E6%B2%99%E4%B8%982%20(2024).strm</code>
               </Field>
             </div>
             <div className="settings-actions">
@@ -743,13 +699,6 @@ export function SettingsPage() {
                 <Field label="MetaTube Server 地址"><Input value={metaTube.baseUrl} onChange={(event) => setMetaTube((current) => ({ ...current, baseUrl: event.target.value }))} placeholder="http://192.168.1.10:8080" /></Field>
                 <Field label="MetaTube Token（可选）"><Input type="password" value={metaTube.token} onChange={(event) => setMetaTube((current) => ({ ...current, token: event.target.value }))} autoComplete="off" /></Field>
                 <Field label="测试连接"><Button type="button" variant="secondary" icon={<Database size={14} />} loading={metaTubeBusy} onClick={() => void testMetaTube()}>测试 MetaTube</Button></Field>
-                <Field label="AV 番号识别测试">
-                  <div className="inline-action">
-                    <Input value={metaTubeQuery} onChange={(event) => setMetaTubeQuery(event.target.value)} placeholder="SSIS-001" />
-                    <Button type="button" variant="secondary" size="sm" loading={metaTubeBusy} onClick={() => void searchMetaTube()}>识别</Button>
-                    {metaTubeResult ? <span>{metaTubeResult}</span> : null}
-                  </div>
-                </Field>
               </div>
               <div className="settings-actions"><Button type="submit" variant="primary" loading={metaTubeBusy}>保存 MetaTube 设置</Button></div>
             </form>
@@ -880,7 +829,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.46.0'}</span>
+            <span>v{system?.version ?? '1.47.0'}</span>
           </section>
         </aside>
       </div>

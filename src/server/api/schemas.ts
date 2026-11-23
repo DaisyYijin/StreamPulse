@@ -171,7 +171,7 @@ export const qrStartSchema = z.object({
 const organizeCategorySchema = z.object({
   id: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1).max(80),
-  mediaType: z.enum(['movie', 'tv']),
+  mediaType: z.enum(['movie', 'tv', 'av']),
   genres: z.array(z.string().trim().max(80)).max(30).default([]),
   countries: z.array(z.string().trim().max(20)).max(30).default([]),
   languages: z.array(z.string().trim().max(20)).max(30).default([]),
@@ -209,6 +209,8 @@ const organizerSchema = z.object({
   movieFileTemplate: z.string().trim().min(1).max(500),
   tvFolderTemplate: z.string().trim().min(1).max(500),
   tvFileTemplate: z.string().trim().min(1).max(500),
+  avFolderTemplate: z.string().trim().min(1).max(500),
+  avFileTemplate: z.string().trim().min(1).max(500),
   washing: washSchema,
   categories: z.array(organizeCategorySchema).max(100),
   categoryFormat: z.enum(['simple', 'cms']).default('simple'),

@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.46.0';
+export const APP_VERSION = '1.47.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -174,7 +174,7 @@ export interface WashConfig {
 export interface OrganizeCategory {
   id: string;
   name: string;
-  mediaType: 'movie' | 'tv';
+  mediaType: 'movie' | 'tv' | 'av';
   genres: string[];
   countries: string[];
   languages: string[];
@@ -196,6 +196,8 @@ export interface OrganizerSettings {
   movieFileTemplate: string;
   tvFolderTemplate: string;
   tvFileTemplate: string;
+  avFolderTemplate: string;
+  avFileTemplate: string;
   washing: WashConfig;
   categories: OrganizeCategory[];
   categoryFormat: 'simple' | 'cms';
@@ -206,6 +208,8 @@ export const DEFAULT_MOVIE_FOLDER_TEMPLATE = '{title} ({year})';
 export const DEFAULT_MOVIE_FILE_TEMPLATE = '{title} ({year}){quality}';
 export const DEFAULT_TV_FOLDER_TEMPLATE = '{title} ({year})-Season {season}';
 export const DEFAULT_TV_FILE_TEMPLATE = '{title} - S{season}E{episode}{quality}';
+export const DEFAULT_AV_FOLDER_TEMPLATE = '{title}';
+export const DEFAULT_AV_FILE_TEMPLATE = '{title}';
 
 export const DEFAULT_CMS_CATEGORIES = `movie:
   电影/动画电影:

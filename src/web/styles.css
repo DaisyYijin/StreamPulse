@@ -7174,3 +7174,8 @@ html[data-theme='light'] .genre-picker-menu {
 .search-login-panel {
   margin-bottom: 10px;
 }
+
+.category-type.av {
+  color: #f0b3ff;
+  border-color: rgba(240, 179, 255, 0.3);
+}

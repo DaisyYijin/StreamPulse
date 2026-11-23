@@ -2,6 +2,17 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.47.0] - 2026-11-23
+
+### Added
+
+- AV folder/file rename templates and an AV category group in simple mode.
+
+### Changed
+
+- Removed run-retention and MetaTube AV recognition-test controls.
+- STRM address is now a direct base URL such as `http://172.17.0.1:1024`.
+
 ## [1.46.0] - 2026-11-23
 
 ### Added

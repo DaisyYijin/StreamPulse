@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, DEFAULT_CMS_CATEGORIES, type Settings, type WashConfig } from '../shared/types.js';
+import { DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, DEFAULT_AV_FILE_TEMPLATE, DEFAULT_AV_FOLDER_TEMPLATE, DEFAULT_URL_TEMPLATE, DEFAULT_CMS_CATEGORIES, type Settings, type WashConfig } from '../shared/types.js';
 import { config } from './config.js';
 import {
   makeStreamKey,
@@ -58,6 +58,8 @@ function createDefaultDatabase(): Database {
         movieFileTemplate: DEFAULT_MOVIE_FILE_TEMPLATE,
         tvFolderTemplate: DEFAULT_TV_FOLDER_TEMPLATE,
         tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
+        avFolderTemplate: DEFAULT_AV_FOLDER_TEMPLATE,
+        avFileTemplate: DEFAULT_AV_FILE_TEMPLATE,
         washing: {
           mode: 'better',
           minGap: 0,

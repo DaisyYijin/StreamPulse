@@ -1,7 +1,7 @@
 import { ArrowRight, FileCode2, FolderInput, FolderOpen, HelpCircle, Pencil, Plus, ScanLine, SlidersHorizontal, Tags, WandSparkles } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { DEFAULT_CMS_CATEGORIES, DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type Library, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
+import { DEFAULT_AV_FILE_TEMPLATE, DEFAULT_AV_FOLDER_TEMPLATE, DEFAULT_CMS_CATEGORIES, DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type Library, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
 import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
 import { DirectoryPicker } from '../components/DirectoryPicker';
@@ -39,6 +39,8 @@ const EMPTY: OrganizerSettings = {
   movieFileTemplate: DEFAULT_MOVIE_FILE_TEMPLATE,
   tvFolderTemplate: DEFAULT_TV_FOLDER_TEMPLATE,
   tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
+  avFolderTemplate: DEFAULT_AV_FOLDER_TEMPLATE,
+  avFileTemplate: DEFAULT_AV_FILE_TEMPLATE,
   washing: { mode: 'better', minGap: 0, minCoverage: 0.35, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
   categoryFormat: 'cms',
@@ -277,7 +279,7 @@ function GenrePicker({ value, mediaType, onChange }: {
   );
 }
 
-const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile', Array<{ label: string; value: string }>> = {
+const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile' | 'avFolder' | 'avFile', Array<{ label: string; value: string }>> = {
   movieFolder: [
     { label: '精简', value: '{title}' },
     { label: '标准', value: '{title} ({year})' },
@@ -292,6 +294,16 @@ const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile
     { label: '精简', value: '{title}-Season {season}' },
     { label: '标准', value: '{title} ({year})-Season {season}' },
     { label: '详细', value: '{first_letter}-{title} ({year})-Season {season}' },
+  ],
+  avFolder: [
+    { label: '精简', value: '{title}' },
+    { label: '标准', value: '{first_letter}-{title}' },
+    { label: '详细', value: '{first_letter}-{title}-{year}' },
+  ],
+  avFile: [
+    { label: '精简', value: '{title}' },
+    { label: '标准', value: '{title}-{resource_pix}' },
+    { label: '详细', value: '{title}-{resource_pix}<.-{resource_team}>' },
   ],
   tvFile: [
     { label: '精简', value: '{title}.S{season}E{episode}' },
@@ -374,6 +386,12 @@ const TEMPLATE_SAMPLES = {
     resource_effect: 'DV', video_encode: 'HEVC', audio_encode: 'DTS',
     resource_team: 'WiKi', first_letter: 'S', fps: '24', resource_version: 'v2',
   },
+  av: {
+    title: 'SSIS-001', year: '2024', season: '01', episode: '01', quality: ' [1080p]',
+    category: 'AV', ext: '.mp4', resource_pix: '1080p', resource_type: 'WEB-DL',
+    resource_effect: '', video_encode: 'H264', audio_encode: 'AAC',
+    resource_team: 'MetaTube', first_letter: 'S', fps: '30', resource_version: '',
+  },
   tv: {
     title: '怪奇物语', year: '2025', season: '05', episode: '01', quality: ' [1080p WEB-DL]',
     category: '美剧', ext: '.mkv', resource_pix: '1080p', resource_type: 'WEB-DL',
@@ -398,7 +416,7 @@ function RenameTemplateField({
   hint: string;
   value: string;
   onChange: (value: string) => void;
-  sampleType: 'movie' | 'tv';
+  sampleType: 'movie' | 'tv' | 'av';
   variants: Array<{ label: string; value: string }>;
 }) {
   const [open, setOpen] = useState(false);
@@ -596,7 +614,7 @@ export function OrganizePage() {
     }
   });
   const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
-  const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv'>('movie');
+  const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv' | 'av'>('movie');
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | null>(null);
@@ -692,8 +710,8 @@ export function OrganizePage() {
     toast.success('已恢复默认洗版策略');
   };
 
-  const addCategory = (mediaType: 'movie' | 'tv') => {
-    const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: mediaType === 'movie' ? '新电影分类' : '新剧集分类', mediaType, genres: [], countries: [], languages: [], keywords: [] }];
+  const addCategory = (mediaType: 'movie' | 'tv' | 'av') => {
+    const categories = [...form.categories, { id: `cat_${Date.now().toString(36)}`, name: mediaType === 'movie' ? '新电影分类' : mediaType === 'tv' ? '新剧集分类' : '新AV分类', mediaType, genres: [], countries: [], languages: [], keywords: [] }];
     applySimpleCategories(categories);
   };
 
@@ -902,6 +920,8 @@ export function OrganizePage() {
             <RenameTemplateField label="电影文件" hint="不带扩展名时自动补原扩展名" value={form.movieFileTemplate} onChange={(value) => update('movieFileTemplate', value)} sampleType="movie" variants={RENAME_VARIANTS.movieFile} />
             <RenameTemplateField label="剧集文件夹" hint="例如 {title} ({year})-Season {season}" value={form.tvFolderTemplate} onChange={(value) => update('tvFolderTemplate', value)} sampleType="tv" variants={RENAME_VARIANTS.tvFolder} />
             <RenameTemplateField label="剧集文件" hint="例如 {title} - S{season}E{episode}{quality}" value={form.tvFileTemplate} onChange={(value) => update('tvFileTemplate', value)} sampleType="tv" variants={RENAME_VARIANTS.tvFile} />
+            <RenameTemplateField label="AV 文件夹" hint="AV 番号的目录模板" value={form.avFolderTemplate} onChange={(value) => update('avFolderTemplate', value)} sampleType="av" variants={RENAME_VARIANTS.avFolder} />
+            <RenameTemplateField label="AV 文件" hint="AV 番号的文件名模板" value={form.avFileTemplate} onChange={(value) => update('avFileTemplate', value)} sampleType="av" variants={RENAME_VARIANTS.avFile} />
           </div>
         </div>
       ) : null}
@@ -938,18 +958,19 @@ export function OrganizePage() {
                 <div className="editor-switch">
                   <button type="button" className={simpleCategoryType === 'movie' ? 'active' : ''} onClick={() => setSimpleCategoryType('movie')}>电影分类 <span>{form.categories.filter((category) => category.mediaType === 'movie').length}</span></button>
                   <button type="button" className={simpleCategoryType === 'tv' ? 'active' : ''} onClick={() => setSimpleCategoryType('tv')}>剧集分类 <span>{form.categories.filter((category) => category.mediaType === 'tv').length}</span></button>
+                  <button type="button" className={simpleCategoryType === 'av' ? 'active' : ''} onClick={() => setSimpleCategoryType('av')}>AV 分类 <span>{form.categories.filter((category) => category.mediaType === 'av').length}</span></button>
                 </div>
                 <Button type="button" variant="secondary" size="sm" icon={<Plus size={14} />} onClick={() => addCategory(simpleCategoryType)}>
-                  添加{simpleCategoryType === 'movie' ? '电影' : '剧集'}分类
+                  添加{simpleCategoryType === 'movie' ? '电影' : simpleCategoryType === 'tv' ? '剧集' : 'AV'}分类
                 </Button>
               </div>
               {form.categories.map((category, index) => category.mediaType !== simpleCategoryType ? null : (
                 <div className="simple-category-row" key={category.id}>
                   <div className="simple-category-name">
-                    <span className={`category-type ${category.mediaType}`}>{category.mediaType === 'movie' ? '电影' : '剧集'}</span>
+                    <span className={`category-type ${category.mediaType}`}>{category.mediaType === 'movie' ? '电影' : category.mediaType === 'tv' ? '剧集' : 'AV'}</span>
                     <Input value={category.name} onChange={(event) => updateCategory(index, { name: event.target.value })} placeholder="分类名" />
                   </div>
-                  <GenrePicker value={category.genres} mediaType={category.mediaType} onChange={(genres) => updateCategory(index, { genres })} />
+                  <GenrePicker value={category.genres} mediaType={category.mediaType === 'tv' ? 'tv' : 'movie'} onChange={(genres) => updateCategory(index, { genres })} />
                   <CodePicker value={category.countries} options={COUNTRY_OPTIONS} onChange={(countries) => updateCategory(index, { countries })} placeholder="选择国家" />
                   <CodePicker value={category.languages} options={LANGUAGE_OPTIONS} onChange={(languages) => updateCategory(index, { languages })} placeholder="选择语言" />
                   <Input value={category.keywords.join(', ')} onChange={(event) => updateCategory(index, { keywords: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} placeholder="关键词（可选）" />
@@ -957,7 +978,7 @@ export function OrganizePage() {
                 </div>
               ))}
               {form.categories.filter((category) => category.mediaType === simpleCategoryType).length === 0 ? (
-                <p className="settings-hint">还没有{simpleCategoryType === 'movie' ? '电影' : '剧集'}分类，点击上方按钮添加。</p>
+                <p className="settings-hint">还没有{simpleCategoryType === 'movie' ? '电影' : simpleCategoryType === 'tv' ? '剧集' : 'AV'}分类，点击上方按钮添加。</p>
               ) : null}
               <div className="simple-category-footer">
                 <Button type="button" variant="ghost" size="sm" onClick={resetCategories}>恢复默认分类</Button>
