@@ -11,6 +11,7 @@ import type {
 import { APP_NAME } from '../../shared/types.js';
 import type { Auth } from '../auth.js';
 import { clientForSource } from '../client.js';
+import { installBrowser } from '../browser.js';
 import { generateLibraryCover } from '../covers.js';
 import { createEmbyLibrary, listEmbyLibraries, testEmby } from '../emby.js';
 import { searchHdhive, testHdhive } from '../hdhive.js';
@@ -335,6 +336,15 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       system: await systemInfo(store),
     };
     res.json(overview);
+  });
+
+  router.post('/system/browser/install', async (_req, res) => {
+    try {
+      const executablePath = await installBrowser();
+      res.json({ executablePath });
+    } catch (error) {
+      throw new HttpError(400, error instanceof Error ? error.message : '浏览器下载失败');
+    }
   });
 
   router.get('/system/directories', async (req, res) => {

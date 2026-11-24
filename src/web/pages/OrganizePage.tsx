@@ -65,7 +65,7 @@ function splitList(value: unknown): string[] {
 }
 
 function simpleCategoriesToCms(categories: OrganizeCategory[]): string {
-  const build = (mediaType: 'movie' | 'tv') => {
+  const build = (mediaType: 'movie' | 'tv' | 'av') => {
     const block: Record<string, Record<string, string>> = {};
     for (const category of categories.filter((item) => item.mediaType === mediaType)) {
       const conditions: Record<string, string> = {};
@@ -78,15 +78,15 @@ function simpleCategoriesToCms(categories: OrganizeCategory[]): string {
     }
     return block;
   };
-  return stringifyYaml({ movie: build('movie'), tv: build('tv') }, { lineWidth: 0 });
+  return stringifyYaml({ movie: build('movie'), tv: build('tv'), av: build('av') }, { lineWidth: 0 });
 }
 
 function cmsToSimpleCategories(yamlText: string): { categories: OrganizeCategory[]; skipped: string[] } {
-  const document = parseYaml(yamlText) as { movie?: unknown; tv?: unknown } | null;
+  const document = parseYaml(yamlText) as { movie?: unknown; tv?: unknown; av?: unknown } | null;
   const categories: OrganizeCategory[] = [];
   const skipped: string[] = [];
   if (!document || typeof document !== 'object') return { categories, skipped };
-  for (const mediaType of ['movie', 'tv'] as const) {
+  for (const mediaType of ['movie', 'tv', 'av'] as const) {
     const block = document[mediaType];
     if (!block || typeof block !== 'object' || Array.isArray(block)) continue;
     for (const [name, raw] of Object.entries(block as Record<string, unknown>)) {
@@ -281,9 +281,9 @@ function GenrePicker({ value, mediaType, onChange }: {
 }
 
 const CATEGORY_PRESETS = {
-  compact: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/剧集:\n`,
-  standard: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/华语电影:\n    original_language: "zh,cn"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/国产剧:\n    origin_country: "CN,HK,TW"\n  剧集/剧集:\n`,
-  detailed: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/华语电影:\n    original_language: "zh,cn"\n  电影/日韩电影:\n    origin_country: "JP,KR"\n  电影/欧美电影:\n    origin_country: "US,GB,CA,AU,FR,DE"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/国产剧:\n    origin_country: "CN,HK,TW"\n  剧集/日韩剧:\n    origin_country: "JP,KR"\n  剧集/欧美剧:\n    origin_country: "US,GB,CA,AU"\n  剧集/剧集:\n`,
+  compact: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/其他:\nav:\n  AV/有码:\n  AV/无码:\n`,
+  standard: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/华语电影:\n    original_language: "zh,cn"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/国产剧:\n    origin_country: "CN,HK,TW"\n  剧集/其他:\nav:\n  AV/有码:\n  AV/无码:\n`,
+  detailed: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/华语电影:\n    original_language: "zh,cn"\n  电影/日韩电影:\n    origin_country: "JP,KR"\n  电影/欧美电影:\n    origin_country: "US,GB,CA,AU,FR,DE"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/国产剧:\n    origin_country: "CN,HK,TW"\n  剧集/日韩剧:\n    origin_country: "JP,KR"\n  剧集/欧美剧:\n    origin_country: "US,GB,CA,AU"\n  剧集/其他:\nav:\n  AV/有码:\n  AV/无码:\n`,
 };
 
 const WASH_POLICY_PRESETS = {
@@ -291,6 +291,21 @@ const WASH_POLICY_PRESETS = {
   standard: `电影洗版策略:\n  mode: replace\n  media_type: movie\n  priority_level:\n    - resource_team: "WiKi"\n      resource_effect: "!DV"\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n剧集洗版策略:\n  mode: replace\n  media_type: tv\n  priority_level:\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n电影兜底:\n  mode: max_size\n  media_type: movie\n剧集兜底:\n  mode: max_size\n  media_type: tv\n`,
   detailed: `电影洗版策略:\n  mode: replace\n  scope: group\n  media_type: movie\n  priority_level:\n    - resource_team: "WiKi"\n      resource_effect: "!DV"\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n剧集洗版策略:\n  mode: replace\n  scope: group\n  media_type: tv\n  priority_level:\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n电影兜底:\n  mode: max_size\n  media_type: movie\n剧集兜底:\n  mode: max_size\n  media_type: tv\n`,
 };
+
+function washModeFromPolicies(text: string): WashConfig['mode'] | null {
+  try {
+    const document = parseYaml(text) as Record<string, unknown> | null;
+    const first = document && typeof document === 'object' ? Object.values(document)[0] : null;
+    const mode = first && typeof first === 'object' && !Array.isArray(first) ? (first as Record<string, unknown>).mode : null;
+    if (mode === 'replace') return 'better';
+    if (mode === 'skip') return 'off';
+    if (mode === 'max_size' || mode === 'min_size') return mode;
+    if (mode === 'coexist') return 'better';
+  } catch {
+    return null;
+  }
+  return null;
+}
 
 const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile' | 'avFolder' | 'avFile', Array<{ label: string; value: string }>> = {
   movieFolder: [
@@ -301,7 +316,7 @@ const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile
   movieFile: [
     { label: '精简', value: '{title}' },
     { label: '标准', value: '{title} ({year}){quality}' },
-    { label: '详细', value: '{title}.{year}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>' },
+    { label: '详细', value: '{title}.{year}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}>-<{resource_team}>' },
   ],
   tvFolder: [
     { label: '精简', value: '{title}-Season {season}' },
@@ -316,12 +331,12 @@ const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile
   avFile: [
     { label: '精简', value: '{title}' },
     { label: '标准', value: '{title}-{resource_pix}' },
-    { label: '详细', value: '{title}-{resource_pix}<{-resource_team}>' },
+    { label: '详细', value: '{title}-{resource_pix}-<{resource_team}>' },
   ],
   tvFile: [
     { label: '精简', value: '{title}.S{season}E{episode}' },
     { label: '标准', value: '{title}.S{season}E{episode}{quality}' },
-    { label: '详细', value: '{title}.S{season}E{episode}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}><-{resource_team}>' },
+    { label: '详细', value: '{title}.S{season}E{episode}<.{resource_pix}><.{resource_type}><.{resource_effect}><.{video_encode}><.{audio_encode}>-<{resource_team}>' },
   ],
 };
 
@@ -376,7 +391,7 @@ function templatePreview(template: string, samples: Record<string, string>): str
     if (!keys.every((key) => Boolean(samples[key]))) return '';
     return inner.replace(/\{([-+]?)([a-z_]+)\}/gi, (_innerMatch, prefix: string, key: string) => `${prefix}${samples[key.toLowerCase()] ?? ''}`);
   }).replace(/\{([a-z_]+)\}/gi, (_match, key: string) => samples[key.toLowerCase()] ?? '');
-  return rendered || '未填写';
+  return rendered.replace(/[.\-/]+$/g, '').replace(/\s+/g, ' ').trim() || '未填写';
 }
 
 function RenameTemplateField({
@@ -634,6 +649,8 @@ export function OrganizePage() {
       setCmsYaml(initialCms);
       setCategoryMode(organizer.categoryFormat === 'cms' ? 'yaml' : 'simple');
       setWashPoliciesYaml(organizer.washPoliciesYaml ?? '');
+      const loadedWashMode = washModeFromPolicies(organizer.washPoliciesYaml ?? '');
+      if (loadedWashMode) organizer.washing = { ...organizer.washing, mode: loadedWashMode };
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
       .finally(() => setLoading(false));
@@ -696,6 +713,12 @@ export function OrganizePage() {
 
   const updateWashWeights = (key: keyof WashConfig['weights'], value: number) => {
     updateWash({ weights: { ...form.washing.weights, [key]: Number.isFinite(value) ? value : 0 } });
+  };
+
+  const applyWashPolicyYaml = (text: string) => {
+    setWashPoliciesYaml(text);
+    const mode = washModeFromPolicies(text);
+    setForm((previous) => ({ ...previous, washPoliciesYaml: text, ...(mode ? { washing: { ...previous.washing, mode } } : {}) }));
   };
 
   const simulateWash = async () => {
@@ -981,12 +1004,12 @@ export function OrganizePage() {
               <div className="template-presets">
                 <span>快速模板</span>
                 {(Object.keys(WASH_POLICY_PRESETS) as Array<keyof typeof WASH_POLICY_PRESETS>).map((key) => (
-                  <button key={key} type="button" onClick={() => { setWashPoliciesYaml(WASH_POLICY_PRESETS[key]); update('washPoliciesYaml', WASH_POLICY_PRESETS[key]); }}>{key === 'compact' ? '精简' : key === 'standard' ? '标准' : '详细'}</button>
+                  <button key={key} type="button" onClick={() => applyWashPolicyYaml(WASH_POLICY_PRESETS[key])}>{key === 'compact' ? '精简' : key === 'standard' ? '标准' : '详细'}</button>
                 ))}
                 <em>点击生成 YAML</em>
               </div>
               <div className="yaml-editor-head"><FileCode2 size={14} />wash-policies.yaml <button type="button" className="yaml-reset" onClick={resetWashing}>恢复默认</button></div>
-              <textarea className="yaml-editor" value={washPoliciesYaml} onChange={(event) => { setWashPoliciesYaml(event.target.value); update('washPoliciesYaml', event.target.value); }} spellCheck={false} placeholder={`电影洗版策略:\n  mode: replace\n  media_type: movie\n  priority_level:\n    - resource_pix: "2160p,4k"`} />
+              <textarea className="yaml-editor" value={washPoliciesYaml} onChange={(event) => applyWashPolicyYaml(event.target.value)} spellCheck={false} placeholder={`电影洗版策略:\n  mode: replace\n  media_type: movie\n  priority_level:\n    - resource_pix: "2160p,4k"`} />
               <div className="yaml-ok">保存时校验 YAML</div>
             </div>
             <div className="yaml-preview">

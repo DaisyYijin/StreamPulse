@@ -3,6 +3,7 @@ import {
   Database,
   FolderCog,
   FolderOpen,
+  Download,
   FolderPlus,
   LibraryBig,
   Bell,
@@ -96,6 +97,8 @@ export function SettingsPage() {
   const [maxConcurrentRuns, setMaxConcurrentRuns] = useState(2);
   const [saving, setSaving] = useState(false);
   const [dirPickerOpen, setDirPickerOpen] = useState(false);
+  const [browserBusy, setBrowserBusy] = useState(false);
+  const [browserPath, setBrowserPath] = useState('');
   const [adminUsername, setAdminUsername] = useState('admin');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -173,6 +176,19 @@ export function SettingsPage() {
       setError(caught instanceof Error ? caught.message : '保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const installBrowser = async () => {
+    setBrowserBusy(true);
+    try {
+      const result = await api.post<{ executablePath: string }>('/api/system/browser/install');
+      setBrowserPath(result.executablePath);
+      toast.success('浏览器已下载，搜索功能会使用新浏览器');
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : '浏览器下载失败');
+    } finally {
+      setBrowserBusy(false);
     }
   };
 
@@ -439,6 +455,12 @@ export function SettingsPage() {
                 <code className="strm-example">示例：{(streamBaseUrl || 'http://172.17.0.1:1024').replace(/\/+$/, '')}/r/a1b2c3d4/%E7%94%B5%E5%BD%B1/%E6%B2%99%E4%B8%982%20(2024).strm</code>
               </Field>
             </div>
+            <Field label="浏览器运行时" hint="项目不再内置 Chromium；首次使用搜索或站点登录前在这里下载，之后可直接调用。">
+              <div className="inline-action">
+                <Button type="button" variant="secondary" icon={<Download size={14} />} loading={browserBusy} onClick={() => void installBrowser()}>下载 / 更新浏览器</Button>
+                {browserPath ? <code className="settings-hint">{browserPath}</code> : null}
+              </div>
+            </Field>
             <div className="settings-actions">
               <Button type="submit" variant="primary" icon={<Save size={16} />} loading={saving}>
                 保存设置
@@ -829,7 +851,7 @@ export function SettingsPage() {
               <strong>StreamPulse</strong>
               <p>让云盘媒体像本地一样播放。</p>
             </div>
-            <span>v{system?.version ?? '1.49.0'}</span>
+            <span>v{system?.version ?? '1.50.0'}</span>
           </section>
         </aside>
       </div>

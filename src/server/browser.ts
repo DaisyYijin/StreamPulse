@@ -1,9 +1,39 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 
 let browserPromise: Promise<Browser> | null = null;
 
-function executablePath(): string {
-  return process.env.CHROMIUM_PATH || process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/chromium';
+function browserPathFile(): string {
+  return path.join(process.env.CONFIG_DIR || '/config', '.browser-path');
+}
+
+export function executablePath(): string {
+  const configured = process.env.CHROMIUM_PATH || process.env.PUPPETEER_EXECUTABLE_PATH;
+  if (configured) return configured;
+  try {
+    const stored = fs.readFileSync(browserPathFile(), 'utf8').trim();
+    if (stored) return stored;
+  } catch {
+    // No downloaded browser yet.
+  }
+  return '/usr/bin/chromium';
+}
+
+export async function installBrowser(): Promise<string> {
+  const { Browser, detectBrowserPlatform, install, resolveBuildId } = await import('@puppeteer/browsers');
+  const platform = detectBrowserPlatform();
+  if (!platform) throw new Error('当前平台不支持自动下载浏览器');
+  const buildId = await resolveBuildId(Browser.CHROME, platform, 'stable');
+  const result = await install({
+    browser: Browser.CHROME,
+    buildId,
+    cacheDir: path.join(process.env.CONFIG_DIR || '/config', 'browsers'),
+  });
+  fs.mkdirSync(path.dirname(browserPathFile()), { recursive: true });
+  fs.writeFileSync(browserPathFile(), result.executablePath, 'utf8');
+  await closeBrowser();
+  return result.executablePath;
 }
 
 async function getBrowser(): Promise<Browser> {
@@ -22,7 +52,7 @@ async function getBrowser(): Promise<Browser> {
       ],
     }).catch((error) => {
       browserPromise = null;
-      throw new Error(`Chromium 启动失败：${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(`浏览器启动失败，请先在设置中下载浏览器：${error instanceof Error ? error.message : String(error)}`);
     });
   }
   return browserPromise;

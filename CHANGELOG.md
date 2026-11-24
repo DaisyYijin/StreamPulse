@@ -2,6 +2,20 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.50.0] - 2026-11-24
+
+### Added
+
+- In-app browser downloader; Chromium is no longer bundled in the image.
+- AV categories in category YAML presets.
+
+### Fixed
+
+- Rename conditional team suffix now uses `-<{resource_team}>` and cleanup
+  removes trailing separators.
+- Category presets no longer generate `剧集/剧集`.
+- Wash YAML changes update the simple-mode wash mode.
+
 ## [1.49.0] - 2026-11-24
 
 ### Added

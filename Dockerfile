@@ -14,7 +14,7 @@ RUN npm run build
 RUN npm prune --omit=dev --no-audit --no-fund
 
 FROM node:24-bookworm-slim AS runtime
-ARG STREAMPULSE_VERSION=1.49.0
+ARG STREAMPULSE_VERSION=1.50.0
 
 LABEL org.opencontainers.image.title="StreamPulse" \
       org.opencontainers.image.description="StreamPulse: 115 / 123 / OpenList STRM libraries for Emby and Jellyfin." \
@@ -23,7 +23,7 @@ LABEL org.opencontainers.image.title="StreamPulse" \
       org.opencontainers.image.version="${STREAMPULSE_VERSION}"
 
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates tini gosu chromium fonts-noto-cjk \
+    && apt-get install -y --no-install-recommends ca-certificates tini gosu fonts-noto-cjk libnss3 libnspr4 libatk1.0-0 libatk-bridge2.0-0 libcups2 libdrm2 libxkbcommon0 libxcomposite1 libxdamage1 libxfixes3 libxrandr2 libgbm1 libpango-1.0-0 libcairo2 libasound2 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -35,7 +35,7 @@ ENV NODE_ENV=production \
     OUTPUT_DIR=/strm \
     LOG_DIR=/logs \
     WEB_DIST=/app/dist/web \
-    CHROMIUM_PATH=/usr/bin/chromium \
+    PUPPETEER_CACHE_DIR=/config/browsers \
     STREAMPULSE_VERSION=${STREAMPULSE_VERSION}
 
 COPY --from=build --chown=node:node /app/node_modules ./node_modules
