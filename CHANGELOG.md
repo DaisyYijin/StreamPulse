@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.50.2] - 2026-11-24
+
+### Fixed
+
+- Simple wash mode now uses the same modes as YAML policies
+  (skip/replace/coexist/max_size/min_size) and updates the first policy.
+
 ## [1.50.1] - 2026-11-24
 
 ### Changed

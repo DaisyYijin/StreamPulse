@@ -292,19 +292,45 @@ const WASH_POLICY_PRESETS = {
   detailed: `电影洗版策略:\n  mode: replace\n  scope: group\n  media_type: movie\n  priority_level:\n    - resource_team: "WiKi"\n      resource_effect: "!DV"\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n剧集洗版策略:\n  mode: replace\n  scope: group\n  media_type: tv\n  priority_level:\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n电影兜底:\n  mode: max_size\n  media_type: movie\n剧集兜底:\n  mode: max_size\n  media_type: tv\n`,
 };
 
-function washModeFromPolicies(text: string): WashConfig['mode'] | null {
+type PolicyMode = 'skip' | 'replace' | 'coexist' | 'max_size' | 'min_size';
+const POLICY_MODE_LABELS: Record<PolicyMode, string> = {
+  skip: '跳过：已有版本就保留',
+  replace: '替换：按优先级洗版',
+  coexist: '共存：保留多版本',
+  max_size: '保留体积更大的版本',
+  min_size: '保留体积更小的版本',
+};
+
+function firstPolicyMode(text: string): PolicyMode {
   try {
     const document = parseYaml(text) as Record<string, unknown> | null;
     const first = document && typeof document === 'object' ? Object.values(document)[0] : null;
     const mode = first && typeof first === 'object' && !Array.isArray(first) ? (first as Record<string, unknown>).mode : null;
-    if (mode === 'replace') return 'better';
-    if (mode === 'skip') return 'off';
-    if (mode === 'max_size' || mode === 'min_size') return mode;
-    if (mode === 'coexist') return 'better';
+    if (mode === 'skip' || mode === 'replace' || mode === 'coexist' || mode === 'max_size' || mode === 'min_size') return mode;
   } catch {
-    return null;
+    return 'replace';
   }
-  return null;
+  return 'replace';
+}
+
+function legacyModeForPolicy(mode: PolicyMode): WashConfig['mode'] {
+  if (mode === 'skip') return 'off';
+  if (mode === 'max_size' || mode === 'min_size') return mode;
+  return 'better';
+}
+
+function updateFirstPolicyMode(text: string, mode: PolicyMode): string {
+  let document: Record<string, unknown>;
+  try {
+    const parsed = parseYaml(text) as Record<string, unknown> | null;
+    document = parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    document = {};
+  }
+  const firstKey = Object.keys(document)[0] ?? '默认洗版策略';
+  const first = document[firstKey];
+  document[firstKey] = { ...(first && typeof first === 'object' && !Array.isArray(first) ? first as Record<string, unknown> : {}), mode };
+  return stringifyYaml(document, { lineWidth: 0 });
 }
 
 const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile' | 'avFolder' | 'avFile', Array<{ label: string; value: string }>> = {
@@ -462,14 +488,6 @@ function RenameTemplateField({
   );
 }
 
-const UPGRADE_LABEL: Record<Exclude<OrganizerSettings['upgradeStrategy'], 'weighted'>, string> = {
-  off: '关闭：目标已存在就跳过',
-  better: '仅当新版本画质更好',
-  always: '总是替换',
-  max_size: '体积更大才替换',
-  min_size: '体积更小才替换',
-};
-
 function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }) {
   if (topic === 'rename') {
     return (
@@ -601,6 +619,7 @@ export function OrganizePage() {
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
   const [washPoliciesYaml, setWashPoliciesYaml] = useState('');
+  const [washPolicyMode, setWashPolicyMode] = useState<PolicyMode>('replace');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | null>(null);
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
@@ -647,8 +666,8 @@ export function OrganizePage() {
       setCmsYaml(initialCms);
       setCategoryMode(organizer.categoryFormat === 'cms' ? 'yaml' : 'simple');
       setWashPoliciesYaml(organizer.washPoliciesYaml ?? '');
-      const loadedWashMode = washModeFromPolicies(organizer.washPoliciesYaml ?? '');
-      if (loadedWashMode) organizer.washing = { ...organizer.washing, mode: loadedWashMode };
+      setWashPolicyMode(firstPolicyMode(organizer.washPoliciesYaml ?? ''));
+      organizer.washing = { ...organizer.washing, mode: legacyModeForPolicy(firstPolicyMode(organizer.washPoliciesYaml ?? '')) };
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
       .finally(() => setLoading(false));
@@ -704,15 +723,18 @@ export function OrganizePage() {
     applySimpleCategories(categories);
   };
 
-  const updateWash = (patch: Partial<WashConfig>) => {
-    const washing = { ...form.washing, ...patch };
-    setForm((previous) => ({ ...previous, washing }));
-  };
-
   const applyWashPolicyYaml = (text: string) => {
     setWashPoliciesYaml(text);
-    const mode = washModeFromPolicies(text);
-    setForm((previous) => ({ ...previous, washPoliciesYaml: text, ...(mode ? { washing: { ...previous.washing, mode } } : {}) }));
+    const mode = firstPolicyMode(text);
+    setWashPolicyMode(mode);
+    setForm((previous) => ({ ...previous, washPoliciesYaml: text, washing: { ...previous.washing, mode: legacyModeForPolicy(mode) } }));
+  };
+
+  const applySimpleWashMode = (mode: PolicyMode) => {
+    setWashPolicyMode(mode);
+    const text = updateFirstPolicyMode(washPoliciesYaml, mode);
+    setWashPoliciesYaml(text);
+    setForm((previous) => ({ ...previous, washPoliciesYaml: text, washing: { ...previous.washing, mode: legacyModeForPolicy(mode) } }));
   };
 
   const simulateWash = async () => {
@@ -944,7 +966,7 @@ export function OrganizePage() {
       {tab === 'upgrade' ? (
         <div className="panel">
           <div className="panel-head">
-            <div><h2>洗版策略</h2><p>简单模式直接选规则；高级模式支持权重、分差、覆盖率和排除条件。</p></div>
+            <div><h2>洗版策略</h2><p>简单模式选择洗版模式；YAML 模式配置多策略、分类过滤和优先级。</p></div>
             <div className="editor-switch">
               <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单模式</button>
               <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => setWashMode('yaml')}>YAML 模式</button>
@@ -954,33 +976,13 @@ export function OrganizePage() {
                     {washMode === 'simple' ? (
             <div className="simple-wash">
               <div className="form-grid form-grid-2">
-                <Field label="洗版模式" hint="决定已有版本时如何处理">
-                  <Select value={form.washing.mode} onChange={(event) => updateWash({ mode: event.target.value as WashConfig['mode'] })}>
-                    {Object.entries(UPGRADE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                <Field label="洗版模式" hint="直接对应洗版 YAML 第一套策略的 mode">
+                  <Select value={washPolicyMode} onChange={(event) => applySimpleWashMode(event.target.value as PolicyMode)}>
+                    {(Object.keys(POLICY_MODE_LABELS) as PolicyMode[]).map((value) => <option key={value} value={value}>{POLICY_MODE_LABELS[value]}</option>)}
                   </Select>
                 </Field>
-                <Field label="同分处理">
-                  <Select value={form.washing.tie} onChange={(event) => updateWash({ tie: event.target.value as 'keep' | 'replace' })}>
-                    <option value="keep">保留现有版本</option>
-                    <option value="replace">替换为候选版本</option>
-                  </Select>
-                </Field>
-                <Field label="最小分差" hint="候选至少高多少分才替换">
-                  <Input type="number" min={0} value={form.washing.minGap} onChange={(event) => updateWash({ minGap: Number(event.target.value) })} />
-                </Field>
-                <Field label="最低覆盖率" hint="0.5 表示至少识别出一半的质量信息">
-                  <Input type="number" min={0} max={1} step={0.05} value={form.washing.minCoverage} onChange={(event) => updateWash({ minCoverage: Number(event.target.value) })} />
-                </Field>
               </div>
-              <div className="form-grid form-grid-2">
-                <Field label="必须包含" hint="逗号分隔，例如 中字, 1080p">
-                  <Input value={form.washing.must.join(', ')} onChange={(event) => updateWash({ must: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} />
-                </Field>
-                <Field label="排除" hint="逗号分隔，例如 DV, CAM">
-                  <Input value={form.washing.exclude.join(', ')} onChange={(event) => updateWash({ exclude: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} />
-                </Field>
-              </div>
-              <p className="settings-hint">画质比较：分辨率 → 片源 → HDR → 编码；体积也按权重参与。权重洗版只在信息足够且分差达到要求时替换。</p>
+              <p className="settings-hint">简单模式只修改第一套策略的 mode；media_type、category 和 priority_level 请在 YAML 模式设置。</p>
             </div>
           ) : (
           <div className="yaml-layout">
@@ -999,7 +1001,7 @@ export function OrganizePage() {
             <div className="yaml-preview">
               <div className="yaml-preview-head">可视化策略</div>
               <div className="upgrade-preview">
-                <strong>{UPGRADE_LABEL[form.washing.mode as keyof typeof UPGRADE_LABEL] ?? '旧权重模式'}</strong>
+                <strong>{POLICY_MODE_LABELS[washPolicyMode]}</strong>
                 <p>最小分差 {form.washing.minGap} · 最低覆盖率 {(form.washing.minCoverage * 100).toFixed(0)}% · 同分{form.washing.tie === 'keep' ? '保留现有' : '替换'}</p>
                 {form.washing.must.length ? <p>必须：{form.washing.must.join(', ')}</p> : null}
                 {form.washing.exclude.length ? <p>排除：{form.washing.exclude.join(', ')}</p> : null}
