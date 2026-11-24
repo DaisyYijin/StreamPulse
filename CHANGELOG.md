@@ -2,6 +2,15 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.52.0] - 2026-11-24
+
+### Changed
+
+- Categories/wash are YAML-only with no editor-mode buttons.
+- Organizer rules tab moved after basic settings.
+- Category help expanded; category outline groups level-1 directories.
+- Wash outline lists every priority level; simulation comparison removed.
+
 ## [1.51.0] - 2026-11-24
 
 ### Added

@@ -336,7 +336,7 @@ function updateFirstPolicyMode(text: string, mode: PolicyMode): string {
   return stringifyYaml(document, { lineWidth: 0 });
 }
 
-interface WashOutlineItem { name: string; mode: string; mediaType: string; categories: string; levels: number; }
+interface WashOutlineItem { name: string; mode: string; mediaType: string; categories: string; levels: Array<{ level: number; summary: string }>; }
 function washPolicyOutline(text: string): WashOutlineItem[] {
   try {
     const document = parseYaml(text) as Record<string, unknown> | null;
@@ -349,7 +349,13 @@ function washPolicyOutline(text: string): WashOutlineItem[] {
         mode: String(item.mode ?? 'replace'),
         mediaType: String(item.media_type ?? '全部'),
         categories,
-        levels: Array.isArray(item.priority_level) ? item.priority_level.length : 0,
+        levels: Array.isArray(item.priority_level) ? item.priority_level.map((level, index) => {
+          const conditions = level && typeof level === 'object' && !Array.isArray(level) ? level as Record<string, unknown> : {};
+          return {
+            level: index + 1,
+            summary: Object.entries(conditions).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value ?? '')}`).join(' · '),
+          };
+        }) : [],
       };
     });
   } catch {
@@ -357,7 +363,7 @@ function washPolicyOutline(text: string): WashOutlineItem[] {
   }
 }
 
-interface CategoryOutlineItem { name: string; mediaType: string; summary: string; }
+interface CategoryOutlineItem { name: string; mediaType: string; summary: string; group: string; }
 function categoryOutline(text: string): CategoryOutlineItem[] {
   try {
     const document = parseYaml(text) as Record<string, unknown> | null;
@@ -369,7 +375,7 @@ function categoryOutline(text: string): CategoryOutlineItem[] {
       for (const [name, raw] of Object.entries(block as Record<string, unknown>)) {
         const conditions = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
         const summary = Object.entries(conditions).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value ?? '')}`).join(' · ');
-        items.push({ name, mediaType, summary });
+        items.push({ name, mediaType, summary, group: name.split('/')[0] || name });
       }
     }
     return items;
@@ -583,47 +589,76 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
     return (
       <div className="rule-help">
         <section>
-          <h3>YAML 分类规则</h3>
-          <pre>{`categories:
-  - name: 电影/动画电影
-    mediaType: movie
-    genres: [Animation]
-  - name: 电影/华语电影
-    mediaType: movie
-    languages: [zh, cn]
-  - name: 电影/外语电影
-    mediaType: movie
-  - name: 剧集/动漫番剧
-    mediaType: tv
-    genres: [Animation]
-    countries: [JP]
-  - name: 剧集/国产剧
-    mediaType: tv
-    countries: [CN, HK, TW]`}</pre>
-          <p>分类名写什么就落到媒体库根下的什么位置，不再自动加 <code>Movies</code>/<code>TV</code> 前缀。最后一条不写条件就是兜底。</p>
+          <h3>YAML 分类格式</h3>
+          <pre>{`movie:
+  电影/动画电影:
+    genre_ids: "16"
+  电影/华语电影:
+    original_language: "zh,cn"
+  电影/外语电影:
+
+tv:
+  剧集/动漫番剧:
+    genre_ids: "16"
+  剧集/国产剧:
+    origin_country: "CN,HK,TW"
+  剧集/其他:
+
+av:
+  AV/有码:
+  AV/无码:`}</pre>
+          <p>顶层写 <code>movie</code> / <code>tv</code> / <code>av</code>；下一层是分类目录名；再下一层是条件。分类名写什么就落到媒体库根下的什么位置，不再自动加 Movies/TV 前缀。</p>
         </section>
         <section>
-          <h3>当前支持的字段</h3>
+          <h3>字段说明</h3>
           <ul>
-            <li><code>movie</code> / <code>tv</code>：顶层必须二选一。</li>
-            <li>分类名：目录名，可用 <code>/</code> 建多级；没有条件的规则是兜底。</li>
-            <li><code>genre_ids</code> / <code>original_language</code> / <code>origin_country</code> / <code>production_countries</code> / <code>release_year</code>。</li>
-            <li><code>keywords</code> / <code>include_keywords</code> / <code>series_keywords</code> / <code>series_actors</code> / <code>series_directors</code>。</li>
-            <li><code>custom_regex</code>；<code>?</code> 可选、<code>+</code> 必须、<code>-</code>/<code>!</code> 排除。</li>
+            <li><code>genre_ids</code>：TMDb 类型 ID，例如 <code>16</code> 动画、<code>99</code> 纪录片、<code>10762</code> 儿童；支持逗号和范围，如 <code>"16,10764-10767"</code>。</li>
+            <li><code>original_language</code>：语言代码，如 <code>zh</code>、<code>cn</code>、<code>ja</code>、<code>ko</code>、<code>en</code>。</li>
+            <li><code>origin_country</code>：出品国家代码，如 <code>CN</code>、<code>HK</code>、<code>JP</code>、<code>KR</code>、<code>US</code>。</li>
+            <li><code>production_countries</code>：制片国家代码，老电影缺少 origin_country 时更稳。</li>
+            <li><code>release_year</code>：年份或范围，如 <code>2020</code>、<code>2000-2009</code>。</li>
+            <li><code>keywords</code>：片名/原名关键词，子串且不区分大小写，如 <code>演唱会,concert</code>。</li>
+            <li><code>include_keywords</code>：TMDb 标签关键词，如 <code>live concert</code>。</li>
+            <li><code>series_keywords</code>：按片名命中系列，并在分类下增加 <code>X系列</code> 层，如 <code>碟中谍</code>。</li>
+            <li><code>series_actors</code> / <code>series_directors</code>：按前 6 位演员/导演命中系列。</li>
+            <li><code>custom_regex</code>：正则匹配片名或原名，命中直接归入此类。</li>
           </ul>
         </section>
         <section>
-          <h3>匹配规则</h3>
+          <h3>条件写法</h3>
           <ul>
-            <li>按列表从上到下匹配，命中第一个分类就停止。</li>
-            <li>同一分类里的多个字段是“且”，字段内多个值是“或”。</li>
-            <li>没有命中任何分类时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</li>
-            <li>分类目录自动创建，不需要 CID。</li>
+            <li>同一个分类里的多个字段是“且”，字段内用逗号分隔的多个值是“或”。</li>
+            <li><code>?字段</code> 是可选项：多个可选条件至少命中一个，其他非可选条件仍要满足。</li>
+            <li><code>+字段</code> 表示必须条件；<code>字段: "!DV"</code> 或 <code>-字段</code> 表示排除。</li>
+            <li>不写任何条件的分类是兜底；没有命中任何分类时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</li>
+            <li>从上到下匹配，命中第一个分类就停止。</li>
           </ul>
         </section>
         <section>
-          <h3>YAML 分类</h3>
-          <p>分类规则直接在 YAML 编辑器中维护，右侧会实时生成可视化大纲。</p>
+          <h3>分类命名</h3>
+          <ul>
+            <li>分类名就是目录路径，例如 <code>电影/华语电影</code> 会生成 <code>电影/华语电影</code>。</li>
+            <li>不需要前缀时直接写 <code>动漫番剧</code>，不要写成 <code>剧集/动漫番剧</code> 后再重复加层。</li>
+            <li>目录不存在时自动创建，不需要填写云盘 CID。</li>
+          </ul>
+        </section>
+        <section>
+          <h3>示例</h3>
+          <pre>{`movie:
+  电影/华语电影:
+    original_language: "zh,cn"
+  电影/日韩电影:
+    origin_country: "JP,KR"
+  电影/动画电影:
+    genre_ids: "16"
+  电影/其他:
+
+tv:
+  剧集/国产剧:
+    origin_country: "CN,HK,TW"
+  剧集/日韩剧:
+    origin_country: "JP,KR"
+  剧集/其他:`}</pre>
         </section>
       </div>
     );
@@ -633,18 +668,35 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
       <section>
         <h3>洗版模式</h3>
         <ul>
-          <li><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。</li>
-          <li><code>max_size</code> 保留更大版本；<code>min_size</code> 保留更小版本。</li>
+          <li><code>skip</code>：已有版本就保留，不再洗版。</li>
+          <li><code>replace</code>：按 <code>priority_level</code> 从高到低判断，候选优先级更高才替换。</li>
+          <li><code>coexist</code>：多版本共存。</li>
+          <li><code>max_size</code>：同优先级时保留体积更大的版本。</li>
+          <li><code>min_size</code>：同优先级时保留体积更小的版本。</li>
         </ul>
       </section>
       <section>
-        <h3>保护条件</h3>
+        <h3>策略字段</h3>
         <ul>
-          <li>最小分差：候选至少高多少分才替换。</li>
-          <li>最低覆盖率：识别出的质量信息不足时倾向保留现有版本。</li>
-          <li>必须/排除：字幕、DV、片源等硬性条件。</li>
-          <li>高级 YAML 可以模拟比较，不会移动文件。</li>
+          <li><code>media_type</code>：movie / tv；不写匹配全部。</li>
+          <li><code>category</code>：对应二级分类名，可写多个。</li>
+          <li><code>scope</code>：all / group。</li>
+          <li><code>priority_level</code>：从上到下优先级依次降低。</li>
+          <li>条件支持重命名变量，如 <code>resource_pix</code>、<code>resource_type</code>、<code>resource_effect</code>、<code>resource_team</code>。</li>
+          <li>值可写多个，如 <code>"2160p,4k"</code>；<code>!DV</code> 表示排除。</li>
         </ul>
+      </section>
+      <section>
+        <h3>示例</h3>
+        <pre>{`电影洗版策略:
+  mode: replace
+  media_type: movie
+  priority_level:
+    - resource_team: "WiKi"
+      resource_effect: "!DV"
+    - resource_pix: "2160p,4k"
+      resource_type: "BluRay"
+    - resource_pix: "1080p"`}</pre>
       </section>
     </div>
   );
@@ -662,7 +714,7 @@ export function OrganizePage() {
   const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('yaml');
   const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv' | 'av'>('movie');
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
-  const [washMode, setWashMode] = useState<'simple' | 'yaml'>('yaml');
+  const [washMode] = useState<'simple' | 'yaml'>('yaml');
   const [washPoliciesYaml, setWashPoliciesYaml] = useState('');
   const [washPolicyMode, setWashPolicyMode] = useState<PolicyMode>('replace');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | null>(null);
@@ -676,9 +728,6 @@ export function OrganizePage() {
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTopic, setHelpTopic] = useState<'rename' | 'categories' | 'upgrade' | null>(null);
-  const [simExisting, setSimExisting] = useState('Movie.2024.1080p.WEB-DL.mkv');
-  const [simCandidate, setSimCandidate] = useState('Movie.2024.2160p.BluRay.HEVC.mkv');
-  const [simResult, setSimResult] = useState<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number } | null>(null);
 
   const changeTab = (next: Tab) => {
     setTab(next);
@@ -782,21 +831,6 @@ export function OrganizePage() {
     setForm((previous) => ({ ...previous, washPoliciesYaml: text, washing: { ...previous.washing, mode: legacyModeForPolicy(mode) } }));
   };
 
-  const simulateWash = async () => {
-    try {
-      await save();
-      const result = await api.post<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number }>('/api/organize/simulate', {
-        candidateName: simCandidate,
-        candidateSize: 0,
-        existingName: simExisting,
-        existingSize: 0,
-      });
-      setSimResult(result);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : '模拟失败');
-    }
-  };
-
   const validateForScan = () => {
     if (!form.sourceId) throw new Error('扫描前请选择来源账号');
     if (!form.sourcePath.trim()) throw new Error('扫描前请选择网盘待整理目录');
@@ -872,10 +906,10 @@ export function OrganizePage() {
 
       <div className="settings-tabs" role="tablist" aria-label="整理设置分类">
         <button role="tab" className={tab === 'settings' ? 'active' : ''} onClick={() => changeTab('settings')}><SlidersHorizontal size={15} />基本设置</button>
+        <button role="tab" className={tab === 'rules' ? 'active' : ''} onClick={() => changeTab('rules')}><SlidersHorizontal size={15} />整理规则</button>
         <button role="tab" className={tab === 'rename' ? 'active' : ''} onClick={() => changeTab('rename')}><Pencil size={15} />重命名规则</button>
         <button role="tab" className={tab === 'categories' ? 'active' : ''} onClick={() => changeTab('categories')}><Tags size={15} />二级分类 <span>{form.categories.length}</span></button>
         <button role="tab" className={tab === 'upgrade' ? 'active' : ''} onClick={() => changeTab('upgrade')}><WandSparkles size={15} />洗版策略</button>
-        <button role="tab" className={tab === 'rules' ? 'active' : ''} onClick={() => changeTab('rules')}><SlidersHorizontal size={15} />整理规则</button>
       </div>
 
       {tab === 'settings' ? (
@@ -944,9 +978,6 @@ export function OrganizePage() {
         <div className="panel">
           <div className="panel-head">
             <div><h2>二级分类</h2><p>按类型、国家、语言、关键词匹配；不匹配进入“其他”。</p></div>
-            <div className="editor-switch">
-              <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); update('categoryFormat', 'cms'); }}>YAML 模式</button>
-            </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
           </div>
                     {categoryMode === 'yaml' ? (
@@ -966,16 +997,18 @@ export function OrganizePage() {
                 placeholder={'movie:\n  电影/动画电影:\n    genre_ids: "16"\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"'}
               />
               <div className="cms-category-preview">
-                <strong>YAML 分类说明</strong>
-                <p>顶层写 <code>movie</code> / <code>tv</code>，下一层是分类目录名，再下一层是条件。分类名写什么就落到媒体库根下的什么位置，不再自动加 Movies/TV 前缀。</p>
-                <p>支持 <code>genre_ids</code>、<code>original_language</code>、<code>origin_country</code>、<code>production_countries</code>、<code>release_year</code>、<code>keywords</code>、<code>include_keywords</code>、<code>series_*</code>、<code>custom_regex</code>、可选 <code>?</code> 和排除 <code>-</code>/<code>!</code> 条件。</p>
-                <p>不写条件的分类作为兜底；没有命中时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</p>
+                <strong>分类大纲</strong>
                 <div className="category-outline">
-                  {categoryOutline(cmsYaml).map((category) => (
-                    <div className="category-outline-row" key={`${category.mediaType}-${category.name}`}>
-                      <strong>{category.name}</strong>
-                      <span>{category.mediaType === 'movie' ? '电影' : category.mediaType === 'tv' ? '剧集' : 'AV'}</span>
-                      <em>{category.summary || '兜底'}</em>
+                  {Array.from(new Set(categoryOutline(cmsYaml).map((category) => category.group))).map((group) => (
+                    <div className="category-outline-group" key={group}>
+                      <strong className="outline-level1">{group}</strong>
+                      {categoryOutline(cmsYaml).filter((category) => category.group === group).map((category) => (
+                        <div className="category-outline-row" key={`${category.mediaType}-${category.name}`}>
+                          <strong>{category.name}</strong>
+                          <span>{category.mediaType === 'movie' ? '电影' : category.mediaType === 'tv' ? '剧集' : 'AV'}</span>
+                          <em>{category.summary || '兜底'}</em>
+                        </div>
+                      ))}
                     </div>
                   ))}
                 </div>
@@ -1045,9 +1078,6 @@ export function OrganizePage() {
         <div className="panel">
           <div className="panel-head">
             <div><h2>洗版策略</h2><p>用多策略 YAML 配置 mode、媒体类型、分类过滤和 priority_level。</p></div>
-            <div className="editor-switch">
-              <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => setWashMode('yaml')}>YAML 模式</button>
-            </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'upgrade' ? null : 'upgrade')}>填写说明</Button>
           </div>
                     {washMode === 'simple' ? (
@@ -1083,21 +1113,13 @@ export function OrganizePage() {
                   <div className="wash-outline-row" key={policy.name}>
                     <strong>{policy.name}</strong>
                     <span>{policy.mode} · {policy.mediaType}{policy.categories ? ` · ${policy.categories}` : ''}</span>
-                    <em>{policy.levels} 级优先级</em>
+                    <em>{policy.levels.length} 级优先级</em>
+                    {policy.levels.map((level) => (
+                      <small key={level.level}><b>P{level.level}</b> {level.summary || '无条件'}</small>
+                    ))}
                   </div>
                 ))}
               </div>
-              <div className="yaml-preview-head">模拟比较</div>
-              <Field label="现有文件名"><Input value={simExisting} onChange={(event) => setSimExisting(event.target.value)} /></Field>
-              <Field label="候选文件名"><Input value={simCandidate} onChange={(event) => setSimCandidate(event.target.value)} /></Field>
-              <Button type="button" variant="secondary" size="sm" onClick={() => void simulateWash()}>模拟比较</Button>
-              {simResult ? (
-                <div className="simulate-result">
-                  <strong>{simResult.action === 'upgrade' ? '候选胜出，允许洗版' : '保留现有版本'}</strong>
-                  <span>{simResult.reason}</span>
-                  <span>候选 {simResult.candidateScore.toFixed(1)} / 现有 {simResult.existingScore.toFixed(1)} · 覆盖率 {(simResult.coverage * 100).toFixed(0)}%</span>
-                </div>
-              ) : null}
             </div>
           </div>
           )}

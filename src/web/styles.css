@@ -7286,3 +7286,29 @@ html[data-theme='light'] .genre-picker-menu {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.category-outline-group {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.outline-level1 {
+  padding: 3px 6px;
+  border-left: 2px solid var(--lime);
+  color: var(--lime);
+  font-size: 10px;
+}
+
+.wash-outline-row small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 8.5px;
+  line-height: 1.5;
+}
+
+.wash-outline-row small b {
+  margin-right: 4px;
+  color: var(--lime);
+  font-weight: 600;
+}
