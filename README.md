@@ -647,7 +647,7 @@ npm test
 ```text
 ghcr.io/daisyyijin/streampulse:latest
 ghcr.io/daisyyijin/streampulse:sha-<commit>
-ghcr.io/daisyyijin/streampulse:1.50.0
+ghcr.io/daisyyijin/streampulse:1.50.1
 ```
 
 ### 首次发布后设为公开

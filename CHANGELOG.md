@@ -2,6 +2,13 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.50.1] - 2026-11-24
+
+### Changed
+
+- Removed the legacy weighted-wash option and weight controls from the simple
+  wash form; use multi-policy priority levels instead.
+
 ## [1.50.0] - 2026-11-24
 
 ### Added

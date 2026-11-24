@@ -462,13 +462,12 @@ function RenameTemplateField({
   );
 }
 
-const UPGRADE_LABEL: Record<OrganizerSettings['upgradeStrategy'], string> = {
+const UPGRADE_LABEL: Record<Exclude<OrganizerSettings['upgradeStrategy'], 'weighted'>, string> = {
   off: '关闭：目标已存在就跳过',
   better: '仅当新版本画质更好',
   always: '总是替换',
   max_size: '体积更大才替换',
   min_size: '体积更小才替换',
-  weighted: '权重洗版',
 };
 
 function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }) {
@@ -573,7 +572,6 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
         <ul>
           <li><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换。</li>
           <li><code>max_size</code> 保留更大版本；<code>min_size</code> 保留更小版本。</li>
-          <li><code>weighted</code> 按分辨率、片源、HDR、编码、体积打分。</li>
         </ul>
       </section>
       <section>
@@ -709,10 +707,6 @@ export function OrganizePage() {
   const updateWash = (patch: Partial<WashConfig>) => {
     const washing = { ...form.washing, ...patch };
     setForm((previous) => ({ ...previous, washing }));
-  };
-
-  const updateWashWeights = (key: keyof WashConfig['weights'], value: number) => {
-    updateWash({ weights: { ...form.washing.weights, [key]: Number.isFinite(value) ? value : 0 } });
   };
 
   const applyWashPolicyYaml = (text: string) => {
@@ -978,16 +972,6 @@ export function OrganizePage() {
                   <Input type="number" min={0} max={1} step={0.05} value={form.washing.minCoverage} onChange={(event) => updateWash({ minCoverage: Number(event.target.value) })} />
                 </Field>
               </div>
-              <div className="simple-wash-weights">
-                <span className="yaml-preview-head">权重</span>
-                {([
-                  ['resolution', '分辨率'], ['source', '片源'], ['hdr', 'HDR'], ['codec', '编码'], ['size', '体积'],
-                ] as const).map(([key, label]) => (
-                  <Field key={key} label={label}>
-                    <Input type="number" min={0} value={form.washing.weights[key]} onChange={(event) => updateWashWeights(key, Number(event.target.value))} />
-                  </Field>
-                ))}
-              </div>
               <div className="form-grid form-grid-2">
                 <Field label="必须包含" hint="逗号分隔，例如 中字, 1080p">
                   <Input value={form.washing.must.join(', ')} onChange={(event) => updateWash({ must: event.target.value.split(',').map((value) => value.trim()).filter(Boolean) })} />
@@ -1015,9 +999,8 @@ export function OrganizePage() {
             <div className="yaml-preview">
               <div className="yaml-preview-head">可视化策略</div>
               <div className="upgrade-preview">
-                <strong>{UPGRADE_LABEL[form.washing.mode]}</strong>
+                <strong>{UPGRADE_LABEL[form.washing.mode as keyof typeof UPGRADE_LABEL] ?? '旧权重模式'}</strong>
                 <p>最小分差 {form.washing.minGap} · 最低覆盖率 {(form.washing.minCoverage * 100).toFixed(0)}% · 同分{form.washing.tie === 'keep' ? '保留现有' : '替换'}</p>
-                <p>权重：分辨率 {form.washing.weights.resolution} / 片源 {form.washing.weights.source} / HDR {form.washing.weights.hdr} / 编码 {form.washing.weights.codec} / 体积 {form.washing.weights.size}</p>
                 {form.washing.must.length ? <p>必须：{form.washing.must.join(', ')}</p> : null}
                 {form.washing.exclude.length ? <p>排除：{form.washing.exclude.join(', ')}</p> : null}
               </div>
@@ -1109,21 +1092,18 @@ export function OrganizePage() {
   - name: 国产剧
     mediaType: tv
     countries: [CN]`}</pre>
-            <p>字段：<code>name</code>、<code>mediaType</code>（movie/tv）、<code>genres</code>、<code>countries</code>、<code>languages</code>、<code>keywords</code>。同一分类内多个条件之间是 AND；数组内多个值之间是 OR。从上到下匹配，第一个符合条件的分类生效。</p>
+            <p>字段：<code>name</code>、<code>mediaType</code>（movie/tv/av）、<code>genres</code>、<code>countries</code>、<code>languages</code>、<code>keywords</code>。同一分类内多个条件之间是 AND；数组内多个值之间是 OR。从上到下匹配，第一个符合条件的分类生效。</p>
           </section>
           <section>
             <h3>洗版策略 YAML</h3>
-            <pre>{`washing:
-  mode: weighted
-  min_gap: 5
-  min_coverage: 0.5
-  weights:
-    resolution: 30
-    source: 20
-    hdr: 5
-    codec: 5
-    size: 5`}</pre>
-            <p><code>off</code> 已存在就跳过；<code>better</code> 画质更好才替换；<code>always</code> 总是替换；<code>max_size</code> / <code>min_size</code> 按体积取舍；<code>weighted</code> 按权重和最小分差。画质比较顺序：分辨率 → 片源 → HDR → 编码。</p>
+            <pre>{`电影洗版策略:
+  mode: replace
+  media_type: movie
+  priority_level:
+    - resource_pix: "2160p,4k"
+      resource_type: "BluRay"
+    - resource_pix: "1080p"`}</pre>
+            <p>多策略 YAML 使用 <code>priority_level</code> 排序；简单模式仍支持关闭、更好、总是、按体积取舍。</p>
           </section>
           <section>
             <h3>重命名模板</h3>
