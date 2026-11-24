@@ -2,6 +2,18 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.49.0] - 2026-11-24
+
+### Added
+
+- Named multi-policy wash YAML with `mode`, `scope`, `media_type`, `category`
+  and `priority_level`; supports coexist/skip/replace/max_size/min_size.
+- One-click 精简 / 标准 / 详细 YAML presets for categories and wash policies.
+
+### Changed
+
+- Removed CMS wording from user-facing help and docs.
+
 ## [1.48.1] - 2026-11-24
 
 ### Fixed

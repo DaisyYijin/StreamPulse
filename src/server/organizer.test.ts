@@ -26,6 +26,7 @@ const config: OrganizerSettings = {
   avFolderTemplate: '{title}',
   avFileTemplate: '{title}',
   tvFileTemplate: '{title} - S{season}E{episode}{quality}',
+  washPoliciesYaml: '',
   washing: { mode: 'better', minGap: 0, minCoverage: 0, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categoryFormat: 'simple',
   cmsCategories: '',

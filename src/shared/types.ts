@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.48.1';
+export const APP_VERSION = '1.49.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -199,6 +199,7 @@ export interface OrganizerSettings {
   avFolderTemplate: string;
   avFileTemplate: string;
   washing: WashConfig;
+  washPoliciesYaml: string;
   categories: OrganizeCategory[];
   categoryFormat: 'simple' | 'cms';
   cmsCategories: string;

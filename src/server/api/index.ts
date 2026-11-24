@@ -15,6 +15,7 @@ import { generateLibraryCover } from '../covers.js';
 import { createEmbyLibrary, listEmbyLibraries, testEmby } from '../emby.js';
 import { searchHdhive, testHdhive } from '../hdhive.js';
 import { parseCmsCategories } from '../cms-categories.js';
+import { parseWashPolicies } from '../wash-policies.js';
 import { searchTmdb } from '../tmdb.js';
 import { searchButailing } from '../butailing.js';
 import { searchGuanying } from '../guanying.js';
@@ -1142,7 +1143,14 @@ export function createApiRouter({ store, auth, runner, scheduler }: ApiDeps): Ro
       try {
         parseCmsCategories(body.organizer.cmsCategories);
       } catch (error) {
-        throw new HttpError(400, error instanceof Error ? error.message : 'CMS 分类 YAML 无效');
+        throw new HttpError(400, error instanceof Error ? error.message : '分类 YAML 无效');
+      }
+    }
+    if (body.organizer?.washPoliciesYaml) {
+      try {
+        parseWashPolicies(body.organizer.washPoliciesYaml);
+      } catch (error) {
+        throw new HttpError(400, error instanceof Error ? error.message : '洗版策略 YAML 无效');
       }
     }
     await store.mutate((db) => {

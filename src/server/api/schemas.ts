@@ -212,6 +212,7 @@ const organizerSchema = z.object({
   avFolderTemplate: z.string().trim().min(1).max(500),
   avFileTemplate: z.string().trim().min(1).max(500),
   washing: washSchema,
+  washPoliciesYaml: z.string().max(200_000).default(''),
   categories: z.array(organizeCategorySchema).max(100),
   categoryFormat: z.enum(['simple', 'cms']).default('simple'),
   cmsCategories: z.string().max(200_000).default(''),

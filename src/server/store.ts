@@ -60,6 +60,7 @@ function createDefaultDatabase(): Database {
         tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
         avFolderTemplate: DEFAULT_AV_FOLDER_TEMPLATE,
         avFileTemplate: DEFAULT_AV_FILE_TEMPLATE,
+        washPoliciesYaml: '',
         washing: {
           mode: 'better',
           minGap: 0,

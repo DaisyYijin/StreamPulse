@@ -6,6 +6,7 @@ import type { StorageClient, StorageEntry } from './storage.js';
 import { searchTmdb, TmdbError, type TmdbInfo } from './tmdb.js';
 import { matchCmsCategory, parseCmsCategories, type CmsCategoryConfig } from './cms-categories.js';
 import { GENRE_NAME_TO_ID } from './genres.js';
+import { evaluateWashPolicies, parseWashPolicies } from './wash-policies.js';
 import { makeId } from './types.js';
 
 const VIDEO_EXTENSIONS = new Set(['.mkv', '.mp4', '.avi', '.mov', '.wmv', '.ts', '.m2ts', '.flv', '.webm', '.rmvb']);
@@ -400,6 +401,7 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
   const files = await scanCloud(client, sourcePath);
   const items: OrganizeItem[] = [];
   const cmsConfig: CmsCategoryConfig | null = settings.categoryFormat === 'cms' ? parseCmsCategories(settings.cmsCategories) : null;
+  const washPolicies = parseWashPolicies(settings.washPoliciesYaml || '');
   const cache = new Map<string, TmdbInfo | null>();
 
   for (const { path: filePath, entry } of files) {
@@ -444,7 +446,15 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
       let action: OrganizeItem['action'] = 'create';
       let reason = '新增入库';
       if (best) {
-        const decision = evaluateWash(settings.washing, entry.name, entry.size, best.name, best.size);
+        const policyDecision = evaluateWashPolicies(washPolicies, {
+          mediaType: parsed.mediaType,
+          category,
+          candidateName: entry.name,
+          candidateSize: entry.size,
+          existingName: best.name,
+          existingSize: best.size,
+        });
+        const decision = policyDecision ?? evaluateWash(settings.washing, entry.name, entry.size, best.name, best.size);
         action = decision.action;
         reason = decision.reason;
       }

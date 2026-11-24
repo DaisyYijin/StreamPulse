@@ -41,6 +41,7 @@ const EMPTY: OrganizerSettings = {
   tvFileTemplate: DEFAULT_TV_FILE_TEMPLATE,
   avFolderTemplate: DEFAULT_AV_FOLDER_TEMPLATE,
   avFileTemplate: DEFAULT_AV_FILE_TEMPLATE,
+  washPoliciesYaml: '',
   washing: { mode: 'better', minGap: 0, minCoverage: 0.35, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
   categoryFormat: 'cms',
@@ -279,6 +280,18 @@ function GenrePicker({ value, mediaType, onChange }: {
   );
 }
 
+const CATEGORY_PRESETS = {
+  compact: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/剧集:\n`,
+  standard: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/华语电影:\n    original_language: "zh,cn"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/国产剧:\n    origin_country: "CN,HK,TW"\n  剧集/剧集:\n`,
+  detailed: `movie:\n  电影/动画电影:\n    genre_ids: "16"\n  电影/华语电影:\n    original_language: "zh,cn"\n  电影/日韩电影:\n    origin_country: "JP,KR"\n  电影/欧美电影:\n    origin_country: "US,GB,CA,AU,FR,DE"\n  电影/外语电影:\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"\n  剧集/国产剧:\n    origin_country: "CN,HK,TW"\n  剧集/日韩剧:\n    origin_country: "JP,KR"\n  剧集/欧美剧:\n    origin_country: "US,GB,CA,AU"\n  剧集/剧集:\n`,
+};
+
+const WASH_POLICY_PRESETS = {
+  compact: `电影洗版策略:\n  mode: replace\n  media_type: movie\n  priority_level:\n    - resource_pix: "2160p,4k"\n    - resource_pix: "1080p"\n剧集洗版策略:\n  mode: replace\n  media_type: tv\n  priority_level:\n    - resource_pix: "2160p,4k"\n    - resource_pix: "1080p"\n电影兜底:\n  mode: max_size\n  media_type: movie\n剧集兜底:\n  mode: max_size\n  media_type: tv\n`,
+  standard: `电影洗版策略:\n  mode: replace\n  media_type: movie\n  priority_level:\n    - resource_team: "WiKi"\n      resource_effect: "!DV"\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n剧集洗版策略:\n  mode: replace\n  media_type: tv\n  priority_level:\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n电影兜底:\n  mode: max_size\n  media_type: movie\n剧集兜底:\n  mode: max_size\n  media_type: tv\n`,
+  detailed: `电影洗版策略:\n  mode: replace\n  scope: group\n  media_type: movie\n  priority_level:\n    - resource_team: "WiKi"\n      resource_effect: "!DV"\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n剧集洗版策略:\n  mode: replace\n  scope: group\n  media_type: tv\n  priority_level:\n    - resource_pix: "2160p,4k"\n      resource_type: "BluRay"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n      resource_type: "BluRay"\n    - resource_pix: "2160p,4k"\n      resource_type: "WEB-DL"\n      resource_effect: "!DV"\n    - resource_pix: "1080p"\n电影兜底:\n  mode: max_size\n  media_type: movie\n剧集兜底:\n  mode: max_size\n  media_type: tv\n`,
+};
+
 const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile' | 'avFolder' | 'avFile', Array<{ label: string; value: string }>> = {
   movieFolder: [
     { label: '精简', value: '{title}' },
@@ -315,50 +328,6 @@ const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile
 const ACTION_LABEL: Record<OrganizeItem['action'], string> = {
   create: '新增', upgrade: '洗版', skip: '跳过', error: '失败',
 };
-
-function toWashYaml(washing: WashConfig): string {
-  return stringifyYaml({
-    mode: washing.mode,
-    min_gap: washing.minGap,
-    min_coverage: washing.minCoverage,
-    tie: washing.tie,
-    weights: {
-      resolution: washing.weights.resolution,
-      source: washing.weights.source,
-      hdr: washing.weights.hdr,
-      codec: washing.weights.codec,
-      size: washing.weights.size,
-    },
-    must: washing.must,
-    exclude: washing.exclude,
-  }, { lineWidth: 0 });
-}
-
-function fromWashYaml(text: string): WashConfig {
-  const document = parseYaml(text) as Record<string, unknown> | null;
-  const mode = String(document?.mode ?? 'better');
-  if (!['off', 'better', 'always', 'max_size', 'min_size', 'weighted'].includes(mode)) {
-    throw new Error('mode 必须是 off、better、always、max_size、min_size 或 weighted');
-  }
-  const weights = (document?.weights ?? {}) as Record<string, unknown>;
-  const number = (value: unknown, fallback: number) => typeof value === 'number' && Number.isFinite(value) ? value : fallback;
-  const strings = (value: unknown) => Array.isArray(value) ? value.map(String).filter(Boolean) : [];
-  return {
-    mode: mode as WashConfig['mode'],
-    minGap: number(document?.min_gap, 0),
-    minCoverage: Math.min(1, Math.max(0, number(document?.min_coverage, 0.35))),
-    tie: document?.tie === 'replace' ? 'replace' : 'keep',
-    weights: {
-      resolution: number(weights.resolution, 30),
-      source: number(weights.source, 20),
-      hdr: number(weights.hdr, 5),
-      codec: number(weights.codec, 5),
-      size: number(weights.size, 5),
-    },
-    must: strings(document?.must),
-    exclude: strings(document?.exclude),
-  };
-}
 
 const TEMPLATE_VARIABLES: Array<{ name: string; label: string }> = [
   { name: 'title', label: '标题' },
@@ -537,7 +506,7 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
     return (
       <div className="rule-help">
         <section>
-          <h3>CMS 语法（默认）</h3>
+          <h3>YAML 分类规则</h3>
           <pre>{`categories:
   - name: 电影/动画电影
     mediaType: movie
@@ -577,7 +546,7 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
         </section>
         <section>
           <h3>简单分类模式</h3>
-          <p>切换“简单分类”仍可用表单逐个填写分类；CMS 模式则直接解析上面的 YAML。</p>
+          <p>简单模式用表单填写分类；YAML 模式直接解析上面的规则。</p>
         </section>
       </div>
     );
@@ -618,6 +587,7 @@ export function OrganizePage() {
   const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv' | 'av'>('movie');
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
   const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
+  const [washPoliciesYaml, setWashPoliciesYaml] = useState('');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | null>(null);
   const [form, setForm] = useState<OrganizerSettings>(EMPTY);
   const [sources, setSources] = useState<Source[]>([]);
@@ -629,8 +599,6 @@ export function OrganizePage() {
   const [executing, setExecuting] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpTopic, setHelpTopic] = useState<'rename' | 'categories' | 'upgrade' | null>(null);
-  const [washYaml, setWashYaml] = useState(toWashYaml(EMPTY.washing));
-  const [washError, setWashError] = useState('');
   const [simExisting, setSimExisting] = useState('Movie.2024.1080p.WEB-DL.mkv');
   const [simCandidate, setSimCandidate] = useState('Movie.2024.2160p.BluRay.HEVC.mkv');
   const [simResult, setSimResult] = useState<{ action: string; reason: string; candidateScore: number; existingScore: number; coverage: number } | null>(null);
@@ -665,7 +633,7 @@ export function OrganizePage() {
       setForm(organizer);
       setCmsYaml(initialCms);
       setCategoryMode(organizer.categoryFormat === 'cms' ? 'yaml' : 'simple');
-      setWashYaml(toWashYaml(organizer.washing ?? EMPTY.washing));
+      setWashPoliciesYaml(organizer.washPoliciesYaml ?? '');
       setSources(list.filter((source) => source.type === '115' || source.type === '123'));
     }).catch((error) => toast.error(error instanceof Error ? error.message : '读取整理设置失败'))
       .finally(() => setLoading(false));
@@ -704,7 +672,6 @@ export function OrganizePage() {
 
   const resetWashing = () => {
     setForm((previous) => ({ ...previous, washing: EMPTY.washing }));
-    setWashYaml(toWashYaml(EMPTY.washing));
     toast.success('已恢复默认洗版策略');
   };
 
@@ -725,22 +692,10 @@ export function OrganizePage() {
   const updateWash = (patch: Partial<WashConfig>) => {
     const washing = { ...form.washing, ...patch };
     setForm((previous) => ({ ...previous, washing }));
-    setWashYaml(toWashYaml(washing));
   };
 
   const updateWashWeights = (key: keyof WashConfig['weights'], value: number) => {
     updateWash({ weights: { ...form.washing.weights, [key]: Number.isFinite(value) ? value : 0 } });
-  };
-
-  const changeWashYaml = (text: string) => {
-    setWashYaml(text);
-    try {
-      const washing = fromWashYaml(text);
-      setForm((previous) => ({ ...previous, washing }));
-      setWashError('');
-    } catch (error) {
-      setWashError(error instanceof Error ? error.message : '洗版 YAML 解析失败');
-    }
   };
 
   const simulateWash = async () => {
@@ -766,17 +721,12 @@ export function OrganizePage() {
   };
 
   const save = async () => {
-    if (washError) {
-      toast.error('YAML 有错误，修正后才能保存');
-      throw new Error('YAML 有错误');
-    }
     setSaving(true);
     try {
       const response = await api.patch<{ settings: Settings }>('/api/settings', { organizer: form });
       const saved = response.settings.organizer;
       if (saved) {
         setForm(saved);
-        setWashYaml(toWashYaml(saved.washing));
       }
       toast.success('整理设置已保存');
     } catch (error) {
@@ -916,6 +866,13 @@ export function OrganizePage() {
           </div>
                     {categoryMode === 'yaml' ? (
             <div className="cms-category-editor">
+              <div className="template-presets">
+                <span>快速模板</span>
+                {(Object.keys(CATEGORY_PRESETS) as Array<keyof typeof CATEGORY_PRESETS>).map((key) => (
+                  <button key={key} type="button" onClick={() => { applyCmsYaml(CATEGORY_PRESETS[key]); update('categoryFormat', 'cms'); }}>{key === 'compact' ? '精简' : key === 'standard' ? '标准' : '详细'}</button>
+                ))}
+                <em>点击生成 YAML</em>
+              </div>
               <textarea
                 className="yaml-editor"
                 value={cmsYaml}
@@ -924,7 +881,7 @@ export function OrganizePage() {
                 placeholder={'movie:\n  电影/动画电影:\n    genre_ids: "16"\ntv:\n  剧集/动漫番剧:\n    genre_ids: "16"'}
               />
               <div className="cms-category-preview">
-                <strong>CMS 格式说明</strong>
+                <strong>YAML 分类说明</strong>
                 <p>顶层写 <code>movie</code> / <code>tv</code>，下一层是分类目录名，再下一层是条件。分类名写什么就落到媒体库根下的什么位置，不再自动加 Movies/TV 前缀。</p>
                 <p>支持 <code>genre_ids</code>、<code>original_language</code>、<code>origin_country</code>、<code>production_countries</code>、<code>release_year</code>、<code>keywords</code>、<code>include_keywords</code>、<code>series_*</code>、<code>custom_regex</code>、可选 <code>?</code> 和排除 <code>-</code>/<code>!</code> 条件。</p>
                 <p>不写条件的分类作为兜底；没有命中时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</p>
@@ -973,7 +930,7 @@ export function OrganizePage() {
             <div><h2>洗版策略</h2><p>简单模式直接选规则；高级模式支持权重、分差、覆盖率和排除条件。</p></div>
             <div className="editor-switch">
               <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单模式</button>
-              <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => { setWashMode('yaml'); setWashYaml(toWashYaml(form.washing)); }}>YAML 模式</button>
+              <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => setWashMode('yaml')}>YAML 模式</button>
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'upgrade' ? null : 'upgrade')}>填写说明</Button>
           </div>
@@ -1021,9 +978,16 @@ export function OrganizePage() {
           ) : (
           <div className="yaml-layout">
             <div className="yaml-editor-wrap">
-              <div className="yaml-editor-head"><FileCode2 size={14} />washing.yaml <button type="button" className="yaml-reset" onClick={resetWashing}>恢复默认</button></div>
-              <textarea className="yaml-editor" value={washYaml} onChange={(event) => changeWashYaml(event.target.value)} spellCheck={false} />
-              {washError ? <div className="yaml-error">{washError}</div> : <div className="yaml-ok">YAML 有效</div>}
+              <div className="template-presets">
+                <span>快速模板</span>
+                {(Object.keys(WASH_POLICY_PRESETS) as Array<keyof typeof WASH_POLICY_PRESETS>).map((key) => (
+                  <button key={key} type="button" onClick={() => { setWashPoliciesYaml(WASH_POLICY_PRESETS[key]); update('washPoliciesYaml', WASH_POLICY_PRESETS[key]); }}>{key === 'compact' ? '精简' : key === 'standard' ? '标准' : '详细'}</button>
+                ))}
+                <em>点击生成 YAML</em>
+              </div>
+              <div className="yaml-editor-head"><FileCode2 size={14} />wash-policies.yaml <button type="button" className="yaml-reset" onClick={resetWashing}>恢复默认</button></div>
+              <textarea className="yaml-editor" value={washPoliciesYaml} onChange={(event) => { setWashPoliciesYaml(event.target.value); update('washPoliciesYaml', event.target.value); }} spellCheck={false} placeholder={`电影洗版策略:\n  mode: replace\n  media_type: movie\n  priority_level:\n    - resource_pix: "2160p,4k"`} />
+              <div className="yaml-ok">保存时校验 YAML</div>
             </div>
             <div className="yaml-preview">
               <div className="yaml-preview-head">可视化策略</div>
