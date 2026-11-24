@@ -287,7 +287,22 @@ export function firstLetterOf(value: string): string {
   return initial ? initial.toUpperCase() : '#';
 }
 
-function qualityTokens(filename: string): Record<string, string> {
+function cleanRecognitionName(filename: string, rules: string): string {
+  let result = filename;
+  for (const line of rules.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const [pattern, replacement = ' '] = trimmed.split('=>').map((part) => part.trim());
+    try {
+      result = result.replace(new RegExp(pattern, 'gi'), replacement);
+    } catch {
+      // Ignore invalid user regex; it must not break the scan.
+    }
+  }
+  return result.replace(/\s+/g, ' ').trim();
+}
+
+function qualityTokens(filename: string, releaseGroups: string[] = []): Record<string, string> {
   const lower = filename.toLowerCase();
   const pix = lower.match(/(2160p|1080p|720p|480p|4k)/)?.[1] || '';
   const type = lower.includes('remux') ? 'Remux'
@@ -307,7 +322,8 @@ function qualityTokens(filename: string): Record<string, string> {
       : /dts/.test(lower) ? 'DTS'
         : /ac3|eac3/.test(lower) ? 'AC3'
           : /aac/.test(lower) ? 'AAC' : '';
-  const team = filename.match(/-([A-Za-z0-9@]+)(?:\.[a-z0-9]{2,4})?$/i)?.[1] || '';
+  const team = releaseGroups.find((group) => group && lower.includes(group.toLowerCase()))
+    ?? (filename.match(/-([A-Za-z0-9@]+)(?:\.[a-z0-9]{2,4})?$/i)?.[1] || '');
   const fps = filename.match(/(\d{2,3})\s*fps/i)?.[1] || '';
   const version = filename.match(/\b(v\d|repack|proper)\b/i)?.[1] || '';
   return {
@@ -356,8 +372,8 @@ function targetFor(
     season_year: '',
     episode_name: '',
     disc_num: '',
-    ...qualityTokens(filename),
-    resource_source: qualityTokens(filename).resource_type,
+    ...qualityTokens(filename, settings.releaseGroups),
+    resource_source: qualityTokens(filename, settings.releaseGroups).resource_type,
   };
   if (parsed.mediaType === 'tv') {
     const folder = templateSegments(renderTemplate(settings.tvFolderTemplate, variables));
@@ -405,7 +421,8 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
   const cache = new Map<string, TmdbInfo | null>();
 
   for (const { path: filePath, entry } of files) {
-    const parsed = parseName(entry.name);
+    const cleanedName = cleanRecognitionName(entry.name, settings.recognitionCleanup);
+    const parsed = parseName(cleanedName);
     const base: OrganizeItem = {
       id: makeId('org'),
       sourcePath: filePath,
@@ -427,6 +444,10 @@ export async function scanCloudOrganizer(settings: OrganizerSettings, client: St
       reason: '',
     };
     try {
+      if (settings.minVideoSizeMB > 0 && entry.size < settings.minVideoSizeMB * 1024 * 1024) {
+        items.push({ ...base, action: 'skip', reason: `文件小于最小视频大小 ${settings.minVideoSizeMB} MB` });
+        continue;
+      }
       const key = `${parsed.mediaType}:${parsed.title.toLowerCase()}:${parsed.year}`;
       let info = cache.get(key);
       if (info === undefined) {

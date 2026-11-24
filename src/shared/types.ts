@@ -1,5 +1,5 @@
 export const APP_NAME = 'StreamPulse';
-export const APP_VERSION = '1.50.2';
+export const APP_VERSION = '1.51.0';
 
 export const DEFAULT_URL_TEMPLATE = '{streamBase}/r/{streamToken}{encodedPath}';
 
@@ -200,6 +200,9 @@ export interface OrganizerSettings {
   avFileTemplate: string;
   washing: WashConfig;
   washPoliciesYaml: string;
+  recognitionCleanup: string;
+  releaseGroups: string[];
+  minVideoSizeMB: number;
   categories: OrganizeCategory[];
   categoryFormat: 'simple' | 'cms';
   cmsCategories: string;

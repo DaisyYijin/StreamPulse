@@ -61,6 +61,9 @@ function createDefaultDatabase(): Database {
         avFolderTemplate: DEFAULT_AV_FOLDER_TEMPLATE,
         avFileTemplate: DEFAULT_AV_FILE_TEMPLATE,
         washPoliciesYaml: '',
+        recognitionCleanup: '',
+        releaseGroups: [],
+        minVideoSizeMB: 0,
         washing: {
           mode: 'better',
           minGap: 0,

@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { DEFAULT_AV_FILE_TEMPLATE, DEFAULT_AV_FOLDER_TEMPLATE, DEFAULT_CMS_CATEGORIES, DEFAULT_MOVIE_FILE_TEMPLATE, DEFAULT_MOVIE_FOLDER_TEMPLATE, DEFAULT_ORGANIZE_CATEGORIES, DEFAULT_TV_FILE_TEMPLATE, DEFAULT_TV_FOLDER_TEMPLATE, type OrganizeCategory, type Library, type OrganizerSettings, type Settings, type Source, type WashConfig } from '../../shared/types';
 import { api } from '../api';
-import { Button, Field, Input, Modal, Select, toast } from '../components/ui';
+import { Button, Field, Input, Modal, Select, Textarea, toast } from '../components/ui';
 import { DirectoryPicker } from '../components/DirectoryPicker';
 
-type Tab = 'settings' | 'rename' | 'categories' | 'upgrade' | 'results';
+type Tab = 'settings' | 'rename' | 'categories' | 'upgrade' | 'results' | 'rules';
 const ORGANIZE_TAB_KEY = 'sp-organize-tab';
 
 interface OrganizeItem {
@@ -42,6 +42,9 @@ const EMPTY: OrganizerSettings = {
   avFolderTemplate: DEFAULT_AV_FOLDER_TEMPLATE,
   avFileTemplate: DEFAULT_AV_FILE_TEMPLATE,
   washPoliciesYaml: '',
+  recognitionCleanup: '',
+  releaseGroups: [],
+  minVideoSizeMB: 0,
   washing: { mode: 'better', minGap: 0, minCoverage: 0.35, tie: 'keep', weights: { resolution: 30, source: 20, hdr: 5, codec: 5, size: 5 }, must: [], exclude: [] },
   categories: DEFAULT_ORGANIZE_CATEGORIES.map((category) => ({ ...category })),
   categoryFormat: 'cms',
@@ -333,6 +336,48 @@ function updateFirstPolicyMode(text: string, mode: PolicyMode): string {
   return stringifyYaml(document, { lineWidth: 0 });
 }
 
+interface WashOutlineItem { name: string; mode: string; mediaType: string; categories: string; levels: number; }
+function washPolicyOutline(text: string): WashOutlineItem[] {
+  try {
+    const document = parseYaml(text) as Record<string, unknown> | null;
+    if (!document || typeof document !== 'object') return [];
+    return Object.entries(document).map(([name, raw]) => {
+      const item = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+      const categories = Array.isArray(item.category) ? item.category.join(', ') : String(item.category ?? '');
+      return {
+        name,
+        mode: String(item.mode ?? 'replace'),
+        mediaType: String(item.media_type ?? '全部'),
+        categories,
+        levels: Array.isArray(item.priority_level) ? item.priority_level.length : 0,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+interface CategoryOutlineItem { name: string; mediaType: string; summary: string; }
+function categoryOutline(text: string): CategoryOutlineItem[] {
+  try {
+    const document = parseYaml(text) as Record<string, unknown> | null;
+    if (!document || typeof document !== 'object') return [];
+    const items: CategoryOutlineItem[] = [];
+    for (const mediaType of ['movie', 'tv', 'av'] as const) {
+      const block = document[mediaType];
+      if (!block || typeof block !== 'object' || Array.isArray(block)) continue;
+      for (const [name, raw] of Object.entries(block as Record<string, unknown>)) {
+        const conditions = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+        const summary = Object.entries(conditions).map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(', ') : String(value ?? '')}`).join(' · ');
+        items.push({ name, mediaType, summary });
+      }
+    }
+    return items;
+  } catch {
+    return [];
+  }
+}
+
 const RENAME_VARIANTS: Record<'movieFolder' | 'movieFile' | 'tvFolder' | 'tvFile' | 'avFolder' | 'avFile', Array<{ label: string; value: string }>> = {
   movieFolder: [
     { label: '精简', value: '{title}' },
@@ -577,8 +622,8 @@ function OrganizerHelp({ topic }: { topic: 'rename' | 'categories' | 'upgrade' }
           </ul>
         </section>
         <section>
-          <h3>简单分类模式</h3>
-          <p>简单模式用表单填写分类；YAML 模式直接解析上面的规则。</p>
+          <h3>YAML 分类</h3>
+          <p>分类规则直接在 YAML 编辑器中维护，右侧会实时生成可视化大纲。</p>
         </section>
       </div>
     );
@@ -609,15 +654,15 @@ export function OrganizePage() {
   const [tab, setTab] = useState<Tab>(() => {
     try {
       const stored = localStorage.getItem(ORGANIZE_TAB_KEY);
-      return stored === 'rename' || stored === 'categories' || stored === 'upgrade' || stored === 'results' ? stored : 'settings';
+      return stored === 'rename' || stored === 'categories' || stored === 'upgrade' || stored === 'rules' ? stored : 'settings';
     } catch {
       return 'settings';
     }
   });
-  const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('simple');
+  const [categoryMode, setCategoryMode] = useState<'simple' | 'yaml'>('yaml');
   const [simpleCategoryType, setSimpleCategoryType] = useState<'movie' | 'tv' | 'av'>('movie');
   const [cmsYaml, setCmsYaml] = useState(DEFAULT_CMS_CATEGORIES);
-  const [washMode, setWashMode] = useState<'simple' | 'yaml'>('simple');
+  const [washMode, setWashMode] = useState<'simple' | 'yaml'>('yaml');
   const [washPoliciesYaml, setWashPoliciesYaml] = useState('');
   const [washPolicyMode, setWashPolicyMode] = useState<PolicyMode>('replace');
   const [pickerField, setPickerField] = useState<'sourcePath' | 'failedPath' | 'redundantPath' | null>(null);
@@ -784,8 +829,10 @@ export function OrganizePage() {
       await save();
       const result = await api.post<Batch>('/api/organize/scan');
       setBatch(result);
-      changeTab('results');
-      toast.success(`扫描完成，共 ${result.items.length} 个视频`);
+      const executed = await api.post<{ executed: number; failed: number; skipped: number; runId: string | null; syncError: string }>('/api/organize/execute', { batchId: result.id });
+      toast.success(`整理完成：执行 ${executed.executed}，跳过 ${executed.skipped}，失败 ${executed.failed}`);
+      if (executed.syncError) toast.error(`整理完成，但同步媒体库失败：${executed.syncError}`);
+      setBatch(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : '扫描失败');
     } finally {
@@ -819,7 +866,7 @@ export function OrganizePage() {
         <div className="page-head-actions">
           <Button variant="ghost" onClick={() => setHelpOpen(true)} icon={<HelpCircle size={16} />}>规则说明</Button>
           <Button variant="ghost" onClick={() => void save().catch(() => undefined)} loading={saving} icon={<WandSparkles size={16} />}>保存设置</Button>
-          <Button variant="primary" onClick={() => void scan()} loading={scanning} icon={<ScanLine size={16} />}>扫描预览</Button>
+          <Button variant="primary" onClick={() => void scan()} loading={scanning} icon={<ScanLine size={16} />}>开始整理</Button>
         </div>
       </header>
 
@@ -828,7 +875,7 @@ export function OrganizePage() {
         <button role="tab" className={tab === 'rename' ? 'active' : ''} onClick={() => changeTab('rename')}><Pencil size={15} />重命名规则</button>
         <button role="tab" className={tab === 'categories' ? 'active' : ''} onClick={() => changeTab('categories')}><Tags size={15} />二级分类 <span>{form.categories.length}</span></button>
         <button role="tab" className={tab === 'upgrade' ? 'active' : ''} onClick={() => changeTab('upgrade')}><WandSparkles size={15} />洗版策略</button>
-        <button role="tab" className={tab === 'results' ? 'active' : ''} onClick={() => changeTab('results')}><ScanLine size={15} />扫描结果 {batch ? <span>{batch.items.length}</span> : null}</button>
+        <button role="tab" className={tab === 'rules' ? 'active' : ''} onClick={() => changeTab('rules')}><SlidersHorizontal size={15} />整理规则</button>
       </div>
 
       {tab === 'settings' ? (
@@ -898,7 +945,6 @@ export function OrganizePage() {
           <div className="panel-head">
             <div><h2>二级分类</h2><p>按类型、国家、语言、关键词匹配；不匹配进入“其他”。</p></div>
             <div className="editor-switch">
-              <button type="button" className={categoryMode === 'simple' ? 'active' : ''} onClick={() => { setCategoryMode('simple'); const converted = cmsToSimpleCategories(cmsYaml); if (converted.categories.length) update('categories', converted.categories); update('categoryFormat', 'simple'); }}>简单模式</button>
               <button type="button" className={categoryMode === 'yaml' ? 'active' : ''} onClick={() => { setCategoryMode('yaml'); update('categoryFormat', 'cms'); }}>YAML 模式</button>
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'categories' ? null : 'categories')}>填写说明</Button>
@@ -924,6 +970,15 @@ export function OrganizePage() {
                 <p>顶层写 <code>movie</code> / <code>tv</code>，下一层是分类目录名，再下一层是条件。分类名写什么就落到媒体库根下的什么位置，不再自动加 Movies/TV 前缀。</p>
                 <p>支持 <code>genre_ids</code>、<code>original_language</code>、<code>origin_country</code>、<code>production_countries</code>、<code>release_year</code>、<code>keywords</code>、<code>include_keywords</code>、<code>series_*</code>、<code>custom_regex</code>、可选 <code>?</code> 和排除 <code>-</code>/<code>!</code> 条件。</p>
                 <p>不写条件的分类作为兜底；没有命中时进入 <code>电影/未分类</code> 或 <code>剧集/未分类</code>。</p>
+                <div className="category-outline">
+                  {categoryOutline(cmsYaml).map((category) => (
+                    <div className="category-outline-row" key={`${category.mediaType}-${category.name}`}>
+                      <strong>{category.name}</strong>
+                      <span>{category.mediaType === 'movie' ? '电影' : category.mediaType === 'tv' ? '剧集' : 'AV'}</span>
+                      <em>{category.summary || '兜底'}</em>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
@@ -963,12 +1018,34 @@ export function OrganizePage() {
         </div>
       ) : null}
 
+      {tab === 'rules' ? (
+        <div className="panel">
+          <div className="panel-head"><div><h2>整理规则</h2><p>只影响识别和整理判断，不会修改网盘里的原文件名。</p></div></div>
+          <div className="form-grid">
+            <Field label="识别前替换规则" hint="每行一个正则；支持 模式=>替换。用于清理广告、水印、语种标注，只影响 TMDb 识别。">
+              <Textarea
+                className="mono-input"
+                rows={6}
+                value={form.recognitionCleanup}
+                onChange={(event) => update('recognitionCleanup', event.target.value)}
+                placeholder={'\[广告\]=>\n\[国语\]=>\n\[中字\]=>\nwww\\.example\\.com=>'}
+              />
+            </Field>
+            <Field label="发布组" hint="默认识别文件名末尾 -GROUP；填写的组名在文件名任意位置出现都算命中，用于 {resource_team} 和洗版规则。">
+              <Input value={form.releaseGroups.join(', ')} onChange={(event) => update('releaseGroups', event.target.value.split(',').map((value) => value.trim()).filter(Boolean))} placeholder="WiKi, FRDS, TnT" />
+            </Field>
+            <Field label="最小视频大小（MB）" hint="小于该体积的视频不识别，扫描后直接移到冗余目录；0 表示不限制。">
+              <Input type="number" min={0} value={form.minVideoSizeMB} onChange={(event) => update('minVideoSizeMB', Number(event.target.value))} />
+            </Field>
+          </div>
+        </div>
+      ) : null}
+
       {tab === 'upgrade' ? (
         <div className="panel">
           <div className="panel-head">
-            <div><h2>洗版策略</h2><p>简单模式选择洗版模式；YAML 模式配置多策略、分类过滤和优先级。</p></div>
+            <div><h2>洗版策略</h2><p>用多策略 YAML 配置 mode、媒体类型、分类过滤和 priority_level。</p></div>
             <div className="editor-switch">
-              <button type="button" className={washMode === 'simple' ? 'active' : ''} onClick={() => setWashMode('simple')}>简单模式</button>
               <button type="button" className={washMode === 'yaml' ? 'active' : ''} onClick={() => setWashMode('yaml')}>YAML 模式</button>
             </div>
             <Button type="button" variant="ghost" size="sm" icon={<HelpCircle size={14} />} onClick={() => setHelpTopic(helpTopic === 'upgrade' ? null : 'upgrade')}>填写说明</Button>
@@ -1000,11 +1077,15 @@ export function OrganizePage() {
             </div>
             <div className="yaml-preview">
               <div className="yaml-preview-head">可视化策略</div>
-              <div className="upgrade-preview">
-                <strong>{POLICY_MODE_LABELS[washPolicyMode]}</strong>
-                <p>最小分差 {form.washing.minGap} · 最低覆盖率 {(form.washing.minCoverage * 100).toFixed(0)}% · 同分{form.washing.tie === 'keep' ? '保留现有' : '替换'}</p>
-                {form.washing.must.length ? <p>必须：{form.washing.must.join(', ')}</p> : null}
-                {form.washing.exclude.length ? <p>排除：{form.washing.exclude.join(', ')}</p> : null}
+              <div className="wash-outline">
+                {washPolicyOutline(washPoliciesYaml).length === 0 ? <p className="settings-hint">YAML 解析后在这里显示策略大纲。</p> : null}
+                {washPolicyOutline(washPoliciesYaml).map((policy) => (
+                  <div className="wash-outline-row" key={policy.name}>
+                    <strong>{policy.name}</strong>
+                    <span>{policy.mode} · {policy.mediaType}{policy.categories ? ` · ${policy.categories}` : ''}</span>
+                    <em>{policy.levels} 级优先级</em>
+                  </div>
+                ))}
               </div>
               <div className="yaml-preview-head">模拟比较</div>
               <Field label="现有文件名"><Input value={simExisting} onChange={(event) => setSimExisting(event.target.value)} /></Field>
@@ -1030,7 +1111,7 @@ export function OrganizePage() {
             {batch ? <Button variant="primary" onClick={() => void execute()} loading={executing} icon={<FolderInput size={16} />}>执行整理</Button> : null}
           </div>
           {loading ? <p className="empty-note">读取设置中…</p> : null}
-          {!batch && !loading ? <p className="empty-note">还没有扫描结果。切到基本设置填写 TMDb Key，再点右上角“扫描预览”。</p> : null}
+          {!batch && !loading ? <p className="empty-note">还没有扫描结果。切到基本设置填写 TMDb Key，再点右上角“开始整理”。</p> : null}
           {batch ? (
             <div className="organize-results">
               {batch.items.map((item) => (
@@ -1105,7 +1186,7 @@ export function OrganizePage() {
     - resource_pix: "2160p,4k"
       resource_type: "BluRay"
     - resource_pix: "1080p"`}</pre>
-            <p>多策略 YAML 使用 <code>priority_level</code> 排序；简单模式仍支持关闭、更好、总是、按体积取舍。</p>
+            <p>多策略 YAML 使用 <code>priority_level</code> 排序；右侧会实时显示策略大纲。</p>
           </section>
           <section>
             <h3>重命名模板</h3>

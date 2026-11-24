@@ -2,6 +2,19 @@
 
 All notable changes to StreamPulse are documented here.
 
+## [1.51.0] - 2026-11-24
+
+### Added
+
+- Organizer “整理规则” tab: pre-recognition cleanup, release groups, and
+  minimum video size.
+- Category and wash YAML visual outlines.
+
+### Changed
+
+- Categories and wash policies are YAML-only.
+- Organizer runs directly after scanning; the scan-result tab was removed.
+
 ## [1.50.2] - 2026-11-24
 
 ### Fixed
