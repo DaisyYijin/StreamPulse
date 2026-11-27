@@ -85,7 +85,7 @@ func TestQRFlow(t *testing.T) {
 		if r.Form.Get("account") != "u1" {
 			t.Errorf("account = %q", r.Form.Get("account"))
 		}
-		_, _ = w.Write([]byte(`{"state":1,"data":{"cookie":"UID=100; CID=abc","user_name":"tester"}}`))
+		_, _ = w.Write([]byte(`{"state":1,"data":{"cookie":"UID=100; CID=abc","user_name":"tester","user_id":100,"is_vip":1,"face":{"face_l":"https://face/l"}}}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -106,12 +106,15 @@ func TestQRFlow(t *testing.T) {
 	if err != nil || st.Status != 2 {
 		t.Fatalf("status: %v %+v", err, st)
 	}
-	cookie, err := c.QRLogin(context.Background(), qr, "web")
+	res, err := c.QRLogin(context.Background(), qr, "web")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(cookie, "UID=100") || !strings.Contains(cookie, "CID=abc") {
-		t.Fatalf("cookie = %q", cookie)
+	if !strings.Contains(res.Cookie, "UID=100") || !strings.Contains(res.Cookie, "CID=abc") {
+		t.Fatalf("cookie = %q", res.Cookie)
+	}
+	if res.UserName != "tester" || res.UserID != 100 || res.VIP != 1 || res.Face != "https://face/l" {
+		t.Fatalf("profile = %+v", res)
 	}
 }
 

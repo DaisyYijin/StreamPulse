@@ -305,25 +305,61 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": st.Status, "message": st.Message})
 		return
 	}
-	cookie, err := c.QRLogin(r.Context(), qr, qr.Device)
+	login, err := c.QRLogin(r.Context(), qr, qr.Device)
 	if err != nil {
 		a.Log.Warn("115 扫码换 Cookie 失败", "device", qr.Device, "err", err)
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+
+	// 登录响应本身就带昵称/头像/VIP，小程序的会话也能拿到；容量再用 GetInfo 补充。
+	prof := pan115.Profile{
+		UserID:    login.UserID,
+		Name:      login.UserName,
+		Face:      login.Face,
+		VIP:       int(login.VIP),
+		Privilege: login.VIP > 0,
+	}
+	profBytes, _ := json.Marshal(prof)
+	nickname := login.UserName
+	if nickname == "" {
+		nickname = "115 用户"
+	}
+	uidText := ""
+	if login.UserID != 0 {
+		uidText = fmt.Sprintf("%d", login.UserID)
+	}
 	id, err := a.Store.UpsertMainAccount(&store.Account{
-		Name: "115 主账号", Role: "main", AuthType: "cookie", Cookie: cookie, Device: qr.Device, Nickname: "115 用户",
+		Name: "115 主账号", Role: "main", AuthType: "cookie",
+		Cookie: login.Cookie, Device: qr.Device,
+		Nickname: nickname, UID: uidText, Profile: string(profBytes),
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// 登录成功后拉一次账号详情（昵称/会员/容量）。
-	// 小程序等非网页端会话可能没有 user/info 权限，失败时至少保存 Cookie 里的 UID。
 	if acc, err := a.Store.GetAccount(id); err == nil {
 		if cl, err := a.Svc.Client(id); err == nil {
 			if p, err := cl.GetProfile(r.Context()); err == nil {
-				if b, err := json.Marshal(p); err == nil {
+				if p.Total > 0 {
+					prof.Total, prof.Used = p.Total, p.Used
+				}
+				if p.Expire > 0 {
+					prof.Expire, prof.Forever = p.Expire, p.Forever
+				}
+				if prof.Name == "" {
+					prof.Name = p.Name
+				}
+				if prof.Face == "" {
+					prof.Face = p.Face
+				}
+				if prof.VIP == 0 {
+					prof.VIP, prof.Privilege = p.VIP, p.Privilege
+				}
+				if prof.UserID == 0 {
+					prof.UserID = p.UserID
+				}
+				if b, err := json.Marshal(prof); err == nil {
 					acc.Profile = string(b)
 				}
 				if p.Name != "" {
@@ -333,9 +369,9 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 					acc.UID = fmt.Sprintf("%d", p.UserID)
 				}
 			} else {
-				a.Log.Warn("获取 115 账号详情失败（该设备类型可能没有 user/info 权限）", "device", qr.Device, "err", err)
+				a.Log.Warn("补充容量信息失败（不影响登录）", "device", qr.Device, "err", err)
 				if acc.UID == "" {
-					acc.UID = cookieUID(cookie)
+					acc.UID = cookieUID(login.Cookie)
 				}
 			}
 			_, _ = a.Store.SaveAccount(acc)

@@ -75,9 +75,6 @@ body{
 h2{font-size:21px;margin:0 0 6px;letter-spacing:-.02em}
 .hint{color:var(--muted);font-size:13px;margin:0 0 18px}
 
-.boot-splash{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--bg)}
-.boot-splash .logo{width:56px;height:56px;border-radius:18px;font-size:24px}
-
 /* ---------- auth ---------- */
 .auth{
   min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px 18px;
@@ -220,16 +217,23 @@ tr:last-child td{border-bottom:0}
   .card{padding:16px}
   .auth-card{padding:26px 22px 22px}
 }
+#auth, #app { display:none }
+html[data-auth="out"] #auth { display:flex }
+html[data-auth="in"] #app { display:flex }
 </style>
+<script>
+(function () {
+  try {
+    document.documentElement.dataset.auth = localStorage.getItem('sp_token') ? 'in' : 'out';
+  } catch (e) {
+    document.documentElement.dataset.auth = 'out';
+  }
+})();
+</script>
 </head>
 <body>
 
-<div id="bootSplash" class="boot-splash">
-  <div class="logo">S</div>
-  <div class="brand-name">StreamPulse</div>
-</div>
-
-<div id="auth" class="auth hide">
+<div id="auth" class="auth">
   <div class="auth-card">
     <div class="brand">
       <div class="logo">S</div>
@@ -271,7 +275,7 @@ tr:last-child td{border-bottom:0}
   <div class="auth-foot">StreamPulse · 自托管 STRM 引擎</div>
 </div>
 
-<div id="app" class="shell hide">
+<div id="app" class="shell">
   <aside class="sidebar">
     <div class="brand">
       <div class="logo">S</div>
@@ -427,31 +431,20 @@ const $ = (id) => document.getElementById(id);
 const VIEWS = ['dashboard', 'accounts', 'libraries', 'tasks', 'settings'];
 let token = localStorage.getItem('sp_token') || '';
 
-function hideSplash() {
-  const el = $('bootSplash');
-  if (el) el.classList.add('hide');
-}
-
 function showLogin() {
-  hideSplash();
-  $('auth').classList.remove('hide');
-  $('app').classList.add('hide');
+  document.documentElement.dataset.auth = 'out';
   $('loginPane').classList.remove('hide');
   $('setupPane').classList.add('hide');
 }
 
 function showSetup() {
-  hideSplash();
-  $('auth').classList.remove('hide');
-  $('app').classList.add('hide');
+  document.documentElement.dataset.auth = 'out';
   $('loginPane').classList.add('hide');
   $('setupPane').classList.remove('hide');
 }
 
 function showApp() {
-  hideSplash();
-  $('auth').classList.add('hide');
-  $('app').classList.remove('hide');
+  document.documentElement.dataset.auth = 'in';
 }
 
 function currentView() {
@@ -556,7 +549,6 @@ async function boot() {
     const s = await publicJSON('/api/setup/status');
     if (!s.initialized) { showSetup(); return; }
   } catch (e) {}
-  hideSplash();
   if (token) { enterApp(); } else { showLogin(); }
 }
 

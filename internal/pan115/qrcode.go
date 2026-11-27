@@ -109,22 +109,24 @@ func (c *Client) QRStatus(ctx context.Context, qr *QR) (*QRState, error) {
 
 // QRLogin 在扫码确认后换取 Cookie。
 // 端点：POST qrcodeapi.115.com/app/1.0/{app}/1.0/login/qrcode/，表单只带 account=uid。
-func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (string, error) {
-	if c.useDriver() {
-		s := &driver.QRCodeSession{UID: qr.UID, Time: qr.Time, Sign: qr.Sign}
-		cr, err := c.driverClient().QRCodeLoginWithApp(s, driver.LoginApp(DeviceApp(device)))
-		if err != nil {
-			return "", fmt.Errorf("115 登录失败: %w", err)
-		}
-		cookie := cr.Cookie()
-		if cookie == "" {
-			return "", fmt.Errorf("115 登录未返回 Cookie")
-		}
-		return cookie, nil
-	}
+// QRLoginResult 是扫码换 Cookie 的结果。115 的登录响应同时带昵称/头像/VIP，
+// 小程序等没有 user/info 权限的会话也能从这里拿到账号资料。
+type QRLoginResult struct {
+	Cookie   string
+	UserName string
+	UserID   int64
+	Face     string
+	VIP      int64
+	Email    string
+}
+
+// QRLogin 在扫码确认后换取 Cookie。
+// 端点：POST qrcodeapi.115.com/app/1.0/{app}/1.0/login/qrcode/，表单带 account + app。
+func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (*QRLoginResult, error) {
 	app := DeviceApp(device)
 	form := url.Values{}
 	form.Set("account", qr.UID)
+	form.Set("app", app)
 
 	var r struct {
 		State flexBool `json:"state"`
@@ -134,11 +136,19 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (string, er
 		Data  struct {
 			Cookie   string `json:"cookie"`
 			UserName string `json:"user_name"`
+			UserID   int64  `json:"user_id"`
+			IsVip    int64  `json:"is_vip"`
+			Email    string `json:"email"`
+			Face     struct {
+				FaceL string `json:"face_l"`
+				FaceM string `json:"face_m"`
+				FaceS string `json:"face_s"`
+			} `json:"face"`
 		} `json:"data"`
 	}
 	endpoint := c.QRAPI + "/app/1.0/" + app + "/1.0/login/qrcode/"
-	if err := c.do(ctx, http.MethodPost, endpoint, form, true, &r); err != nil {
-		return "", err
+	if err := c.do(ctx, http.MethodPost, endpoint, form, false, &r); err != nil {
+		return nil, err
 	}
 	if !bool(r.State) || r.Data.Cookie == "" {
 		msg := r.Error
@@ -155,7 +165,21 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (string, er
 		if code == 40101004 {
 			msg += "。IP 被 115 临时风控：请停止重试，等待数小时或更换出口 IP 后再扫码"
 		}
-		return "", fmt.Errorf("115 登录失败: %s", msg)
+		return nil, fmt.Errorf("115 登录失败: %s", msg)
 	}
-	return r.Data.Cookie, nil
+	face := r.Data.Face.FaceL
+	if face == "" {
+		face = r.Data.Face.FaceM
+	}
+	if face == "" {
+		face = r.Data.Face.FaceS
+	}
+	return &QRLoginResult{
+		Cookie:   r.Data.Cookie,
+		UserName: r.Data.UserName,
+		UserID:   r.Data.UserID,
+		Face:     face,
+		VIP:      r.Data.IsVip,
+		Email:    r.Data.Email,
+	}, nil
 }
