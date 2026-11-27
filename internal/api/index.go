@@ -191,10 +191,6 @@ tr:last-child td{border-bottom:0}
 .quota i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px}
 .quota-text{font-size:12.5px;color:var(--muted);margin-top:6px}
 .account-list{display:grid;gap:10px;margin-top:0}
-.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
-.stat{background:#f8fbf9;border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
-.stat b{display:block;font-size:19px;letter-spacing:-.02em;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.stat span{font-size:12px;color:var(--muted)}
 .list-item{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fbf9;border:1px solid var(--line);border-radius:10px;font-size:13.5px}
 .qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:16px;padding:18px;background:#f8fbf9;border:1px dashed #d8e5df;border-radius:14px}
 .qr-box img{width:200px;height:200px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 8px 20px rgba(20,60,45,.10)}
@@ -218,7 +214,6 @@ tr:last-child td{border-bottom:0}
   .sidebar-foot{border-top:0;padding:0 14px 10px;justify-content:flex-end}
   .content{padding:18px 14px 44px;max-width:none}
   .grid{grid-template-columns:1fr}
-  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .card{padding:16px}
   .auth-card{padding:26px 22px 22px}
 }
@@ -333,10 +328,6 @@ html[data-auth="in"] #app { display:flex }
           <button class="btn ghost" id="logout115">退出 115 登录</button>
         </div>
       </div>
-      <div class="card">
-        <div class="card-head"><h2>账号统计</h2></div>
-        <div class="stats-grid" id="accountStats"></div>
-      </div>
     </section>
 
     <section id="view-libraries" class="view">
@@ -381,6 +372,7 @@ html[data-auth="in"] #app { display:flex }
         <div class="card-head"><h2>播放与 Emby</h2></div>
         <div class="grid">
           <div><label>播放地址（写入 STRM）</label><input id="publicBase" placeholder="http://192.168.1.10:2048"></div>
+          <div><label>API 等待时间（秒）</label><input id="apiWaitSec" type="number" min="1" max="60" placeholder="1"><p class="section-note">扫描网盘、生成 STRM 时每次请求的等待时间；写操作至少 3 秒。</p></div>
           <div><label>Emby 地址</label><input id="embyBase" placeholder="http://192.168.1.10:8096"></div>
           <div><label>Emby API Key</label><input id="embyApiKey" type="password" autocomplete="off"></div>
           <div><label>Emby Webhook Token</label><input id="embyWebhookToken" type="password" autocomplete="off"></div>
@@ -422,6 +414,7 @@ html[data-auth="in"] #app { display:flex }
         <option value="web">网页端（会顶掉浏览器登录）</option>
         <option value="115android">Android App</option>
         <option value="115ios">iOS App</option>
+        <option value="115ipad">iPad App</option>
         <option value="tv">电视端</option>
         <option value="alipaymini">支付宝小程序</option>
         <option value="wechatmini">微信小程序</option>
@@ -653,12 +646,6 @@ async function refreshAll() {
       '<span>播放模式 <b>' + esc(s.playMode) + '</b></span>' +
       '<span>Emby ' + (s.emby ? '<b>已配置</b>' : '未配置') + '</span>';
 
-    $('accountStats').innerHTML =
-      '<div class="stat"><b>' + s.libraries + '</b><span>媒体库</span></div>' +
-      '<div class="stat"><b>' + s.files + '</b><span>已同步文件</span></div>' +
-      '<div class="stat"><b>' + s.orphans + '</b><span>失效文件</span></div>' +
-      '<div class="stat"><b>' + (s.lastScan ? new Date(s.lastScan * 1000).toLocaleString() : '—') + '</b><span>最近扫描</span></div>';
-
     const accs = (await api('/api/accounts')) || [];
     const main = accs[0];
     $('accountCard').innerHTML = renderAccountCard(main);
@@ -689,6 +676,7 @@ async function loadSettings() {
   try {
     const s = await api('/api/settings');
     $('publicBase').value = s.publicBase || '';
+    $('apiWaitSec').value = s.apiWaitSec || '1';
     $('embyBase').value = s.embyBase || '';
     $('embyApiKey').placeholder = s.embyApiKeySet ? '已设置（留空不修改）' : 'API Key';
     $('embyWebhookToken').placeholder = s.embyWebhookTokenSet ? '已设置（留空不修改）' : 'Webhook Token';
@@ -709,10 +697,15 @@ $('saveSettings').onclick = async () => {
     if ($('adminPassword').value && $('adminPassword').value.length < 8) {
       throw new Error('新密码至少 8 位');
     }
+    const wait = Number($('apiWaitSec').value || 1);
+    if (!Number.isFinite(wait) || wait < 1 || wait > 60) {
+      throw new Error('API 等待时间需在 1–60 秒之间');
+    }
     await api('/api/settings', {
       method: 'PUT',
       body: JSON.stringify({
         publicBase: $('publicBase').value,
+        apiWaitSec: Number($('apiWaitSec').value || 1),
         embyBase: $('embyBase').value,
         embyApiKey: $('embyApiKey').value,
         embyWebhookToken: $('embyWebhookToken').value,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -32,6 +33,7 @@ func (s *Service) Client(accountID int64) (*pan115.Client, error) {
 	defer s.mu.Unlock()
 	if c, ok := s.clients[accountID]; ok {
 		if cr := c.Credential(); cr.AccessToken == "" || cr.ExpiresAt == 0 || time.Now().Unix() < cr.ExpiresAt-120 {
+			s.applyIntervals(c)
 			return c, nil
 		}
 	}
@@ -59,8 +61,26 @@ func (s *Service) Client(accountID int64) (*pan115.Client, error) {
 		acc.AccessToken, acc.RefreshToken, acc.ExpiresAt = nc.AccessToken, nc.RefreshToken, nc.ExpiresAt
 		_, _ = s.Store.SaveAccount(acc)
 	}
+	s.applyIntervals(c)
 	s.clients[accountID] = c
 	return c, nil
+}
+
+// applyIntervals 把项目设置里的「API 等待时间（秒）」应用到 115 客户端。
+// 设置保存后对缓存的客户端也立即生效。
+func (s *Service) applyIntervals(c *pan115.Client) {
+	sec := 1
+	if v := s.Store.GetSetting("api_wait_sec", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 && n <= 60 {
+			sec = n
+		}
+	}
+	read := time.Duration(sec) * time.Second
+	write := read
+	if write < 3*time.Second {
+		write = 3 * time.Second
+	}
+	c.SetIntervals(read, write)
 }
 
 func (s *Service) Invalidate(accountID int64) {

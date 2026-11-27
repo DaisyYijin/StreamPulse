@@ -120,7 +120,7 @@ func TestQRFlow(t *testing.T) {
 
 func TestDeviceApp(t *testing.T) {
 	cases := map[string]string{
-		"web": "web", "115android": "android", "115ios": "ios", "tv": "tv",
+		"web": "web", "115android": "android", "115ios": "ios", "115ipad": "ipad", "tv": "tv",
 		"alipaymini": "alipaymini", "wechatmini": "wechatmini", "unknown": "web",
 	}
 	for in, want := range cases {

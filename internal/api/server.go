@@ -725,6 +725,7 @@ func (a *App) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"p115AppId":           a.Store.GetSetting("p115_app_id", ""),
 		"p115AppSecretSet":    a.Store.GetSetting("p115_app_secret", "") != "",
 		"adminUser":           a.Store.GetSetting("admin_user", "admin"),
+		"apiWaitSec":          a.Store.GetSetting("api_wait_sec", "1"),
 		"publicBase":          a.Store.GetSetting("public_base", ""),
 	})
 }
@@ -740,6 +741,7 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		P115AppId             string `json:"p115AppId"`
 		P115AppSecret         string `json:"p115AppSecret"`
 		AdminUser             string `json:"adminUser"`
+		ApiWaitSec            int    `json:"apiWaitSec"`
 		PublicBase            string `json:"publicBase"`
 		NewPassword           string `json:"newPassword"`
 		ClearEmbyApiKey       bool   `json:"clearEmbyApiKey"`
@@ -752,6 +754,10 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.NewPassword != "" && len(in.NewPassword) < 8 {
 		writeErr(w, http.StatusBadRequest, "新密码至少 8 位")
+		return
+	}
+	if in.ApiWaitSec != 0 && (in.ApiWaitSec < 1 || in.ApiWaitSec > 60) {
+		writeErr(w, http.StatusBadRequest, "API 等待时间需在 1–60 秒之间")
 		return
 	}
 	e := a.Store.GetEmbyConfig()
@@ -785,6 +791,9 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	_ = a.Store.SetSetting("p115_app_secret", secret)
 
 	_ = a.Store.SetSetting("public_base", strings.TrimRight(strings.TrimSpace(in.PublicBase), "/"))
+	if in.ApiWaitSec > 0 {
+		_ = a.Store.SetSetting("api_wait_sec", fmt.Sprintf("%d", in.ApiWaitSec))
+	}
 
 	if u := strings.TrimSpace(in.AdminUser); u != "" {
 		_ = a.Store.SetSetting("admin_user", u)

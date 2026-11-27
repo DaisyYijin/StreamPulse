@@ -22,6 +22,8 @@ func DeviceApp(device string) string {
 		return "android"
 	case "115ios":
 		return "ios"
+	case "115ipad":
+		return "ipad"
 	case "tv":
 		return "tv"
 	case "alipaymini":
