@@ -49,7 +49,7 @@ func (c *Client) ListBehavior(ctx context.Context, limit int) ([]LifeEvent, erro
 	var lastErr error
 	for _, ep := range endpoints {
 		var r struct {
-			State bool   `json:"state"`
+			State flexBool `json:"state"`
 			Error string `json:"error"`
 			Data  struct {
 				Count json.RawMessage            `json:"count"`
@@ -65,7 +65,7 @@ func (c *Client) ListBehavior(ctx context.Context, limit int) ([]LifeEvent, erro
 			}
 			continue
 		}
-		if !r.State {
+		if !bool(r.State) {
 			lastErr = fmt.Errorf("生活事件被拒绝: %s", r.Error)
 			continue
 		}

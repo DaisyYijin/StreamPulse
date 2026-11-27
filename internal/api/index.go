@@ -284,6 +284,14 @@ tr:last-child td{border-bottom:0}
         <div class="row-actions" style="margin-top:0">
           <button class="btn primary" id="qrLogin">扫码登录 115</button>
           <button class="btn ghost" id="openLogin">开放平台扫码（需 AppID）</button>
+          <select id="qrDevice" style="width:auto;min-width:200px">
+            <option value="web">网页端（会顶掉浏览器登录）</option>
+            <option value="115android">Android App</option>
+            <option value="115ios">iOS App</option>
+            <option value="tv">电视端</option>
+            <option value="alipaymini">支付宝小程序</option>
+            <option value="wechatmini">微信小程序</option>
+          </select>
         </div>
         <div id="qrBox" class="qr-box hide">
           <div id="qrMsg" class="hint">请用 115 App 扫码</div>
@@ -528,7 +536,7 @@ async function refreshAll() {
 
     const accs = (await api('/api/accounts')) || [];
     $('accList').innerHTML = accs.length
-      ? accs.map((a) => '<div class="list-item"><span>' + esc(a.name) + '</span><span class="muted">' + esc(a.authType) + ' · ' + esc(a.nickname || '') + '</span></div>').join('')
+      ? accs.map((a) => '<div class="list-item"><span>' + esc(a.name) + '</span><span class="muted">' + esc(a.authType) + (a.device ? ' · ' + esc(a.device) : '') + ' · ' + esc(a.nickname || '') + '</span></div>').join('')
       : '<div class="muted" style="font-size:13px">还没有账号，先扫码登录 115。</div>';
 
     const libs = (await api('/api/libraries')) || [];
@@ -649,7 +657,7 @@ function watchQR(url, doneMsg) {
 
 $('qrLogin').onclick = async () => {
   try {
-    const q = await api('/api/accounts/qrcode', { method: 'POST' });
+    const q = await api('/api/accounts/qrcode', { method: 'POST', body: JSON.stringify({ device: $('qrDevice').value }) });
     $('qrImg').src = '/api/accounts/qrcode/' + encodeURIComponent(q.uid) + '/image';
     watchQR('/api/accounts/qrcode/' + encodeURIComponent(q.uid), '请用 115 App 扫码');
   } catch (e) { alert(e.message); }

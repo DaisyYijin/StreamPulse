@@ -69,8 +69,8 @@ func TestListDirPaginationAndDownload(t *testing.T) {
 
 func TestQRFlow(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/1.0/web/1.0/token", func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"state":true,"data":{"uid":"u1","time":123,"sign":"s1"}}`))
+	mux.HandleFunc("/api/1.0/web/1.0/token/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"state":1,"data":{"uid":"u1","time":123,"sign":"s1"}}`))
 	})
 	mux.HandleFunc("/get/status/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("uid") != "u1" {
@@ -78,14 +78,12 @@ func TestQRFlow(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`{"state":true,"data":{"status":2,"msg":"确认","version":"1"}}`))
 	})
-	mux.HandleFunc("/app/1.0/web/1.0/check/sso", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/app/1.0/web/1.0/login/qrcode/", func(w http.ResponseWriter, r *http.Request) {
 		_ = r.ParseForm()
 		if r.Form.Get("account") != "u1" {
 			t.Errorf("account = %q", r.Form.Get("account"))
 		}
-		http.SetCookie(w, &http.Cookie{Name: "UID", Value: "100"})
-		http.SetCookie(w, &http.Cookie{Name: "CID", Value: "abc"})
-		_, _ = w.Write([]byte(`{"state":true,"data":{"uid":"100"}}`))
+		_, _ = w.Write([]byte(`{"state":1,"data":{"cookie":"UID=100; CID=abc","user_name":"tester"}}`))
 	})
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
@@ -105,12 +103,24 @@ func TestQRFlow(t *testing.T) {
 	if err != nil || st.Status != 2 {
 		t.Fatalf("status: %v %+v", err, st)
 	}
-	cookie, err := c.QRLogin(context.Background(), qr)
+	cookie, err := c.QRLogin(context.Background(), qr, "web")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(cookie, "UID=100") || !strings.Contains(cookie, "CID=abc") {
 		t.Fatalf("cookie = %q", cookie)
+	}
+}
+
+func TestDeviceApp(t *testing.T) {
+	cases := map[string]string{
+		"web": "web", "115android": "android", "115ios": "ios", "tv": "tv",
+		"alipaymini": "alipaymini", "wechatmini": "wechatmini", "unknown": "web",
+	}
+	for in, want := range cases {
+		if got := DeviceApp(in); got != want {
+			t.Fatalf("DeviceApp(%q) = %q, want %q", in, got, want)
+		}
 	}
 }
 

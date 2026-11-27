@@ -18,14 +18,14 @@ func (c *Client) DeleteToRecycle(ctx context.Context, fids []string) error {
 		form.Set(fmt.Sprintf("fid[%d]", i), fid)
 	}
 	var r struct {
-		State bool   `json:"state"`
+		State flexBool `json:"state"`
 		Error string `json:"error"`
 		ErrMs string `json:"errMsg"`
 	}
 	if err := c.do(ctx, http.MethodPost, c.WebAPI+"/rb/delete", form, true, &r); err != nil {
 		return err
 	}
-	if !r.State {
+	if !bool(r.State) {
 		msg := r.Error
 		if msg == "" {
 			msg = r.ErrMs

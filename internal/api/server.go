@@ -261,12 +261,24 @@ func (a *App) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleQRStart(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Device string `json:"device"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil && err != io.EOF {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if in.Device == "" {
+		in.Device = "web"
+	}
 	c := pan115.New(pan115.Credential{}, time.Second, 3*time.Second)
 	qr, err := c.QRCreate(r.Context())
 	if err != nil {
+		a.Log.Warn("115 扫码会话创建失败", "err", err)
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
+	qr.Device = in.Device
 	a.qrMu.Lock()
 	a.qr[qr.UID] = qr
 	a.qrMu.Unlock()
@@ -292,13 +304,14 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": st.Status, "message": st.Message})
 		return
 	}
-	cookie, err := c.QRLogin(r.Context(), qr)
+	cookie, err := c.QRLogin(r.Context(), qr, qr.Device)
 	if err != nil {
+		a.Log.Warn("115 扫码换 Cookie 失败", "device", qr.Device, "err", err)
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	id, err := a.Store.SaveAccount(&store.Account{
-		Name: "115 主账号", Role: "main", AuthType: "cookie", Cookie: cookie, Nickname: "扫码登录",
+		Name: "115 主账号", Role: "main", AuthType: "cookie", Cookie: cookie, Device: qr.Device, Nickname: "扫码登录",
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())

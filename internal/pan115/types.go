@@ -29,6 +29,7 @@ type QR struct {
 	Time    int64  `json:"time"`
 	Sign    string `json:"sign"`
 	Content string `json:"content"` // 二维码内容，前端据此生成图片
+	Device  string `json:"device"`  // web / 115android / 115ios / tv / alipaymini / wechatmini
 }
 
 // QRState 是轮询结果。

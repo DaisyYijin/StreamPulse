@@ -39,7 +39,7 @@ func (c *Client) OpenLoginStart(ctx context.Context, appID string) (*OpenAuth, e
 	form.Set("code_challenge", challenge)
 	form.Set("code_challenge_method", "S256")
 	var r struct {
-		State bool   `json:"state"`
+		State flexBool `json:"state"`
 		Error string `json:"error"`
 		Data  struct {
 			UID   string `json:"uid"`
@@ -51,7 +51,7 @@ func (c *Client) OpenLoginStart(ctx context.Context, appID string) (*OpenAuth, e
 	if err := c.do(ctx, http.MethodPost, c.Passport+"/open/authDeviceCode", form, true, &r); err != nil {
 		return nil, err
 	}
-	if !r.State || r.Data.UID == "" {
+	if !bool(r.State) || r.Data.UID == "" {
 		return nil, fmt.Errorf("115 设备码获取失败: %s", r.Error)
 	}
 	return &OpenAuth{
@@ -71,7 +71,7 @@ func (c *Client) OpenLoginPoll(ctx context.Context, a *OpenAuth, appID string) (
 	form.Set("sign", a.Sign)
 	form.Set("code_verifier", a.Verifier)
 	var r struct {
-		State bool   `json:"state"`
+		State flexBool `json:"state"`
 		Error string `json:"error"`
 		Data  struct {
 			AccessToken  string `json:"access_token"`
@@ -83,7 +83,7 @@ func (c *Client) OpenLoginPoll(ctx context.Context, a *OpenAuth, appID string) (
 	if err := c.do(ctx, http.MethodPost, c.Passport+"/open/deviceCodeToToken", form, true, &r); err != nil {
 		return nil, err
 	}
-	if !r.State || r.Data.AccessToken == "" {
+	if !bool(r.State) || r.Data.AccessToken == "" {
 		// 未扫码/未确认通常不是错误，交给上层继续轮询；真实错误带 error 文本。
 		if r.Error != "" && !strings.Contains(r.Error, "等待") {
 			return nil, fmt.Errorf("115 设备码轮询失败: %s", r.Error)
@@ -113,7 +113,7 @@ func (c *Client) RefreshOpenToken(ctx context.Context) error {
 	form.Set("refresh_token", cr.RefreshToken)
 	form.Set("client_id", cr.AppID)
 	var r struct {
-		State bool   `json:"state"`
+		State flexBool `json:"state"`
 		Error string `json:"error"`
 		Data  struct {
 			AccessToken  string `json:"access_token"`
@@ -124,7 +124,7 @@ func (c *Client) RefreshOpenToken(ctx context.Context) error {
 	if err := c.do(ctx, http.MethodPost, c.Passport+"/open/refreshToken", form, true, &r); err != nil {
 		return err
 	}
-	if !r.State || r.Data.AccessToken == "" {
+	if !bool(r.State) || r.Data.AccessToken == "" {
 		return fmt.Errorf("115 token 刷新失败: %s", r.Error)
 	}
 	cr.AccessToken = r.Data.AccessToken

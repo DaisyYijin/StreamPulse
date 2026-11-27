@@ -24,7 +24,8 @@ const (
 	DefaultProAPI    = "https://proapi.115.com"
 	DefaultQRAPI     = "https://qrcodeapi.115.com"
 	DefaultPassport  = "https://passportapi.115.com"
-	DefaultUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+	// 115 的 Cookie 会话与 UA 绑定：登录、列目录、取直链必须全程同一个 UA。
+	DefaultUserAgent = "Mozilla/5.0 115Browser/36.0.0"
 )
 
 type Client struct {
@@ -96,6 +97,22 @@ func (c *Client) SetIntervals(readEvery, writeEvery time.Duration) {
 
 var ErrNotLoggedIn = errors.New("115 未登录或凭据为空")
 
+// flexBool 兼容 115 返回的 true/false 与 1/0（扫码 token 返回的是数字 1）。
+type flexBool bool
+
+func (b *flexBool) UnmarshalJSON(data []byte) error {
+	s := strings.Trim(strings.TrimSpace(string(data)), `"`)
+	switch strings.ToLower(s) {
+	case "true", "1":
+		*b = true
+	case "false", "0", "null", "":
+		*b = false
+	default:
+		return fmt.Errorf("invalid bool %q", s)
+	}
+	return nil
+}
+
 // ---------- low level ----------
 
 func (c *Client) cookieHeader() string {
@@ -160,7 +177,7 @@ func truncate(s string, n int) string {
 // ---------- directory ----------
 
 type listResp struct {
-	State bool   `json:"state"`
+	State flexBool `json:"state"`
 	Error string `json:"error"`
 	Count int    `json:"count"`
 	Data  []struct {
@@ -196,7 +213,7 @@ func (c *Client) ListDir(ctx context.Context, cid string) ([]Entry, error) {
 		if err := c.do(ctx, http.MethodGet, c.WebAPI+"/files?"+q.Encode(), nil, false, &r); err != nil {
 			return nil, err
 		}
-		if !r.State {
+		if !bool(r.State) {
 			return nil, fmt.Errorf("115 列目录失败: %s", r.Error)
 		}
 		for _, it := range r.Data {
@@ -231,7 +248,7 @@ func (c *Client) FileDetail(ctx context.Context, fid string) (*FileDetail, error
 	q.Set("fid", fid)
 	q.Set("aid", "1")
 	var r struct {
-		State bool   `json:"state"`
+		State flexBool `json:"state"`
 		Error string `json:"error"`
 		Data  []struct {
 			FID  string `json:"fid"`
@@ -244,7 +261,7 @@ func (c *Client) FileDetail(ctx context.Context, fid string) (*FileDetail, error
 	if err := c.do(ctx, http.MethodGet, c.WebAPI+"/files?"+q.Encode(), nil, false, &r); err != nil {
 		return nil, err
 	}
-	if !r.State || len(r.Data) == 0 {
+	if !bool(r.State) || len(r.Data) == 0 {
 		return nil, fmt.Errorf("115 文件不存在: %s", r.Error)
 	}
 	d := r.Data[0]
@@ -262,7 +279,7 @@ func (c *Client) DownloadURL(ctx context.Context, pickcode string) (string, erro
 	form := url.Values{}
 	form.Set("data", string(payload))
 	var r struct {
-		State bool   `json:"state"`
+		State flexBool `json:"state"`
 		Error string `json:"error"`
 		Data  map[string]struct {
 			URL struct {
@@ -273,7 +290,7 @@ func (c *Client) DownloadURL(ctx context.Context, pickcode string) (string, erro
 	if err := c.do(ctx, http.MethodPost, c.ProAPI+"/app/chrome/downurl", form, false, &r); err != nil {
 		return "", err
 	}
-	if !r.State {
+	if !bool(r.State) {
 		return "", fmt.Errorf("115 取直链失败: %s", r.Error)
 	}
 	for _, v := range r.Data {
