@@ -61,7 +61,7 @@ docker compose up -d
 docker compose logs -f streampulse
 ```
 
-镜像：`ghcr.io/daisyijin/streampulse:latest`，由 GitHub Actions 在 `main` 分支构建。
+镜像：`ghcr.io/daisyyijin/streampulse:latest`，由 GitHub Actions 在 `main` 分支构建。
 不想每次登录的话，可在 GitHub → Packages → streampulse → Package settings 把可见性改为 Public。
 
 媒体目录固定为 compose 同级目录的 `./media`（容器内 `/media`），**Emby 必须挂载同一个宿主机目录**，否则找不到 STRM。

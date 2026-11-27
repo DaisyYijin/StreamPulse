@@ -1,6 +1,6 @@
 services:
   streampulse:
-    image: ghcr.io/daisyijin/streampulse:latest
+    image: ghcr.io/daisyyijin/streampulse:latest
     container_name: streampulse
     restart: unless-stopped
     ports:
