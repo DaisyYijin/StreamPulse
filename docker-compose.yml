@@ -8,10 +8,9 @@ services:
       - "2048:2048"
     environment:
       TZ: Asia/Shanghai
-      AUTH_PASSWORD: ${AUTH_PASSWORD:?请在 .env 中设置 AUTH_PASSWORD}
       PUBLIC_BASE: ${PUBLIC_BASE:-http://127.0.0.1:2048}
     volumes:
       - ./data:/data
       - ./config:/config
       - ./logs:/logs
-      - ${MEDIA_DIR:-./media}:/media
+      - ./media:/media

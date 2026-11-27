@@ -19,7 +19,7 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	dir := t.TempDir()
 	cfg := &config.Config{
 		Port: 1024, StreamPort: 2048, DataDir: dir, ConfigDir: dir, MediaDir: dir, LogDir: dir,
-		AdminUser: "admin", AdminPass: "pass", PlayMode: "redirect",
+		PlayMode: "redirect",
 		PublicBase: "http://h:2048", ReadEvery: time.Millisecond, WriteEvery: time.Millisecond,
 	}
 	st, err := store.Open(dir)
@@ -32,6 +32,9 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 测试固定管理员密码（生产环境由首次启动随机生成）
+	_ = st.SetSetting("admin_user", "admin")
+	_ = st.SetSetting("admin_password_hash", hashPassword("pass"))
 	return app, st
 }
 
@@ -202,5 +205,31 @@ func TestSettingsEmbyAndP115(t *testing.T) {
 	})
 	if st.GetEmbyConfig().APIKey != "" || st.GetSetting("p115_app_secret", "") != "" {
 		t.Fatal("explicit clear failed")
+	}
+}
+
+func TestAdminCredentialsInSettings(t *testing.T) {
+	app, _ := newTestApp(t)
+	h := app.Handler()
+	w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "admin", "password": "pass"})
+	var login struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &login)
+
+	w = doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{
+		"adminUser": "root", "newPassword": "newpass123",
+	})
+	if w.Code != 200 {
+		t.Fatalf("save admin = %d %s", w.Code, w.Body.String())
+	}
+	if w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "root", "password": "newpass123"}); w.Code != 200 {
+		t.Fatalf("new credentials login = %d", w.Code)
+	}
+	if w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "admin", "password": "pass"}); w.Code != 401 {
+		t.Fatalf("old credentials should fail = %d", w.Code)
+	}
+	if w := doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{"newPassword": "123"}); w.Code != 400 {
+		t.Fatalf("short password = %d", w.Code)
 	}
 }

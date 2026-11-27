@@ -114,6 +114,8 @@ th{color:var(--muted);font-weight:600}
         <div><label><input type="checkbox" id="embyDeleteRemote" style="width:auto;margin-right:6px">删除联动同时删网盘（进回收站）</label></div>
         <div><label>115 开放平台 AppID（可选）</label><input id="p115AppId" autocomplete="off"></div>
         <div><label>115 AppSecret（可选）</label><input id="p115AppSecret" type="password" autocomplete="off"></div>
+        <div><label>管理员用户名</label><input id="adminUser" autocomplete="username"></div>
+        <div><label>新密码（留空不改）</label><input id="adminPassword" type="password" autocomplete="new-password"></div>
       </div>
       <div style="margin-top:12px"><button id="saveSettings">保存设置</button> <span id="setMsg" class="muted"></span></div>
       <p class="muted" style="font-size:12px;margin:8px 0 0">Emby 配置保存在本地数据库，保存后立即生效；密钥留空表示不修改。115 登录用下方二维码，开放平台为可选项。</p>
@@ -251,6 +253,7 @@ async function loadSettings() {
     $('embyDeleteRemote').checked = !!s.embyDeleteRemote;
     $('p115AppId').value = s.p115AppId || '';
     $('p115AppSecret').placeholder = s.p115AppSecretSet ? '已设置（留空不修改）' : 'App Secret';
+    $('adminUser').value = s.adminUser || 'admin';
   } catch (e) {}
 }
 
@@ -263,9 +266,11 @@ $('saveSettings').onclick = async () => {
       embyWebhookToken: $('embyWebhookToken').value,
       embyDeleteRemote: $('embyDeleteRemote').checked,
       p115AppId: $('p115AppId').value,
-      p115AppSecret: $('p115AppSecret').value
+      p115AppSecret: $('p115AppSecret').value,
+      adminUser: $('adminUser').value,
+      newPassword: $('adminPassword').value
     })});
-    $('embyApiKey').value = ''; $('embyWebhookToken').value = ''; $('p115AppSecret').value = '';
+    $('embyApiKey').value = ''; $('embyWebhookToken').value = ''; $('p115AppSecret').value = ''; $('adminPassword').value = '';
     $('setMsg').textContent = '已保存';
     loadSettings(); refreshAll();
   } catch (e) { $('setMsg').textContent = e.message; }

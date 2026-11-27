@@ -6,8 +6,4 @@ if [ -n "${wizard_media_dir:-}" ]; then
 else
   printf "%s" "/vol1/1000/Media" > "${TRIM_PKGVAR}/media_dir"
 fi
-# 可选：把向导里的管理员密码交给首次启动
-if [ -n "${wizard_admin_password:-}" ]; then
-  printf "%s" "$wizard_admin_password" > "${TRIM_PKGVAR}/admin_password"
-fi
 exit 0

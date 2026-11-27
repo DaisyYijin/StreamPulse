@@ -51,13 +51,10 @@ func (a *App) ensureAdmin() {
 	if a.Store.GetSetting("admin_password_hash", "") != "" {
 		return
 	}
-	pw := a.Cfg.AdminPass
-	if pw == "" {
-		pw = randomPassword(12)
-		a.Log.Warn("未设置 AUTH_PASSWORD，已生成随机初始密码，请登录后立即修改", "password", pw)
-	}
+	pw := randomPassword(12)
 	_ = a.Store.SetSetting("admin_password_hash", hashPassword(pw))
-	_ = a.Store.SetSetting("admin_user", a.Cfg.AdminUser)
+	_ = a.Store.SetSetting("admin_user", "admin")
+	a.Log.Warn("已生成初始管理员账号，请登录后在「设置」里修改密码", "username", "admin", "password", pw)
 }
 
 func (a *App) Handler() http.Handler {
@@ -142,7 +139,7 @@ func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "请求格式错误")
 		return
 	}
-	wantUser := a.Store.GetSetting("admin_user", a.Cfg.AdminUser)
+	wantUser := a.Store.GetSetting("admin_user", "admin")
 	wantHash := a.Store.GetSetting("admin_password_hash", "")
 	if in.Username != wantUser || !verifyPassword(in.Password, wantHash) {
 		writeErr(w, http.StatusUnauthorized, "用户名或密码错误")
@@ -489,6 +486,7 @@ func (a *App) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"embyDeleteRemote":    e.DeleteRemote,
 		"p115AppId":           a.Store.GetSetting("p115_app_id", ""),
 		"p115AppSecretSet":    a.Store.GetSetting("p115_app_secret", "") != "",
+		"adminUser":           a.Store.GetSetting("admin_user", "admin"),
 	})
 }
 
@@ -502,12 +500,18 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		EmbyDeleteRemote      bool   `json:"embyDeleteRemote"`
 		P115AppId             string `json:"p115AppId"`
 		P115AppSecret         string `json:"p115AppSecret"`
+		AdminUser             string `json:"adminUser"`
+		NewPassword           string `json:"newPassword"`
 		ClearEmbyApiKey       bool   `json:"clearEmbyApiKey"`
 		ClearEmbyWebhookToken bool   `json:"clearEmbyWebhookToken"`
 		ClearP115AppSecret    bool   `json:"clearP115AppSecret"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if in.NewPassword != "" && len(in.NewPassword) < 8 {
+		writeErr(w, http.StatusBadRequest, "新密码至少 8 位")
 		return
 	}
 	e := a.Store.GetEmbyConfig()
@@ -539,6 +543,20 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		secret = strings.TrimSpace(in.P115AppSecret)
 	}
 	_ = a.Store.SetSetting("p115_app_secret", secret)
+
+	if u := strings.TrimSpace(in.AdminUser); u != "" {
+		_ = a.Store.SetSetting("admin_user", u)
+	}
+	if in.NewPassword != "" {
+		if len(in.NewPassword) < 8 {
+			writeErr(w, http.StatusBadRequest, "新密码至少 8 位")
+			return
+		}
+		if err := a.Store.SetSetting("admin_password_hash", hashPassword(in.NewPassword)); err != nil {
+			writeErr(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 

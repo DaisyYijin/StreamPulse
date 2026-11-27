@@ -17,9 +17,6 @@ type Config struct {
 	MediaDir  string // STRM 与附属文件输出根
 	LogDir    string
 
-	AdminUser string
-	AdminPass string
-
 
 	// 默认写进 STRM 的播放域名，如 http://192.168.1.10:2048
 	PublicBase string
@@ -48,8 +45,6 @@ func Load() *Config {
 		ConfigDir:  envStr("CONFIG_DIR", "/config"),
 		MediaDir:   envStr("MEDIA_DIR", "/media"),
 		LogDir:     envStr("LOG_DIR", "/logs"),
-		AdminUser:  envStr("AUTH_USER", "admin"),
-		AdminPass:  envStr("AUTH_PASSWORD", ""),
 		PublicBase: strings.TrimRight(envStr("PUBLIC_BASE", ""), "/"),
 		PlayMode:   envStr("PLAY_MODE", "redirect"),
 		ReadEvery:  envMillis("P115_READ_INTERVAL_MS", 1000),
@@ -69,10 +64,6 @@ func Load() *Config {
 func (c *Config) Validate() string {
 	if c.Port == c.StreamPort {
 		return "PORT 与 STREAM_PORT 不能相同"
-	}
-	if c.AdminPass == "" {
-		// 允许首次启动自动生成，由调用方处理；这里不阻断。
-		return ""
 	}
 	return ""
 }

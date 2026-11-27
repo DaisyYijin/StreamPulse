@@ -38,12 +38,11 @@
 
 ```bash
 # 本地运行（需要 Go 1.26+）
-export AUTH_PASSWORD='your-password'
 export DATA_DIR=./data CONFIG_DIR=./config MEDIA_DIR=./media LOG_DIR=./logs
 go run ./cmd/server
 ```
 
-打开 `http://127.0.0.1:1024`，登录后：
+首次启动会在日志里打印初始管理员账号（`admin` + 随机密码），**登录后请在「设置」里修改**。打开 `http://127.0.0.1:1024`，登录后：
 
 1. 「扫码登录 115」用 115 App 扫码；开放平台为可选通道，先在「设置」里填 AppID；
 2. 添加媒体库：远端 CID（`0` 为根）、本地目录、播放域名（如 `http://NAS_IP:2048`）；
@@ -55,7 +54,7 @@ go run ./cmd/server
 
 ```bash
 cp .env.example .env
-# 编辑 .env：至少设置 AUTH_PASSWORD、PUBLIC_BASE、MEDIA_DIR
+# 编辑 .env：设置 PUBLIC_BASE（播放器能访问到的地址）
 
 # GHCR 包默认私有，先登录（PAT 需 read:packages）
 echo "$CR_PAT" | docker login ghcr.io -u DaisyYijin --password-stdin
@@ -68,7 +67,8 @@ docker compose logs -f streampulse
 镜像：`ghcr.io/daisyijin/streampulse:latest`，由 GitHub Actions 在 `main` 分支构建。
 不想每次登录的话，可在 GitHub → Packages → streampulse → Package settings 把可见性改为 Public。
 
-媒体目录注意：`MEDIA_DIR` 必须与 Emby 容器挂载的是**同一个宿主机路径**，否则 Emby 找不到 STRM。
+媒体目录固定为 compose 同级目录的 `./media`（容器内 `/media`），**Emby 必须挂载同一个宿主机目录**，否则找不到 STRM。
+首次启动密码在日志里：`docker compose logs streampulse | grep 初始管理员`。
 
 ### 本地构建
 
@@ -76,8 +76,7 @@ docker compose logs -f streampulse
 docker build -t streampulse .
 docker run -d --name streampulse \
   -p 1024:1024 -p 2048:2048 \
-  -e AUTH_PASSWORD='your-password' \
-  -v ./data:/data -v ./config:/config -v /path/to/media:/media -v ./logs:/logs \
+  -v ./data:/data -v ./config:/config -v ./media:/media -v ./logs:/logs \
   streampulse
 ```
 
@@ -91,7 +90,6 @@ docker run -d --name streampulse \
 | `CONFIG_DIR` | `/config` | 密钥、配置 |
 | `MEDIA_DIR` | `/media` | STRM 输出根 |
 | `LOG_DIR` | `/logs` | 日志 |
-| `AUTH_USER` / `AUTH_PASSWORD` | `admin` / 随机 | 管理员；未设置密码时会生成并打印到日志 |
 | `PUBLIC_BASE` | `http://127.0.0.1:2048` | 写进 STRM 的默认播放域名 |
 | `PLAY_MODE` | `redirect` | `redirect` 302 / `proxy` 本机中转 |
 | `P115_READ_INTERVAL_MS` | `1000` | 读接口最小间隔 |
@@ -109,6 +107,7 @@ docker run -d --name streampulse \
 | Emby Webhook Token | 校验 Emby 回调；留空不校验 |
 | 删除联动同时删网盘 | 默认关闭；开启后进 115 回收站（可还原） |
 | 115 开放平台 AppID / AppSecret | 仅使用开放平台扫码时需要；不填只用扫码 Cookie |
+| 管理员用户名 / 新密码 | 首次启动生成随机密码并打印到日志；这里可改用户名与密码（至少 8 位） |
 
 密钥类字段留空表示不修改；要清空请调用 API 时带 `clearEmbyApiKey` 等标志。
 
