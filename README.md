@@ -2,6 +2,7 @@
 
 把 **115 网盘**媒体映射成本地 STRM 文件，供 Emby / Jellyfin 原生播放。单二进制、SQLite、无外部运行时依赖，面向 Docker 与飞牛 fnOS 原生应用包（fpk）。
 
+> 115 的列目录、取直链、删除使用 Go 库 `github.com/SheltonZhu/115driver`；扫码登录为自研实现（支持设备切换）。
 > 当前为 **P0 骨架**：核心同步与播放闭环已经可运行；整理、刮削、深度删除、转码代理等在后续阶段。
 > 代码为独立实现，只借鉴参考项目的协议与思路，不复制其源码（115-Station 无 LICENSE、LitePan 禁商用、QMediaSync 为 GPL-3.0）。
 

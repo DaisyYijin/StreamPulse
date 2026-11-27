@@ -41,6 +41,8 @@ func TestListDirPaginationAndDownload(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{Cookie: "UID=1"}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
+	c.SetDriver(false)
 	c.WebAPI = srv.URL
 	c.ProAPI = srv.URL
 
@@ -89,6 +91,7 @@ func TestQRFlow(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
 	c.QRAPI = srv.URL
 	c.Passport = srv.URL
 
@@ -146,6 +149,7 @@ func TestOpenAPIFlow(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
 	c.Passport = srv.URL
 
 	oa, err := c.OpenLoginStart(context.Background(), "app1")
@@ -177,6 +181,7 @@ func TestRateLimitReadInterval(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{Cookie: "x"}, 40*time.Millisecond, 40*time.Millisecond)
+	c.SetDriver(false)
 	c.WebAPI = srv.URL
 	start := time.Now()
 	for i := 0; i < 3; i++ {

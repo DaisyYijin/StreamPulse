@@ -22,6 +22,7 @@ func TestListBehaviorParsesAndIgnores(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{Cookie: "x"}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
 	c.ProAPI = srv.URL
 	c.WebAPI = srv.URL
 
@@ -52,6 +53,7 @@ func TestListBehaviorFallsBackToWeb(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{Cookie: "x"}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
 	c.ProAPI = srv.URL
 	c.WebAPI = srv.URL
 
@@ -78,6 +80,7 @@ func TestDeleteToRecycle(t *testing.T) {
 	defer srv.Close()
 
 	c := New(Credential{Cookie: "x"}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
 	c.WebAPI = srv.URL
 	if err := c.DeleteToRecycle(context.Background(), []string{"a", "b"}); err != nil {
 		t.Fatal(err)

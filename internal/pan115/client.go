@@ -15,15 +15,17 @@ import (
 	"sync"
 	"time"
 
+	driver "github.com/SheltonZhu/115driver/pkg/driver"
+
 	"streampulse/internal/ratelimit"
 )
 
 // Default* 是线上端点；测试可整体替换。
 const (
-	DefaultWebAPI    = "https://webapi.115.com"
-	DefaultProAPI    = "https://proapi.115.com"
-	DefaultQRAPI     = "https://qrcodeapi.115.com"
-	DefaultPassport  = "https://passportapi.115.com"
+	DefaultWebAPI   = "https://webapi.115.com"
+	DefaultProAPI   = "https://proapi.115.com"
+	DefaultQRAPI    = "https://qrcodeapi.115.com"
+	DefaultPassport = "https://passportapi.115.com"
 	// 115 的 Cookie 会话与 UA 绑定：登录、列目录、取直链必须全程同一个 UA。
 	DefaultUserAgent = "Mozilla/5.0 115Browser/36.0.0"
 )
@@ -41,22 +43,25 @@ type Client struct {
 	read  *ratelimit.Limiter
 	write *ratelimit.Limiter
 
-	mu        sync.RWMutex
-	cred      Credential
-	pageLimit int
+	mu         sync.RWMutex
+	cred       Credential
+	pageLimit  int
+	driverMode bool
+	drv        *driver.Pan115Client
 }
 
 func New(cred Credential, readEvery, writeEvery time.Duration) *Client {
 	return &Client{
-		http:      &http.Client{Timeout: 30 * time.Second},
-		WebAPI:    DefaultWebAPI,
-		ProAPI:    DefaultProAPI,
-		QRAPI:     DefaultQRAPI,
-		Passport:  DefaultPassport,
-		UserAgent: DefaultUserAgent,
-		read:      ratelimit.New(readEvery),
-		write:     ratelimit.New(writeEvery),
-		cred:      cred,
+		http:       &http.Client{Timeout: 30 * time.Second},
+		WebAPI:     DefaultWebAPI,
+		ProAPI:     DefaultProAPI,
+		QRAPI:      DefaultQRAPI,
+		Passport:   DefaultPassport,
+		UserAgent:  DefaultUserAgent,
+		read:       ratelimit.New(readEvery),
+		write:      ratelimit.New(writeEvery),
+		cred:       cred,
+		driverMode: true,
 	}
 }
 
@@ -69,7 +74,39 @@ func (c *Client) Credential() Credential {
 func (c *Client) SetCredential(cr Credential) {
 	c.mu.Lock()
 	c.cred = cr
+	c.drv = nil
 	c.mu.Unlock()
+}
+
+// SetDriver 控制是否使用 115driver（测试里关掉以注入 httptest 端点）。
+func (c *Client) SetDriver(enabled bool) {
+	c.mu.Lock()
+	c.driverMode = enabled
+	c.mu.Unlock()
+}
+
+func (c *Client) useDriver() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.driverMode
+}
+
+func (c *Client) driverClient() *driver.Pan115Client {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.drv != nil {
+		return c.drv
+	}
+	d := driver.New(driver.UA(c.UserAgent))
+	d.SetHttpClient(&http.Client{Timeout: 30 * time.Second})
+	if c.cred.Cookie != "" {
+		var cr driver.Credential
+		if err := cr.FromCookie(c.cred.Cookie); err == nil {
+			d.ImportCredential(&cr)
+		}
+	}
+	c.drv = d
+	return d
 }
 
 // SetPageLimit 控制列目录每页条数：快速模式 1000，标准模式 200。
@@ -113,7 +150,7 @@ func (b *flexBool) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// ---------- low level ----------
+// ---------- low level（生活事件等仍走轻量 HTTP） ----------
 
 func (c *Client) cookieHeader() string {
 	c.mu.RLock()
@@ -178,8 +215,8 @@ func truncate(s string, n int) string {
 
 type listResp struct {
 	State flexBool `json:"state"`
-	Error string `json:"error"`
-	Count int    `json:"count"`
+	Error string   `json:"error"`
+	Count int      `json:"count"`
 	Data  []struct {
 		FID  string `json:"fid"`
 		CID  string `json:"cid"`
@@ -192,11 +229,47 @@ type listResp struct {
 	} `json:"data"`
 }
 
-// ListDir 拉取一个目录的直接子项（自动翻页）。cid=0 为根目录。
 func (c *Client) ListDir(ctx context.Context, cid string) ([]Entry, error) {
 	if cid == "" {
 		cid = "0"
 	}
+	if c.useDriver() {
+		return c.listWithDriver(ctx, cid)
+	}
+	return c.listWithHTTP(ctx, cid)
+}
+
+func (c *Client) listWithDriver(ctx context.Context, cid string) ([]Entry, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	files, err := c.driverClient().ListWithLimit(cid, int64(c.PageLimit()))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Entry, 0, len(*files))
+	for _, f := range *files {
+		e := Entry{
+			FID:      f.FileID,
+			ParentID: f.ParentID,
+			Name:     f.Name,
+			IsDir:    f.IsDirectory,
+			Size:     f.Size,
+			Pickcode: f.PickCode,
+			SHA1:     f.Sha1,
+			PTime:    f.UpdateTime.Unix(),
+		}
+		if f.IsDirectory {
+			e.CID = f.FileID
+		} else {
+			e.CID = f.ParentID
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func (c *Client) listWithHTTP(ctx context.Context, cid string) ([]Entry, error) {
 	var out []Entry
 	offset := 0
 	for {
@@ -227,8 +300,6 @@ func (c *Client) ListDir(ctx context.Context, cid string) ([]Entry, error) {
 				SHA1:     it.SHA,
 				PTime:    it.TE,
 			}
-			// 115 的目录项没有 pickcode；文件一定有（极少数异常项除外）。
-			// fid 在目录项上可能为 "0" 或与 cid 相同，不能单独用来判目录。
 			if e.FID == "" || it.PC == "" {
 				e.IsDir = true
 			}
@@ -244,12 +315,19 @@ func (c *Client) ListDir(ctx context.Context, cid string) ([]Entry, error) {
 
 // FileDetail 查单个文件。
 func (c *Client) FileDetail(ctx context.Context, fid string) (*FileDetail, error) {
+	if c.useDriver() {
+		f, err := c.driverClient().GetFile(fid)
+		if err != nil {
+			return nil, err
+		}
+		return &FileDetail{FID: f.FileID, Name: f.Name, Size: f.Size, Pickcode: f.PickCode, SHA1: f.Sha1}, nil
+	}
 	q := url.Values{}
 	q.Set("fid", fid)
 	q.Set("aid", "1")
 	var r struct {
 		State flexBool `json:"state"`
-		Error string `json:"error"`
+		Error string   `json:"error"`
 		Data  []struct {
 			FID  string `json:"fid"`
 			Name string `json:"n"`
@@ -270,17 +348,26 @@ func (c *Client) FileDetail(ctx context.Context, fid string) (*FileDetail, error
 
 // ---------- download ----------
 
-// DownloadURL 用 pickcode 换直链。write=false（读操作），但会用写间隔？不，取链接算读。
 func (c *Client) DownloadURL(ctx context.Context, pickcode string) (string, error) {
 	if pickcode == "" {
 		return "", errors.New("pickcode 为空")
+	}
+	if c.useDriver() {
+		info, err := c.driverClient().Download(pickcode)
+		if err != nil {
+			return "", err
+		}
+		if info.Url.Url == "" {
+			return "", errors.New("115 取直链响应里没有 url")
+		}
+		return info.Url.Url, nil
 	}
 	payload, _ := json.Marshal(map[string]string{"pickcode": pickcode})
 	form := url.Values{}
 	form.Set("data", string(payload))
 	var r struct {
 		State flexBool `json:"state"`
-		Error string `json:"error"`
+		Error string   `json:"error"`
 		Data  map[string]struct {
 			URL struct {
 				URL string `json:"url"`

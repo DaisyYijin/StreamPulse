@@ -13,6 +13,9 @@ func (c *Client) DeleteToRecycle(ctx context.Context, fids []string) error {
 	if len(fids) == 0 {
 		return nil
 	}
+	if c.useDriver() {
+		return c.driverClient().Delete(fids...)
+	}
 	form := url.Values{}
 	for i, fid := range fids {
 		form.Set(fmt.Sprintf("fid[%d]", i), fid)
