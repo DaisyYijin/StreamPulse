@@ -298,7 +298,7 @@ html[data-auth="in"] #app { display:flex }
   </aside>
 
   <main class="content">
-    <section id="view-dashboard" class="view active">
+    <section id="view-dashboard" class="view">
       <div class="page-head"><h1>概览</h1><p>账号、媒体库与同步状态</p></div>
       <div class="card">
         <div id="status" class="status-line">加载中…</div>
@@ -405,6 +405,19 @@ html[data-auth="in"] #app { display:flex }
     </section>
   </main>
 </div>
+
+<script>
+(function () {
+  var views = ['dashboard', 'accounts', 'libraries', 'tasks', 'settings'];
+  var h = (location.hash || '').replace(/^#\/?/, '');
+  if (views.indexOf(h) < 0) h = 'dashboard';
+  var el = document.getElementById('view-' + h);
+  if (el) el.classList.add('active');
+  Array.prototype.forEach.call(document.querySelectorAll('.menu button'), function (b) {
+    b.classList.toggle('active', b.getAttribute('data-view') === h);
+  });
+})();
+</script>
 
 <div id="qrModal" class="modal hide">
   <div class="modal-card">
