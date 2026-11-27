@@ -178,8 +178,13 @@ func (a *App) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	tok := issueToken(a.secret, user, 8*24*time.Hour)
+	http.SetCookie(w, &http.Cookie{
+		Name: "sp_token", Value: tok, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		MaxAge: 8 * 24 * 3600,
+	})
 	a.Log.Info("管理员账号已创建", "username", user)
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	writeJSON(w, http.StatusOK, map[string]string{"token": tok})
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {

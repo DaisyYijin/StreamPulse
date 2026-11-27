@@ -291,8 +291,12 @@ func TestSetupFlow(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("setup = %d %s", w.Code, w.Body.String())
 	}
-	if !bytes.Contains(w.Body.Bytes(), []byte(`"ok":true`)) {
-		t.Fatalf("setup body = %s", w.Body.String())
+	var out struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	if out.Token == "" {
+		t.Fatalf("setup should return token: %s", w.Body.String())
 	}
 
 	w = doJSON(t, h, http.MethodGet, "/api/setup/status", "", nil)

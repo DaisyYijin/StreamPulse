@@ -126,18 +126,38 @@ select{
 .rule{display:flex;align-items:center;gap:10px;color:#9aa8a0;font-size:12px;margin:18px 0 0}
 .rule::before,.rule::after{content:"";height:1px;background:var(--line);flex:1}
 
-/* ---------- app ---------- */
-.topbar{
-  position:sticky;top:0;z-index:10;background:rgba(255,255,255,.9);
-  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);
+/* ---------- app shell ---------- */
+.shell{display:flex;min-height:100vh}
+.sidebar{
+  width:220px;flex:0 0 220px;background:var(--panel);border-right:1px solid var(--line);
+  position:sticky;top:0;height:100vh;display:flex;flex-direction:column;
 }
-.topbar-inner{max-width:1120px;margin:0 auto;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;gap:12px}
-.brand.small{margin:0}
-.brand.small .logo{width:34px;height:34px;border-radius:11px;font-size:16px;box-shadow:none}
-.brand.small .brand-name{font-size:15px}
-.top-actions{display:flex;align-items:center;gap:12px}
-.main{max-width:1120px;margin:0 auto;padding:22px 22px 64px;display:grid;gap:16px}
+.sidebar .brand{padding:20px 18px 14px;margin:0}
+.sidebar .logo{width:36px;height:36px;border-radius:11px;font-size:17px;box-shadow:none}
+.sidebar .brand-name{font-size:15px}
+.menu{display:flex;flex-direction:column;gap:2px;padding:6px 10px;flex:1}
+.menu button{
+  position:relative;border:0;background:transparent;text-align:left;cursor:pointer;
+  padding:10px 14px;border-radius:9px;font-size:14px;font-weight:600;color:#40504a;
+  transition:background .15s,color .15s;
+}
+.menu button:hover{background:#f2f8f5}
+.menu button.active{background:var(--accent-soft);color:var(--accent)}
+.menu button.active::before{
+  content:"";position:absolute;left:0;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--accent);
+}
+.sidebar-foot{
+  padding:14px 16px;border-top:1px solid var(--line);display:flex;align-items:center;
+  justify-content:space-between;gap:8px;font-size:13px;
+}
+.content{flex:1;min-width:0;padding:26px 28px 64px;max-width:1120px}
+.view{display:none}
+.view.active{display:block}
+.page-head{margin:0 0 18px}
+.page-head h1{font-size:23px;margin:0 0 4px;letter-spacing:-.02em}
+.page-head p{margin:0;color:var(--muted);font-size:13px}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 22px;box-shadow:var(--shadow)}
+.view > .card + .card{margin-top:16px}
 .card-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .card-head h2{font-size:16px;margin:0;letter-spacing:0}
 .card-head .hint{margin:0;font-size:12px}
@@ -161,10 +181,19 @@ tr:last-child td{border-bottom:0}
 .qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:16px;padding:18px;background:#f8fbf9;border:1px dashed #d8e5df;border-radius:14px}
 .qr-box img{width:200px;height:200px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 8px 20px rgba(20,60,45,.10)}
 .section-note{font-size:12.5px;color:var(--muted);margin:8px 0 0}
-@media (max-width:760px){
+.steps{margin:0;padding-left:20px;color:#3d4a44;font-size:14px}
+.steps li{margin:6px 0}
+
+@media (max-width:860px){
+  .shell{display:block}
+  .sidebar{position:static;height:auto;width:auto;border-right:0;border-bottom:1px solid var(--line)}
+  .sidebar .brand{padding:14px 16px 6px;margin:0}
+  .menu{flex-direction:row;overflow-x:auto;padding:4px 10px 10px;gap:4px}
+  .menu button{white-space:nowrap;padding:8px 12px}
+  .menu button.active::before{display:none}
+  .sidebar-foot{border-top:0;padding:0 14px 10px;justify-content:flex-end}
+  .content{padding:18px 14px 44px;max-width:none}
   .grid{grid-template-columns:1fr}
-  .topbar-inner{padding:10px 14px}
-  .main{padding:16px 14px 48px}
   .card{padding:16px}
   .auth-card{padding:26px 22px 22px}
 }
@@ -214,88 +243,122 @@ tr:last-child td{border-bottom:0}
   <div class="auth-foot">StreamPulse · 自托管 STRM 引擎</div>
 </div>
 
-<div id="app" class="hide">
-  <header class="topbar">
-    <div class="topbar-inner">
-      <div class="brand small">
-        <div class="logo">S</div>
-        <div class="brand-name">StreamPulse</div>
-      </div>
-      <div class="top-actions">
-        <span id="who" class="muted"></span>
-        <button class="btn ghost" id="logout">退出</button>
-      </div>
+<div id="app" class="shell hide">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">S</div>
+      <div class="brand-name">StreamPulse</div>
     </div>
-  </header>
+    <nav class="menu">
+      <button data-view="dashboard" class="active">概览</button>
+      <button data-view="accounts">115 账号</button>
+      <button data-view="libraries">媒体库</button>
+      <button data-view="tasks">任务</button>
+      <button data-view="settings">设置</button>
+    </nav>
+    <div class="sidebar-foot">
+      <span id="who" class="muted"></span>
+      <button class="btn ghost" id="logout">退出</button>
+    </div>
+  </aside>
 
-  <main class="main">
-    <section class="card">
-      <div class="card-head"><h2>概览</h2></div>
-      <div id="status" class="status-line">加载中…</div>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><h2>115 账号</h2><span class="hint">扫码登录，Cookie 保存在本地数据库</span></div>
-      <div class="row-actions">
-        <button class="btn primary" id="qrLogin">扫码登录 115</button>
-        <button class="btn ghost" id="openLogin">开放平台扫码（需 AppID）</button>
+  <main class="content">
+    <section id="view-dashboard" class="view active">
+      <div class="page-head"><h1>概览</h1><p>账号、媒体库与同步状态</p></div>
+      <div class="card">
+        <div id="status" class="status-line">加载中…</div>
       </div>
-      <div id="qrBox" class="qr-box hide">
-        <div id="qrMsg" class="hint">请用 115 App 扫码</div>
-        <img id="qrImg" alt="二维码">
-      </div>
-      <div id="accList" class="list"></div>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><h2>设置</h2><span class="hint">保存在本地数据库，保存即生效</span></div>
-      <div class="grid">
-        <div><label>播放地址（写入 STRM）</label><input id="publicBase" placeholder="http://192.168.1.10:2048"></div>
-        <div><label>Emby 地址</label><input id="embyBase" placeholder="http://192.168.1.10:8096"></div>
-        <div><label>Emby API Key</label><input id="embyApiKey" type="password" autocomplete="off"></div>
-        <div><label>Emby Webhook Token</label><input id="embyWebhookToken" type="password" autocomplete="off"></div>
-        <div><label>115 开放平台 AppID（可选）</label><input id="p115AppId" autocomplete="off"></div>
-        <div><label>115 AppSecret（可选）</label><input id="p115AppSecret" type="password" autocomplete="off"></div>
-        <div><label>管理员用户名</label><input id="adminUser" autocomplete="username"></div>
-        <div><label>新密码（留空不改）</label><input id="adminPassword" type="password" autocomplete="new-password"></div>
-        <div class="full check"><input type="checkbox" id="embyDeleteRemote"><label for="embyDeleteRemote" style="margin:0">删除联动同时删网盘（进 115 回收站）</label></div>
-      </div>
-      <div class="row-actions">
-        <button class="btn primary" id="saveSettings">保存设置</button>
-        <span id="setMsg" class="msg inline"></span>
-      </div>
-      <p class="section-note">密钥留空表示不修改；修改播放地址后需重新扫描媒体库以更新 STRM。</p>
-    </section>
-
-    <section class="card">
-      <div class="card-head"><h2>媒体库</h2></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>名称</th><th>远端 CID</th><th>本地目录</th><th>模式</th><th>操作</th></tr></thead>
-          <tbody id="libs"></tbody>
-        </table>
-      </div>
-      <div class="grid" style="margin-top:16px">
-        <div><label>名称</label><input id="libName" placeholder="电影"></div>
-        <div><label>远端 CID（0 = 根）</label><input id="libCid" value="0"></div>
-        <div><label>本地目录</label><input id="libDir" placeholder="/media/movies"></div>
-        <div><label>播放域名（留空用全局播放地址）</label><input id="libBase" placeholder="http://192.168.1.10:2048"></div>
-        <div><label>STRM 格式</label><select id="libFmt"><option value="pick_code">pick_code</option><option value="pick_code_name">pick_code_name</option></select></div>
-        <div><label>扫描模式</label><select id="libMode"><option value="fast">快速</option><option value="normal">标准</option></select></div>
-      </div>
-      <div class="row-actions">
-        <button class="btn primary" id="addLib">添加媒体库</button>
-        <span id="libMsg" class="msg inline"></span>
+      <div class="card">
+        <div class="card-head"><h2>快速开始</h2></div>
+        <ol class="steps">
+          <li>到「设置」填写播放地址（写入 STRM），以及 Emby 地址与 API Key。</li>
+          <li>到「115 账号」用 115 App 扫码登录。</li>
+          <li>到「媒体库」添加远端目录并点「扫描」。</li>
+        </ol>
       </div>
     </section>
 
-    <section class="card">
-      <div class="card-head"><h2>任务</h2></div>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>#</th><th>类型</th><th>状态</th><th>信息</th></tr></thead>
-          <tbody id="tasks"></tbody>
-        </table>
+    <section id="view-accounts" class="view">
+      <div class="page-head"><h1>115 账号</h1><p>扫码登录，Cookie 保存在本地数据库</p></div>
+      <div class="card">
+        <div class="row-actions" style="margin-top:0">
+          <button class="btn primary" id="qrLogin">扫码登录 115</button>
+          <button class="btn ghost" id="openLogin">开放平台扫码（需 AppID）</button>
+        </div>
+        <div id="qrBox" class="qr-box hide">
+          <div id="qrMsg" class="hint">请用 115 App 扫码</div>
+          <img id="qrImg" alt="二维码">
+        </div>
+        <div id="accList" class="list"></div>
+      </div>
+    </section>
+
+    <section id="view-libraries" class="view">
+      <div class="page-head"><h1>媒体库</h1><p>把 115 目录映射成本地 STRM 媒体库</p></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>名称</th><th>远端 CID</th><th>本地目录</th><th>模式</th><th>操作</th></tr></thead>
+            <tbody id="libs"></tbody>
+          </table>
+        </div>
+        <div class="grid" style="margin-top:16px">
+          <div><label>名称</label><input id="libName" placeholder="电影"></div>
+          <div><label>远端 CID（0 = 根）</label><input id="libCid" value="0"></div>
+          <div><label>本地目录</label><input id="libDir" placeholder="/media/movies"></div>
+          <div><label>播放域名（留空用全局播放地址）</label><input id="libBase" placeholder="http://192.168.1.10:2048"></div>
+          <div><label>STRM 格式</label><select id="libFmt"><option value="pick_code">pick_code</option><option value="pick_code_name">pick_code_name</option></select></div>
+          <div><label>扫描模式</label><select id="libMode"><option value="fast">快速</option><option value="normal">标准</option></select></div>
+        </div>
+        <div class="row-actions">
+          <button class="btn primary" id="addLib">添加媒体库</button>
+          <span id="libMsg" class="msg inline"></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-tasks" class="view">
+      <div class="page-head"><h1>任务</h1><p>扫描、目录同步与定时任务记录</p></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>类型</th><th>状态</th><th>信息</th></tr></thead>
+            <tbody id="tasks"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-settings" class="view">
+      <div class="page-head"><h1>设置</h1><p>保存在本地数据库，保存即生效</p></div>
+      <div class="card">
+        <div class="card-head"><h2>播放与 Emby</h2></div>
+        <div class="grid">
+          <div><label>播放地址（写入 STRM）</label><input id="publicBase" placeholder="http://192.168.1.10:2048"></div>
+          <div><label>Emby 地址</label><input id="embyBase" placeholder="http://192.168.1.10:8096"></div>
+          <div><label>Emby API Key</label><input id="embyApiKey" type="password" autocomplete="off"></div>
+          <div><label>Emby Webhook Token</label><input id="embyWebhookToken" type="password" autocomplete="off"></div>
+          <div class="full check"><input type="checkbox" id="embyDeleteRemote"><label for="embyDeleteRemote" style="margin:0">删除联动同时删网盘（进 115 回收站）</label></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>115 开放平台</h2><span class="hint">只使用扫码 Cookie 时可以不填</span></div>
+        <div class="grid">
+          <div><label>AppID</label><input id="p115AppId" autocomplete="off"></div>
+          <div><label>AppSecret</label><input id="p115AppSecret" type="password" autocomplete="off"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>管理员</h2></div>
+        <div class="grid">
+          <div><label>用户名</label><input id="adminUser" autocomplete="username"></div>
+          <div><label>新密码（留空不改）</label><input id="adminPassword" type="password" autocomplete="new-password"></div>
+        </div>
+        <div class="row-actions">
+          <button class="btn primary" id="saveSettings">保存设置</button>
+          <span id="setMsg" class="msg inline"></span>
+        </div>
+        <p class="section-note">密钥留空表示不修改；修改播放地址后需重新扫描媒体库以更新 STRM。</p>
       </div>
     </section>
   </main>
@@ -303,6 +366,7 @@ tr:last-child td{border-bottom:0}
 
 <script>
 const $ = (id) => document.getElementById(id);
+const VIEWS = ['dashboard', 'accounts', 'libraries', 'tasks', 'settings'];
 let token = localStorage.getItem('sp_token') || '';
 
 function showLogin() {
@@ -322,6 +386,31 @@ function showSetup() {
 function showApp() {
   $('auth').classList.add('hide');
   $('app').classList.remove('hide');
+}
+
+function currentView() {
+  const h = (location.hash || '').replace(/^#\/?/, '');
+  return VIEWS.indexOf(h) >= 0 ? h : 'dashboard';
+}
+
+function showView(name) {
+  if (VIEWS.indexOf(name) < 0) name = 'dashboard';
+  VIEWS.forEach((v) => {
+    const el = $('view-' + v);
+    if (el) el.classList.toggle('active', v === name);
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.menu button'), (b) => {
+    b.classList.toggle('active', b.getAttribute('data-view') === name);
+  });
+  history.replaceState(null, '', '#/' + name);
+  if (name === 'settings') loadSettings();
+  refreshAll();
+}
+
+function enterApp() {
+  showApp();
+  showView(currentView());
+  loadSettings();
 }
 
 async function publicJSON(path, opts) {
@@ -366,8 +455,7 @@ async function boot() {
     const s = await publicJSON('/api/setup/status');
     if (!s.initialized) { showSetup(); return; }
   } catch (e) {}
-  if (token) { showApp(); refreshAll(); loadSettings(); }
-  else { showLogin(); }
+  if (token) { enterApp(); } else { showLogin(); }
 }
 
 $('setupForm').addEventListener('submit', async (e) => {
@@ -381,18 +469,16 @@ $('setupForm').addEventListener('submit', async (e) => {
   if (password.length < 8) { msg.textContent = '密码至少 8 位'; return; }
   if (password !== confirm) { msg.textContent = '两次输入的密码不一致'; return; }
   try {
-    await publicJSON('/api/setup', {
+    const d = await publicJSON('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: username, password: password, confirm: confirm })
     });
+    token = d.token;
+    localStorage.setItem('sp_token', token);
     $('setupPass').value = '';
     $('setupConfirm').value = '';
-    showLogin();
-    $('loginUser').value = username;
-    $('loginPass').value = '';
-    $('loginMsg').className = 'msg ok';
-    $('loginMsg').textContent = '管理员已创建，请登录';
+    enterApp();
   } catch (err) {
     msg.textContent = err.message;
   }
@@ -412,9 +498,7 @@ $('loginForm').addEventListener('submit', async (e) => {
     token = d.token;
     localStorage.setItem('sp_token', token);
     $('loginPass').value = '';
-    showApp();
-    refreshAll();
-    loadSettings();
+    enterApp();
   } catch (err) {
     if (err.message.indexOf('创建管理员') >= 0) { showSetup(); return; }
     msg.textContent = err.message;
@@ -427,6 +511,11 @@ $('logout').onclick = async () => {
   localStorage.removeItem('sp_token');
   showLogin();
 };
+
+Array.prototype.forEach.call(document.querySelectorAll('.menu button'), (b) => {
+  b.addEventListener('click', () => showView(b.getAttribute('data-view')));
+});
+window.addEventListener('hashchange', () => showView(currentView()));
 
 async function refreshAll() {
   try {
