@@ -512,3 +512,38 @@ func (s *Store) CountEvents(accountID int64) (int, error) {
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM sync_events WHERE account_id=?`, accountID).Scan(&n)
 	return n, err
 }
+
+// ---------- emby settings ----------
+
+type EmbyConfig struct {
+	Base         string `json:"base"`
+	APIKey       string `json:"apiKey"`
+	WebhookToken string `json:"webhookToken"`
+	DeleteRemote bool   `json:"deleteRemote"`
+}
+
+func (s *Store) GetEmbyConfig() EmbyConfig {
+	return EmbyConfig{
+		Base:         s.GetSetting("emby_base", ""),
+		APIKey:       s.GetSetting("emby_api_key", ""),
+		WebhookToken: s.GetSetting("emby_webhook_token", ""),
+		DeleteRemote: s.GetSetting("emby_delete_remote", "0") == "1",
+	}
+}
+
+func (s *Store) SaveEmbyConfig(c EmbyConfig) error {
+	if err := s.SetSetting("emby_base", c.Base); err != nil {
+		return err
+	}
+	if err := s.SetSetting("emby_api_key", c.APIKey); err != nil {
+		return err
+	}
+	if err := s.SetSetting("emby_webhook_token", c.WebhookToken); err != nil {
+		return err
+	}
+	v := "0"
+	if c.DeleteRemote {
+		v = "1"
+	}
+	return s.SetSetting("emby_delete_remote", v)
+}

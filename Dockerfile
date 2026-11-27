@@ -10,13 +10,13 @@ FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 COPY --from=build /out/streampulse /app/streampulse
-ENV PORT=6060 \
-    STREAM_PORT=6086 \
+ENV PORT=1024 \
+    STREAM_PORT=2048 \
     DATA_DIR=/data \
     CONFIG_DIR=/config \
     MEDIA_DIR=/media \
     LOG_DIR=/logs \
     TZ=Asia/Shanghai
 VOLUME ["/data", "/config", "/media", "/logs"]
-EXPOSE 6060 6086
+EXPOSE 1024 2048
 ENTRYPOINT ["/app/streampulse"]

@@ -184,8 +184,8 @@ func TestSTRMFormat(t *testing.T) {
 	if id != "pc1.mkv" {
 		t.Fatalf("id = %q", id)
 	}
-	u := STRM("http://h:6086/", "pick_code_name", id, "a b.mkv")
-	if !strings.HasPrefix(u, "http://h:6086/d/pc1.mkv?/") || !strings.Contains(u, "a%20b.mkv") {
+	u := STRM("http://h:2048/", "pick_code_name", id, "a b.mkv")
+	if !strings.HasPrefix(u, "http://h:2048/d/pc1.mkv?/") || !strings.Contains(u, "a%20b.mkv") {
 		t.Fatalf("url = %q", u)
 	}
 	iso := STRMID("", "pc2", ".mkv", false, true)

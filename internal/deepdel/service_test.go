@@ -31,7 +31,7 @@ func setup(t *testing.T) (*store.Store, *store.Library, string, string) {
 	accID, _ := st.SaveAccount(&store.Account{Name: "main", Role: "main", AuthType: "cookie", Cookie: "UID=1"})
 	libID, _ := st.SaveLibrary(&store.Library{
 		Name: "movies", AccountID: accID, RemoteCID: "0", LocalDir: root,
-		BaseURL: "http://h:6086", VideoExts: ".mkv", Enabled: true,
+		BaseURL: "http://h:2048", VideoExts: ".mkv", Enabled: true,
 	})
 	lib, _ := st.GetLibrary(libID)
 
@@ -39,7 +39,7 @@ func setup(t *testing.T) (*store.Store, *store.Library, string, string) {
 	if err := os.MkdirAll(filepath.Dir(strm), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(strm, []byte("http://h:6086/d/pc1\n"), 0o644); err != nil {
+	if err := os.WriteFile(strm, []byte("http://h:2048/d/pc1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	sidecar := filepath.Join(filepath.Dir(strm), "a.nfo")
@@ -82,7 +82,8 @@ func TestRejectsUnsafeRequests(t *testing.T) {
 func TestDeletesFileAndSidecar(t *testing.T) {
 	st, _, root, strm := setup(t)
 	remote := &fakeRemote{}
-	svc := &Service{Store: st, Log: slog.Default(), Svc: remote, DeleteRemote: true}
+	_ = st.SetSetting("emby_delete_remote", "1")
+	svc := &Service{Store: st, Log: slog.Default(), Svc: remote}
 
 	res, err := svc.Handle(context.Background(), Item{Type: "Movie", Name: "a", Path: strm})
 	if err != nil {
@@ -120,7 +121,7 @@ func TestDeletesDirectoryTree(t *testing.T) {
 	st, _, root, _ := setup(t)
 	// 增加第二集
 	second := filepath.Join(root, "Movies", "Season 01", "b.strm")
-	if err := os.WriteFile(second, []byte("http://h:6086/d/pc2\n"), 0o644); err != nil {
+	if err := os.WriteFile(second, []byte("http://h:2048/d/pc2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_ = st.UpsertFile(&store.SyncedFile{

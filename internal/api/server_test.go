@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"streampulse/internal/config"
-	"streampulse/internal/emby"
 	"streampulse/internal/p115svc"
 	"streampulse/internal/store"
 )
@@ -19,9 +18,9 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	t.Helper()
 	dir := t.TempDir()
 	cfg := &config.Config{
-		Port: 6060, StreamPort: 6086, DataDir: dir, ConfigDir: dir, MediaDir: dir, LogDir: dir,
+		Port: 1024, StreamPort: 2048, DataDir: dir, ConfigDir: dir, MediaDir: dir, LogDir: dir,
 		AdminUser: "admin", AdminPass: "pass", PlayMode: "redirect",
-		PublicBase: "http://h:6086", ReadEvery: time.Millisecond, WriteEvery: time.Millisecond,
+		PublicBase: "http://h:2048", ReadEvery: time.Millisecond, WriteEvery: time.Millisecond,
 	}
 	st, err := store.Open(dir)
 	if err != nil {
@@ -29,7 +28,7 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	}
 	t.Cleanup(func() { st.Close() })
 	svc := p115svc.New(st, cfg)
-	app, err := New(cfg, st, svc, emby.New("", ""), nil, slog.Default())
+	app, err := New(cfg, st, svc, nil, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +103,7 @@ func TestLibraryCRUD(t *testing.T) {
 
 	lib := map[string]any{
 		"name": "movies", "accountId": accID, "remoteCid": "0",
-		"localDir": t.TempDir(), "baseUrl": "http://h:6086",
+		"localDir": t.TempDir(), "baseUrl": "http://h:2048",
 	}
 	w = doJSON(t, h, http.MethodPost, "/api/libraries", login.Token, lib)
 	if w.Code != 200 {
@@ -153,5 +152,55 @@ func TestPasswordHash(t *testing.T) {
 	h := hashPassword("secret")
 	if h == "secret" || !verifyPassword("secret", h) || verifyPassword("wrong", h) {
 		t.Fatal("password hash/verify failed")
+	}
+}
+
+func TestSettingsEmbyAndP115(t *testing.T) {
+	app, st := newTestApp(t)
+	h := app.Handler()
+	w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "admin", "password": "pass"})
+	var login struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &login)
+
+	w = doJSON(t, h, http.MethodGet, "/api/settings", login.Token, nil)
+	if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte(`"embyApiKeySet":false`)) {
+		t.Fatalf("initial settings = %d %s", w.Code, w.Body.String())
+	}
+
+	w = doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{
+		"embyBase": "http://emby:8096/", "embyApiKey": "key1", "embyWebhookToken": "wh1",
+		"embyDeleteRemote": true, "p115AppId": "app1", "p115AppSecret": "sec1",
+	})
+	if w.Code != 200 {
+		t.Fatalf("save = %d %s", w.Code, w.Body.String())
+	}
+	e := st.GetEmbyConfig()
+	if e.Base != "http://emby:8096" || e.APIKey != "key1" || e.WebhookToken != "wh1" || !e.DeleteRemote {
+		t.Fatalf("emby config = %+v", e)
+	}
+	if st.GetSetting("p115_app_id", "") != "app1" || st.GetSetting("p115_app_secret", "") != "sec1" {
+		t.Fatal("p115 settings not saved")
+	}
+
+	// 空密钥 = 保持不变
+	w = doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{
+		"embyBase": "http://emby:8096", "embyApiKey": "", "embyWebhookToken": "",
+	})
+	if w.Code != 200 {
+		t.Fatalf("save2 = %d", w.Code)
+	}
+	e = st.GetEmbyConfig()
+	if e.APIKey != "key1" || e.WebhookToken != "wh1" {
+		t.Fatalf("secrets should be kept: %+v", e)
+	}
+
+	// 显式清空
+	_ = doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{
+		"embyBase": "http://emby:8096", "clearEmbyApiKey": true, "clearP115AppSecret": true,
+	})
+	if st.GetEmbyConfig().APIKey != "" || st.GetSetting("p115_app_secret", "") != "" {
+		t.Fatal("explicit clear failed")
 	}
 }

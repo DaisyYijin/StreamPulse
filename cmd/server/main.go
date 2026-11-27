@@ -14,7 +14,6 @@ import (
 	"streampulse/internal/api"
 	"streampulse/internal/config"
 	"streampulse/internal/deepdel"
-	"streampulse/internal/emby"
 	"streampulse/internal/incr"
 	"streampulse/internal/logx"
 	"streampulse/internal/p115svc"
@@ -53,9 +52,8 @@ func main() {
 	defer st.Close()
 
 	svc := p115svc.New(st, cfg)
-	eb := emby.New(cfg.EmbyBase, cfg.EmbyKey)
-	deep := &deepdel.Service{Store: st, Svc: svc, Log: log, DeleteRemote: cfg.EmbyDeleteRemote}
-	app, err := api.New(cfg, st, svc, eb, deep, log)
+	deep := &deepdel.Service{Store: st, Svc: svc, Log: log}
+	app, err := api.New(cfg, st, svc, deep, log)
 	if err != nil {
 		log.Error("初始化 API 失败", "err", err)
 		os.Exit(1)

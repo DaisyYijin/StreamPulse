@@ -34,7 +34,7 @@ func newLib(t *testing.T, st *store.Store) *store.Library {
 	dir := t.TempDir()
 	id, err := st.SaveLibrary(&store.Library{
 		Name: "movies", AccountID: 1, RemoteCID: "0", LocalDir: dir,
-		BaseURL: "http://h:6086", STRMFormat: "pick_code", KeepExt: false,
+		BaseURL: "http://h:2048", STRMFormat: "pick_code", KeepExt: false,
 		VideoExts: ".mkv", MetaExts: ".srt", ScanMode: "fast", Enabled: true,
 	})
 	if err != nil {
@@ -85,7 +85,7 @@ func TestScanWritesSTRMAndSkipsUnchanged(t *testing.T) {
 		}
 	}
 	b, _ := os.ReadFile(filepath.Join(lib.LocalDir, "Movies", "a.strm"))
-	if string(b) != "http://h:6086/d/pc1\n" {
+	if string(b) != "http://h:2048/d/pc1\n" {
 		t.Fatalf("strm content = %q", b)
 	}
 	if _, err := os.Stat(filepath.Join(lib.LocalDir, "Movies", "a.srt")); err != nil {

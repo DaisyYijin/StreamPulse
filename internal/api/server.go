@@ -24,7 +24,6 @@ type App struct {
 	Cfg   *config.Config
 	Store *store.Store
 	Svc   *p115svc.Service
-	Emby  *emby.Client
 	Deep  *deepdel.Service
 	Log   *slog.Logger
 
@@ -35,13 +34,13 @@ type App struct {
 	opena map[string]*pan115.OpenAuth
 }
 
-func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, eb *emby.Client, deep *deepdel.Service, log *slog.Logger) (*App, error) {
+func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, log *slog.Logger) (*App, error) {
 	secret, err := loadSecret(cfg.ConfigDir)
 	if err != nil {
 		return nil, err
 	}
 	a := &App{
-		Cfg: cfg, Store: st, Svc: svc, Emby: eb, Deep: deep, Log: log, secret: secret,
+		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
 	}
 	a.ensureAdmin()
@@ -92,6 +91,8 @@ func (a *App) Handler() http.Handler {
 
 	mux.Handle("GET /api/tasks", auth(http.HandlerFunc(a.handleTasks)))
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
+	mux.Handle("GET /api/settings", auth(http.HandlerFunc(a.handleGetSettings)))
+	mux.Handle("PUT /api/settings", auth(http.HandlerFunc(a.handleSaveSettings)))
 
 	return securityHeaders(mux)
 }
@@ -169,7 +170,7 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 		"version":   "0.1.0-p0",
 		"accounts":  len(accs),
 		"libraries": len(libs),
-		"emby":      a.Emby.Enabled(),
+		"emby":      a.emby().Enabled(),
 		"playMode":  a.Cfg.PlayMode,
 	})
 }
@@ -253,9 +254,9 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleOpenStart(w http.ResponseWriter, r *http.Request) {
-	appID := a.Cfg.OpenAppID
+	appID := a.Store.GetSetting("p115_app_id", "")
 	if appID == "" {
-		writeErr(w, http.StatusBadRequest, "未配置 P115_APP_ID")
+		writeErr(w, http.StatusBadRequest, "请先在设置页填写 115 开放平台 AppID")
 		return
 	}
 	c := pan115.New(pan115.Credential{}, time.Second, 3*time.Second)
@@ -280,7 +281,7 @@ func (a *App) handleOpenPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	c := pan115.New(pan115.Credential{}, time.Second, 3*time.Second)
-	cr, err := c.OpenLoginPoll(r.Context(), oa, a.Cfg.OpenAppID)
+	cr, err := c.OpenLoginPoll(r.Context(), oa, a.Store.GetSetting("p115_app_id", ""))
 	if err != nil {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
@@ -426,7 +427,7 @@ func (a *App) runScan(taskID int64, lib *store.Library) {
 		a.Log.Error("扫描失败", "library", lib.Name, "err", err)
 		return
 	}
-	if err := a.Emby.RefreshLibrary(ctx, ""); err != nil {
+	if err := a.emby().RefreshLibrary(ctx, ""); err != nil {
 		a.Log.Warn("Emby 刷新失败", "err", err)
 	}
 	msg := fmt.Sprintf("扫描 %d，写入 %d，跳过 %d，改名 %d，附属 %d，失效 %d",
@@ -476,19 +477,90 @@ func (a *App) handleTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tasks)
 }
 
+
+// ---------- settings ----------
+
+func (a *App) handleGetSettings(w http.ResponseWriter, r *http.Request) {
+	e := a.Store.GetEmbyConfig()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"embyBase":            e.Base,
+		"embyApiKeySet":       e.APIKey != "",
+		"embyWebhookTokenSet": e.WebhookToken != "",
+		"embyDeleteRemote":    e.DeleteRemote,
+		"p115AppId":           a.Store.GetSetting("p115_app_id", ""),
+		"p115AppSecretSet":    a.Store.GetSetting("p115_app_secret", "") != "",
+	})
+}
+
+// handleSaveSettings 保存 Emby 与 115 开放平台配置。
+// 密钥类字段为空表示"保持不变"；要清空请显式传 clearXxx=true。
+func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		EmbyBase              string `json:"embyBase"`
+		EmbyApiKey            string `json:"embyApiKey"`
+		EmbyWebhookToken      string `json:"embyWebhookToken"`
+		EmbyDeleteRemote      bool   `json:"embyDeleteRemote"`
+		P115AppId             string `json:"p115AppId"`
+		P115AppSecret         string `json:"p115AppSecret"`
+		ClearEmbyApiKey       bool   `json:"clearEmbyApiKey"`
+		ClearEmbyWebhookToken bool   `json:"clearEmbyWebhookToken"`
+		ClearP115AppSecret    bool   `json:"clearP115AppSecret"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	e := a.Store.GetEmbyConfig()
+	e.Base = strings.TrimRight(strings.TrimSpace(in.EmbyBase), "/")
+	switch {
+	case in.ClearEmbyApiKey:
+		e.APIKey = ""
+	case strings.TrimSpace(in.EmbyApiKey) != "":
+		e.APIKey = strings.TrimSpace(in.EmbyApiKey)
+	}
+	switch {
+	case in.ClearEmbyWebhookToken:
+		e.WebhookToken = ""
+	case strings.TrimSpace(in.EmbyWebhookToken) != "":
+		e.WebhookToken = strings.TrimSpace(in.EmbyWebhookToken)
+	}
+	e.DeleteRemote = in.EmbyDeleteRemote
+	if err := a.Store.SaveEmbyConfig(e); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	_ = a.Store.SetSetting("p115_app_id", strings.TrimSpace(in.P115AppId))
+	secret := a.Store.GetSetting("p115_app_secret", "")
+	switch {
+	case in.ClearP115AppSecret:
+		secret = ""
+	case strings.TrimSpace(in.P115AppSecret) != "":
+		secret = strings.TrimSpace(in.P115AppSecret)
+	}
+	_ = a.Store.SetSetting("p115_app_secret", secret)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // ---------- emby ----------
 
+func (a *App) emby() *emby.Client {
+	e := a.Store.GetEmbyConfig()
+	return emby.New(e.Base, e.APIKey)
+}
+
 func (a *App) handleEmbyStatus(w http.ResponseWriter, r *http.Request) {
-	if !a.Emby.Enabled() {
+	c := a.emby()
+	if !c.Enabled() {
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
-	err := a.Emby.Ping(r.Context())
+	err := c.Ping(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{"enabled": true, "ok": err == nil, "error": errString(err)})
 }
 
 func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
-	token := a.Store.GetSetting("emby_webhook_token", a.Cfg.EmbyWebhookToken)
+	token := a.Store.GetEmbyConfig().WebhookToken
 	if token != "" {
 		if r.URL.Query().Get("token") != token && r.Header.Get("X-Emby-Token") != token {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -507,7 +579,7 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
-			_ = a.Emby.RefreshLibrary(ctx, "")
+			_ = a.emby().RefreshLibrary(ctx, "")
 		}()
 	case strings.Contains(wh.Event, "library.deleted"):
 		if a.Deep == nil {

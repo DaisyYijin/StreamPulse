@@ -29,8 +29,8 @@ start() {
   # 媒体目录可在安装向导里改；这里读取用户保存的值，缺省用 fnOS 默认存储空间
   MEDIA_DIR="$(cat "${TRIM_PKGVAR}/media_dir" 2>/dev/null || echo '/vol1/1000/Media')"
 
-  PORT=6060 \
-  STREAM_PORT=6086 \
+  PORT=1024 \
+  STREAM_PORT=2048 \
   DATA_DIR="${TRIM_PKGVAR}/data" \
   CONFIG_DIR="${TRIM_PKGVAR}/config" \
   LOG_DIR="${TRIM_PKGVAR}/logs" \

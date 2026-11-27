@@ -1,6 +1,6 @@
 # fnOS 应用配置（展示用；实际运行参数由 cmd/main 注入环境变量）
-port: 6060
-stream_port: 6086
+port: 1024
+stream_port: 2048
 data_dir: "@TRIM_PKGVAR@/data"
 config_dir: "@TRIM_PKGVAR@/config"
 log_dir: "@TRIM_PKGVAR@/logs"

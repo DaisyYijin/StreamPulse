@@ -3,8 +3,8 @@
 ## 1. 进程与端口
 
 ```
-浏览器 ──> :6060 管理/API（内嵌页面）
-播放器 ──> :6086 /d/{pickcode} ──302──> 115 CDN
+浏览器 ──> :1024 管理/API（内嵌页面）
+播放器 ──> :2048 /d/{pickcode} ──302──> 115 CDN
                      └─ proxy 模式 ──> 本机转发 ──> 115 CDN
 ```
 
@@ -70,6 +70,12 @@ tasks(id, kind, library_id, status, message)
 
 P0 的播放端点与 115-Station 一样属于“pickcode 即弱凭据”，公网部署必须自行加访问控制。
 
+## 6.1 配置来源
+
+- **环境变量**只放部署级参数：端口、数据卷、管理员、播放域名、节流与增量开关。
+- **Emby 地址/Key/Webhook Token、删除联动开关、115 开放平台 AppID/Secret** 存在 SQLite `settings` 表，由管理页「设置」维护，保存立即生效（不改环境变量、不重启）。
+- 密钥类字段读取时不回显完整值，只返回 `xxxSet` 布尔。
+
 ## 7. 安全
 
 - PBKDF2-HMAC-SHA256（120k 次）存管理员密码；
@@ -112,7 +118,7 @@ Emby `library.deleted` → `deepdel.Handle`：
 3. **台账命中**：只处理 `synced_files.strm_path` 精确等于 Path（或位于 Path 目录下）的行；未命中直接拒绝。
 4. 删除 STRM + 同名 sidecar（nfo/srt/ass/ssa/vtt/jpg/png/webp），同步删台账行。
 5. 从文件父目录向上删空目录，**库根永不删除**。
-6. **网盘删除**：仅当 `EMBY_DELETE_REMOTE=true`；走 `/rb/delete` 进 115 回收站，可还原。
+6. **网盘删除**：仅当项目设置里开启「删除联动同时删网盘」；走 `/rb/delete` 进 115 回收站，可还原。
 7. 任一步拒绝都会返回 `Rejected`，不做部分删除（本地删除按文件粒度继续并记录 warning）。
 
 ## 11. 后续设计要点

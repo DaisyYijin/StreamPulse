@@ -22,7 +22,6 @@ type Service struct {
 	Store        *store.Store
 	Svc          Remote
 	Log          *slog.Logger
-	DeleteRemote bool
 }
 
 type Item struct {
@@ -105,8 +104,8 @@ func (s *Service) Handle(ctx context.Context, item Item) (Result, error) {
 	}
 	res.Matched = len(files)
 
-	// 网盘删除（可选）
-	if s.DeleteRemote {
+	// 网盘删除（可选）：每次从项目设置读取，保存后立即生效
+	if s.Store.GetSetting("emby_delete_remote", "0") == "1" {
 		fids := make([]string, 0, len(files))
 		for _, f := range files {
 			if f.FID != "" {

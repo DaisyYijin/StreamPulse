@@ -36,7 +36,7 @@ func TestStoreBasics(t *testing.T) {
 
 	libID, err := st.SaveLibrary(&Library{
 		Name: "movies", AccountID: id, RemoteCID: "0", LocalDir: filepath.Join(t.TempDir(), "media"),
-		BaseURL: "http://h:6086", STRMFormat: "pick_code", VideoExts: ".mkv", MetaExts: ".srt",
+		BaseURL: "http://h:2048", STRMFormat: "pick_code", VideoExts: ".mkv", MetaExts: ".srt",
 		ScanMode: "fast", Enabled: true,
 	})
 	if err != nil {

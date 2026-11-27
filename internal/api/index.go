@@ -106,10 +106,24 @@ th{color:var(--muted);font-weight:600}
     </div>
 
     <div class="card">
+      <h2>设置</h2>
+      <div class="row">
+        <div><label>Emby 地址</label><input id="embyBase" placeholder="http://192.168.1.10:8096"></div>
+        <div><label>Emby API Key</label><input id="embyApiKey" type="password" autocomplete="off"></div>
+        <div><label>Webhook Token</label><input id="embyWebhookToken" type="password" autocomplete="off"></div>
+        <div><label><input type="checkbox" id="embyDeleteRemote" style="width:auto;margin-right:6px">删除联动同时删网盘（进回收站）</label></div>
+        <div><label>115 开放平台 AppID（可选）</label><input id="p115AppId" autocomplete="off"></div>
+        <div><label>115 AppSecret（可选）</label><input id="p115AppSecret" type="password" autocomplete="off"></div>
+      </div>
+      <div style="margin-top:12px"><button id="saveSettings">保存设置</button> <span id="setMsg" class="muted"></span></div>
+      <p class="muted" style="font-size:12px;margin:8px 0 0">Emby 配置保存在本地数据库，保存后立即生效；密钥留空表示不修改。115 登录用下方二维码，开放平台为可选项。</p>
+    </div>
+
+    <div class="card">
       <h2>115 账号</h2>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button id="qrLogin">扫码登录（Cookie）</button>
-        <button id="openLogin" class="ghost">开放平台授权</button>
+        <button id="qrLogin">扫码登录 115（推荐）</button>
+        <button id="openLogin" class="ghost">开放平台扫码（需 AppID）</button>
       </div>
       <div id="qrBox"><div class="muted" id="qrMsg">请用 115 App 扫码</div><img id="qrImg" alt="二维码"></div>
       <div id="accList" style="margin-top:12px"></div>
@@ -124,7 +138,7 @@ th{color:var(--muted);font-weight:600}
           <div><label>名称</label><input id="libName" placeholder="电影"></div>
           <div><label>远端 CID（0 = 根）</label><input id="libCid" value="0"></div>
           <div><label>本地目录</label><input id="libDir" placeholder="/media/movies"></div>
-          <div><label>播放域名</label><input id="libBase" placeholder="http://IP:6086"></div>
+          <div><label>播放域名</label><input id="libBase" placeholder="http://IP:2048"></div>
           <div><label>STRM 格式</label><select id="libFmt"><option value="pick_code">pick_code</option><option value="pick_code_name">pick_code_name</option></select></div>
           <div><label>扫描模式</label><select id="libMode"><option value="fast">快速</option><option value="normal">标准</option></select></div>
         </div>
@@ -163,7 +177,7 @@ $('doLogin').onclick = async () => {
   $('loginMsg').textContent = '';
   try {
     const d = await api('/api/login', { method: 'POST', body: JSON.stringify({ username: $('u').value, password: $('p').value }) });
-    token = d.token; localStorage.setItem('sp_token', token); showApp(); refreshAll();
+    token = d.token; localStorage.setItem('sp_token', token); showApp(); refreshAll(); loadSettings();
   } catch (e) { $('loginMsg').textContent = e.message; }
 };
 $('logout').onclick = async () => { try { await api('/api/logout', { method: 'POST' }); } catch (e) {} token = ''; localStorage.removeItem('sp_token'); showLogin(); };
@@ -228,7 +242,36 @@ $('openLogin').onclick = async () => {
   } catch (e) { alert(e.message); }
 };
 
-if (token) { showApp(); refreshAll(); } else { showLogin(); }
+async function loadSettings() {
+  try {
+    const s = await api('/api/settings');
+    $('embyBase').value = s.embyBase || '';
+    $('embyApiKey').placeholder = s.embyApiKeySet ? '已设置（留空不修改）' : 'API Key';
+    $('embyWebhookToken').placeholder = s.embyWebhookTokenSet ? '已设置（留空不修改）' : 'Webhook Token';
+    $('embyDeleteRemote').checked = !!s.embyDeleteRemote;
+    $('p115AppId').value = s.p115AppId || '';
+    $('p115AppSecret').placeholder = s.p115AppSecretSet ? '已设置（留空不修改）' : 'App Secret';
+  } catch (e) {}
+}
+
+$('saveSettings').onclick = async () => {
+  $('setMsg').textContent = '保存中…';
+  try {
+    await api('/api/settings', { method: 'PUT', body: JSON.stringify({
+      embyBase: $('embyBase').value,
+      embyApiKey: $('embyApiKey').value,
+      embyWebhookToken: $('embyWebhookToken').value,
+      embyDeleteRemote: $('embyDeleteRemote').checked,
+      p115AppId: $('p115AppId').value,
+      p115AppSecret: $('p115AppSecret').value
+    })});
+    $('embyApiKey').value = ''; $('embyWebhookToken').value = ''; $('p115AppSecret').value = '';
+    $('setMsg').textContent = '已保存';
+    loadSettings(); refreshAll();
+  } catch (e) { $('setMsg').textContent = e.message; }
+};
+
+if (token) { showApp(); refreshAll(); loadSettings(); } else { showLogin(); }
 setInterval(() => { if (!$('app').classList.contains('hide')) refreshAll(); }, 5000);
 </script>
 </body>

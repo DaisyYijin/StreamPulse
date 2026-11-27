@@ -20,14 +20,8 @@ type Config struct {
 	AdminUser string
 	AdminPass string
 
-	EmbyBase string
-	EmbyKey  string
 
-	// 115 开放平台（用户自备 AppID）
-	OpenAppID  string
-	OpenSecret string
-
-	// 默认写进 STRM 的播放域名，如 http://192.168.1.10:6086
+	// 默认写进 STRM 的播放域名，如 http://192.168.1.10:2048
 	PublicBase string
 	// redirect: 302 直连；proxy: 本机中转
 	PlayMode string
@@ -48,28 +42,22 @@ type Config struct {
 
 func Load() *Config {
 	c := &Config{
-		Port:       envInt("PORT", 6060),
-		StreamPort: envInt("STREAM_PORT", 6086),
+		Port:       envInt("PORT", 1024),
+		StreamPort: envInt("STREAM_PORT", 2048),
 		DataDir:    envStr("DATA_DIR", "/data"),
 		ConfigDir:  envStr("CONFIG_DIR", "/config"),
 		MediaDir:   envStr("MEDIA_DIR", "/media"),
 		LogDir:     envStr("LOG_DIR", "/logs"),
 		AdminUser:  envStr("AUTH_USER", "admin"),
 		AdminPass:  envStr("AUTH_PASSWORD", ""),
-		EmbyBase:   strings.TrimRight(envStr("EMBY_BASE", ""), "/"),
-		EmbyKey:    envStr("EMBY_API_KEY", ""),
-		OpenAppID:  envStr("P115_APP_ID", ""),
-		OpenSecret: envStr("P115_APP_SECRET", ""),
 		PublicBase: strings.TrimRight(envStr("PUBLIC_BASE", ""), "/"),
 		PlayMode:   envStr("PLAY_MODE", "redirect"),
 		ReadEvery:  envMillis("P115_READ_INTERVAL_MS", 1000),
 		WriteEvery: envMillis("P115_WRITE_INTERVAL_MS", 3000),
 		TrustProxy: envBool("TRUST_PROXY", false),
 
-		IncrEnabled:      envBool("INCR_ENABLED", true),
-		IncrInterval:     envMillis("INCR_INTERVAL_MS", 30000),
-		EmbyDeleteRemote: envBool("EMBY_DELETE_REMOTE", false),
-		EmbyWebhookToken: envStr("EMBY_WEBHOOK_TOKEN", ""),
+		IncrEnabled:  envBool("INCR_ENABLED", true),
+		IncrInterval: envMillis("INCR_INTERVAL_MS", 30000),
 	}
 	if c.PublicBase == "" {
 		c.PublicBase = "http://127.0.0.1:" + strconv.Itoa(c.StreamPort)

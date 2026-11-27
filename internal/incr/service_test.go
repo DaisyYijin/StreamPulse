@@ -36,7 +36,7 @@ func TestPollOnceBaselineThenDelta(t *testing.T) {
 	}
 	libID, _ := st.SaveLibrary(&store.Library{
 		Name: "movies", AccountID: accID, RemoteCID: "0", LocalDir: t.TempDir(),
-		BaseURL: "http://h:6086", VideoExts: ".mkv", Enabled: true,
+		BaseURL: "http://h:2048", VideoExts: ".mkv", Enabled: true,
 	})
 	_ = st.UpsertDir(libID, "c1", "0", "Movies", "Movies")
 

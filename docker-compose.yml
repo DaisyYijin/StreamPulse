@@ -1,40 +1,17 @@
 services:
   streampulse:
     image: ghcr.io/daisyijin/streampulse:latest
-    # GHCR 包默认私有：首次拉取前执行
-    #   echo "$CR_PAT" | docker login ghcr.io -u DaisyYijin --password-stdin
-    # 或在 GitHub → Packages → streampulse → Package settings 把可见性改为 Public
     container_name: streampulse
     restart: unless-stopped
     ports:
-      - "${WEB_PORT:-6060}:6060"
-      - "${STREAM_PORT:-6086}:6086"
+      - "1024:1024"
+      - "2048:2048"
     environment:
       TZ: Asia/Shanghai
-      AUTH_USER: ${AUTH_USER:-admin}
       AUTH_PASSWORD: ${AUTH_PASSWORD:?请在 .env 中设置 AUTH_PASSWORD}
-      # 写进 STRM 的播放地址，必须是播放器能访问到的宿主机地址
-      PUBLIC_BASE: ${PUBLIC_BASE:-http://127.0.0.1:6086}
-      PLAY_MODE: ${PLAY_MODE:-redirect}
-      P115_READ_INTERVAL_MS: ${P115_READ_INTERVAL_MS:-1000}
-      P115_WRITE_INTERVAL_MS: ${P115_WRITE_INTERVAL_MS:-3000}
-      P115_APP_ID: ${P115_APP_ID:-}
-      P115_APP_SECRET: ${P115_APP_SECRET:-}
-      INCR_ENABLED: ${INCR_ENABLED:-true}
-      INCR_INTERVAL_MS: ${INCR_INTERVAL_MS:-30000}
-      EMBY_BASE: ${EMBY_BASE:-}
-      EMBY_API_KEY: ${EMBY_API_KEY:-}
-      EMBY_DELETE_REMOTE: ${EMBY_DELETE_REMOTE:-false}
-      EMBY_WEBHOOK_TOKEN: ${EMBY_WEBHOOK_TOKEN:-}
+      PUBLIC_BASE: ${PUBLIC_BASE:-http://127.0.0.1:2048}
     volumes:
       - ./data:/data
       - ./config:/config
       - ./logs:/logs
-      # 宿主目录必须与 Emby 看到的是同一个路径（STRM 里存的是相对映射关系）
       - ${MEDIA_DIR:-./media}:/media
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:6086/healthz"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
