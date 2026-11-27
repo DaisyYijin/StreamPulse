@@ -244,7 +244,7 @@ func (s *Store) ListAccounts() ([]Account, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Account
+	out := make([]Account, 0)
 	for rows.Next() {
 		var a Account
 		if err := rows.Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.ExpiresAt, &a.AppID, &a.UID, &a.Nickname, &a.CreatedAt, &a.UpdatedAt); err != nil {
@@ -316,7 +316,7 @@ func (s *Store) ListLibraries() ([]Library, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Library
+	out := make([]Library, 0)
 	for rows.Next() {
 		var l Library
 		var keep, enabled int
@@ -479,7 +479,7 @@ func (s *Store) ListTasks(limit int) ([]Task, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Task
+	out := make([]Task, 0)
 	for rows.Next() {
 		var t Task
 		if err := rows.Scan(&t.ID, &t.Kind, &t.LibraryID, &t.Status, &t.Message, &t.StartedAt, &t.EndedAt, &t.CreatedAt); err != nil {

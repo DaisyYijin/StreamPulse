@@ -3,7 +3,7 @@
     "stepTitle": "欢迎使用 StreamPulse",
     "items": [
       { "type": "tips", "helpText": "StreamPulse 把 115 网盘媒体映射成本地 STRM，供 Emby / Jellyfin 播放。" },
-      { "type": "tips", "helpText": "安装后打开 http://NAS_IP:1024；初始管理员密码在应用日志里，登录后可在「设置」修改。" }
+      { "type": "tips", "helpText": "安装后打开 http://NAS_IP:1024，首次访问会要求创建管理员（输入两次密码）。" }
     ]
   },
   {

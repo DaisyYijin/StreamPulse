@@ -42,7 +42,7 @@ export DATA_DIR=./data CONFIG_DIR=./config MEDIA_DIR=./media LOG_DIR=./logs
 go run ./cmd/server
 ```
 
-首次启动会在日志里打印初始管理员账号（`admin` + 随机密码），**登录后请在「设置」里修改**。打开 `http://127.0.0.1:1024`，登录后：
+首次打开 `http://127.0.0.1:1024` 会进入**创建管理员**页面：填写用户名、密码与确认密码（至少 8 位，两次必须一致），创建后自动登录。之后：
 
 1. 「扫码登录 115」用 115 App 扫码；开放平台为可选通道，先在「设置」里填 AppID；
 2. 先在「设置」里填**播放地址**（如 `http://NAS_IP:2048`，会写进 STRM），再添加媒体库：远端 CID（`0` 为根）、本地目录；
@@ -65,7 +65,7 @@ docker compose logs -f streampulse
 不想每次登录的话，可在 GitHub → Packages → streampulse → Package settings 把可见性改为 Public。
 
 媒体目录固定为 compose 同级目录的 `./media`（容器内 `/media`），**Emby 必须挂载同一个宿主机目录**，否则找不到 STRM。
-首次启动密码在日志里：`docker compose logs streampulse | grep 初始管理员`。
+首次打开 `http://NAS_IP:1024` 创建管理员账号（两次密码确认），无需查日志。
 
 ### 本地构建
 
@@ -106,7 +106,7 @@ docker run -d --name streampulse \
 | Emby Webhook Token | 校验 Emby 回调；留空不校验 |
 | 删除联动同时删网盘 | 默认关闭；开启后进 115 回收站（可还原） |
 | 115 开放平台 AppID / AppSecret | 仅使用开放平台扫码时需要；不填只用扫码 Cookie |
-| 管理员用户名 / 新密码 | 首次启动生成随机密码并打印到日志；这里可改用户名与密码（至少 8 位） |
+| 管理员用户名 / 新密码 | 首次打开时创建；之后可在这里修改用户名与密码（至少 8 位） |
 
 密钥类字段留空表示不修改；要清空请调用 API 时带 `clearEmbyApiKey` 等标志。
 

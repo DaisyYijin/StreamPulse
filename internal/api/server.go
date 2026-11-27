@@ -32,6 +32,8 @@ type App struct {
 	qrMu  sync.Mutex
 	qr    map[string]*pan115.QR
 	opena map[string]*pan115.OpenAuth
+
+	setupMu sync.Mutex
 }
 
 func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, log *slog.Logger) (*App, error) {
@@ -43,23 +45,19 @@ func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepde
 		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
 	}
-	a.ensureAdmin()
+	// 首次启动不生成密码：由 /api/setup 让用户自己创建管理员。
 	return a, nil
 }
 
-func (a *App) ensureAdmin() {
-	if a.Store.GetSetting("admin_password_hash", "") != "" {
-		return
-	}
-	pw := randomPassword(12)
-	_ = a.Store.SetSetting("admin_password_hash", hashPassword(pw))
-	_ = a.Store.SetSetting("admin_user", "admin")
-	a.Log.Warn("已生成初始管理员账号，请登录后在「设置」里修改密码", "username", "admin", "password", pw)
+func (a *App) initialized() bool {
+	return a.Store.GetSetting("admin_password_hash", "") != ""
 }
 
 func (a *App) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /", a.handleIndex)
+	mux.HandleFunc("GET /api/setup/status", a.handleSetupStatus)
+	mux.HandleFunc("POST /api/setup", a.handleSetup)
 	mux.HandleFunc("POST /api/login", a.handleLogin)
 	mux.HandleFunc("POST /api/emby/webhook", a.handleEmbyWebhook)
 
@@ -130,7 +128,65 @@ func (a *App) requireAuth(next http.Handler) http.Handler {
 
 // ---------- auth ----------
 
+func (a *App) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]bool{"initialized": a.initialized()})
+}
+
+// handleSetup 只在尚未初始化时可用：创建管理员并直接登录。
+func (a *App) handleSetup(w http.ResponseWriter, r *http.Request) {
+	a.setupMu.Lock()
+	defer a.setupMu.Unlock()
+	if a.initialized() {
+		writeErr(w, http.StatusConflict, "已经初始化，请直接登录")
+		return
+	}
+	var in struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Confirm  string `json:"confirm"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if in.Password != in.Confirm {
+		writeErr(w, http.StatusBadRequest, "两次输入的密码不一致")
+		return
+	}
+	if len(in.Password) < 8 {
+		writeErr(w, http.StatusBadRequest, "密码至少 8 位")
+		return
+	}
+	user := strings.TrimSpace(in.Username)
+	if user == "" {
+		user = "admin"
+	}
+	if len(user) > 64 {
+		writeErr(w, http.StatusBadRequest, "用户名过长")
+		return
+	}
+	if err := a.Store.SetSetting("admin_user", user); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if err := a.Store.SetSetting("admin_password_hash", hashPassword(in.Password)); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tok := issueToken(a.secret, user, 8*24*time.Hour)
+	http.SetCookie(w, &http.Cookie{
+		Name: "sp_token", Value: tok, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		MaxAge: 8 * 24 * 3600,
+	})
+	a.Log.Info("管理员账号已创建", "username", user)
+	writeJSON(w, http.StatusOK, map[string]string{"token": tok})
+}
+
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if !a.initialized() {
+		writeErr(w, http.StatusConflict, "请先创建管理员账号")
+		return
+	}
 	var in struct {
 		Username string `json:"username"`
 		Password string `json:"password"`

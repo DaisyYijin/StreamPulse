@@ -262,3 +262,51 @@ func TestLibraryRequiresPublicBase(t *testing.T) {
 		t.Fatalf("library base = %+v", list)
 	}
 }
+
+func TestSetupFlow(t *testing.T) {
+	app, st := newTestApp(t)
+	_ = st.SetSetting("admin_password_hash", "")
+	h := app.Handler()
+
+	w := doJSON(t, h, http.MethodGet, "/api/setup/status", "", nil)
+	if w.Code != 200 || !bytes.Contains(w.Body.Bytes(), []byte(`"initialized":false`)) {
+		t.Fatalf("setup status = %d %s", w.Code, w.Body.String())
+	}
+	if w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "admin", "password": "x"}); w.Code != 409 {
+		t.Fatalf("login before setup = %d", w.Code)
+	}
+
+	w = doJSON(t, h, http.MethodPost, "/api/setup", "", map[string]string{
+		"username": "root", "password": "pass12345", "confirm": "different",
+	})
+	if w.Code != 400 {
+		t.Fatalf("mismatch = %d", w.Code)
+	}
+
+	w = doJSON(t, h, http.MethodPost, "/api/setup", "", map[string]string{
+		"username": "root", "password": "pass12345", "confirm": "pass12345",
+	})
+	if w.Code != 200 {
+		t.Fatalf("setup = %d %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &out)
+	if out.Token == "" {
+		t.Fatal("setup should return token")
+	}
+
+	w = doJSON(t, h, http.MethodGet, "/api/setup/status", "", nil)
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"initialized":true`)) {
+		t.Fatalf("status after setup = %s", w.Body.String())
+	}
+	if w := doJSON(t, h, http.MethodPost, "/api/setup", "", map[string]string{
+		"username": "x", "password": "pass12345", "confirm": "pass12345",
+	}); w.Code != 409 {
+		t.Fatalf("second setup = %d", w.Code)
+	}
+	if w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "root", "password": "pass12345"}); w.Code != 200 {
+		t.Fatalf("login new admin = %d", w.Code)
+	}
+}
