@@ -87,6 +87,8 @@ docker run -d --name streampulse \
 | `CONFIG_DIR` | `/config` | 密钥、配置 |
 | `MEDIA_DIR` | `/media` | STRM 输出根 |
 | `LOG_DIR` | `/logs` | 日志 |
+| `LOG_MAX_MB` | `50` | 单个日志文件上限（MB），超过即切分 |
+| `LOG_KEEP_DAYS` | `14` | 日志保留天数 |
 | `PLAY_MODE` | `redirect` | `redirect` 302 / `proxy` 本机中转 |
 | `P115_READ_INTERVAL_MS` | `1000` | 读接口最小间隔 |
 | `P115_WRITE_INTERVAL_MS` | `3000` | 写接口最小间隔 |
@@ -107,6 +109,10 @@ docker run -d --name streampulse \
 | 管理员用户名 / 新密码 | 首次启动生成随机密码并打印到日志；这里可改用户名与密码（至少 8 位） |
 
 密钥类字段留空表示不修改；要清空请调用 API 时带 `clearEmbyApiKey` 等标志。
+
+日志按天 + 大小分段：`logs/app-2026-11-27.log`，单文件超过 `LOG_MAX_MB` 后切为 `.1`、`.2`，保留 `LOG_KEEP_DAYS` 天。
+
+安全说明：115 Cookie / Token 以明文存 SQLite（`data/streampulse.db`）。程序会把 `data/` 收紧到 `0700`、数据库与 `config/jwt.key` 收紧到 `0600`，安全边界依赖宿主机文件权限；备份时请一起备份 `data/` 与 `config/`。
 
 ## 飞牛 fnOS 打包
 

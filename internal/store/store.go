@@ -13,28 +13,47 @@ import (
 
 // Store 封装 SQLite。台账以 fid 为自然键，路径只是派生列。
 type Store struct {
-	db *sql.DB
+	db   *sql.DB
+	path string
 }
 
 func Open(dataDir string) (*Store, error) {
-	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return nil, err
 	}
+	// 目录可能是旧版本以 0755 创建的，显式收紧
+	_ = os.Chmod(dataDir, 0o700)
 	p := filepath.Join(dataDir, "streampulse.db")
 	db, err := sql.Open("sqlite", "file:"+p+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)")
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, path: p}
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
 	}
+	secureDBFiles(p)
 	return s, nil
 }
 
-func (s *Store) Close() error { return s.db.Close() }
+func (s *Store) Close() error {
+	secureDBFiles(s.path)
+	return s.db.Close()
+}
+
+// secureDBFiles 把数据库及 WAL/SHM 收紧到 0600（Linux 生效）。
+func secureDBFiles(p string) {
+	if p == "" {
+		return
+	}
+	for _, f := range []string{p, p + "-wal", p + "-shm"} {
+		if _, err := os.Stat(f); err == nil {
+			_ = os.Chmod(f, 0o600)
+		}
+	}
+}
 
 const schema = `
 CREATE TABLE IF NOT EXISTS settings (

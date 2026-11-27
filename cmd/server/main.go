@@ -34,7 +34,7 @@ func main() {
 		slog.Error("配置错误", "error", msg)
 		os.Exit(1)
 	}
-	closeLog, err := logx.Init(cfg.LogDir)
+	closeLog, err := logx.Init(cfg.LogDir, cfg.LogMaxMB, cfg.LogKeepDays)
 	if err != nil {
 		slog.Warn("日志文件不可写，只输出到 stdout", "err", err)
 		closeLog = func() error { return nil }

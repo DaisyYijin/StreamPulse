@@ -1,92 +1,178 @@
 package logx
 
 import (
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
-// rotatingWriter 按大小切分日志文件，保留固定份数。
-type rotatingWriter struct {
-	mu      sync.Mutex
-	dir     string
-	name    string
-	size    int64
-	maxSize int64
-	keep    int
-	file    *os.File
+// dailyWriter 按天 + 单文件大小切分：
+//
+//	app-2026-11-27.log
+//	app-2026-11-27.log.1   （当天超过 maxSize 后）
+//	app-2026-11-27.log.2
+//
+// 保留最近 keepDays 天，过期文件在启动与跨天时清理。
+type dailyWriter struct {
+	mu       sync.Mutex
+	dir      string
+	base     string
+	maxSize  int64
+	keepDays int
+
+	day  string
+	seq  int
+	size int64
+	file *os.File
+
+	now func() time.Time
 }
 
-func newRotatingWriter(dir, name string, maxSize int64, keep int) (*rotatingWriter, error) {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+var fileRe = regexp.MustCompile(`^(.*)-(\d{4}-\d{2}-\d{2})\.log(?:\.(\d+))?$`)
+
+func newDailyWriter(dir, base string, maxSize int64, keepDays int) (*dailyWriter, error) {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	w := &rotatingWriter{dir: dir, name: name, maxSize: maxSize, keep: keep}
+	w := &dailyWriter{
+		dir: dir, base: base, maxSize: maxSize, keepDays: keepDays,
+		now: time.Now,
+	}
+	w.day = w.now().Format("2006-01-02")
 	if err := w.open(); err != nil {
 		return nil, err
 	}
+	w.cleanup()
 	return w, nil
 }
 
-func (w *rotatingWriter) open() error {
-	p := filepath.Join(w.dir, w.name)
-	f, err := os.OpenFile(p, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
+func (w *dailyWriter) path() string {
+	name := fmt.Sprintf("%s-%s.log", w.base, w.day)
+	if w.seq > 0 {
+		name += "." + strconv.Itoa(w.seq)
 	}
-	st, _ := f.Stat()
-	w.file = f
-	if st != nil {
-		w.size = st.Size()
-	}
-	return nil
+	return filepath.Join(w.dir, name)
 }
 
-func (w *rotatingWriter) Write(p []byte) (int, error) {
+func (w *dailyWriter) open() error {
+	for i := 0; i < 1000; i++ {
+		f, err := os.OpenFile(w.path(), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return err
+		}
+		st, _ := f.Stat()
+		var size int64
+		if st != nil {
+			size = st.Size()
+		}
+		if w.maxSize > 0 && size >= w.maxSize {
+			f.Close()
+			w.seq++
+			continue
+		}
+		w.file = f
+		w.size = size
+		return nil
+	}
+	return fmt.Errorf("日志切分失败：%s 的序号超过上限", w.base)
+}
+
+func (w *dailyWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.size+int64(len(p)) > w.maxSize {
-		w.rotate()
+
+	day := w.now().Format("2006-01-02")
+	if w.file == nil || day != w.day || (w.maxSize > 0 && w.size+int64(len(p)) > w.maxSize) {
+		if err := w.rotate(day); err != nil {
+			return 0, err
+		}
 	}
 	n, err := w.file.Write(p)
 	w.size += int64(n)
 	return n, err
 }
 
-func (w *rotatingWriter) rotate() {
-	w.file.Close()
-	_ = os.Remove(filepath.Join(w.dir, w.name+"."+itoa(w.keep-1)))
-	for i := w.keep - 2; i >= 1; i-- {
-		_ = os.Rename(filepath.Join(w.dir, w.name+"."+itoa(i)), filepath.Join(w.dir, w.name+"."+itoa(i+1)))
+func (w *dailyWriter) rotate(day string) error {
+	if w.file != nil {
+		_ = w.file.Close()
+		w.file = nil
 	}
-	_ = os.Rename(filepath.Join(w.dir, w.name), filepath.Join(w.dir, w.name+".1"))
-	w.size = 0
-	_ = w.open()
+	if day != w.day {
+		w.day = day
+		w.seq = 0
+		w.cleanupLocked()
+	} else {
+		w.seq++
+	}
+	return w.open()
 }
 
-func itoa(n int) string {
-	if n == 0 {
-		return "0"
+func (w *dailyWriter) Close() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if w.file == nil {
+		return nil
 	}
-	var b [8]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = byte('0' + n%10)
-		n /= 10
-	}
-	return string(b[i:])
+	err := w.file.Close()
+	w.file = nil
+	return err
 }
 
-// Init 初始化 slog：stdout + 文件。返回关闭函数。
-func Init(dir string) (func() error, error) {
-	w, err := newRotatingWriter(dir, "app.log", 10<<20, 3)
+func (w *dailyWriter) cleanup() {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.cleanupLocked()
+}
+
+func (w *dailyWriter) cleanupLocked() {
+	if w.keepDays <= 0 {
+		return
+	}
+	cutoff := w.now().AddDate(0, 0, -(w.keepDays - 1)).Format("2006-01-02")
+	entries, err := os.ReadDir(w.dir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if m := fileRe.FindStringSubmatch(name); m != nil && m[1] == w.base {
+			if m[2] < cutoff {
+				_ = os.Remove(filepath.Join(w.dir, name))
+			}
+			continue
+		}
+		// 兼容旧版 app.log / app.log.1：按 mtime 清理
+		if name == w.base+".log" || strings.HasPrefix(name, w.base+".log.") {
+			if info, err := e.Info(); err == nil && info.ModTime().Format("2006-01-02") < cutoff {
+				_ = os.Remove(filepath.Join(w.dir, name))
+			}
+		}
+	}
+}
+
+// Init 初始化 slog：stdout + 按天/按大小滚动的文件。返回关闭函数。
+func Init(dir string, maxMB, keepDays int) (func() error, error) {
+	if maxMB <= 0 {
+		maxMB = 50
+	}
+	if keepDays <= 0 {
+		keepDays = 14
+	}
+	w, err := newDailyWriter(dir, "app", int64(maxMB)<<20, keepDays)
 	if err != nil {
 		return func() error { return nil }, err
 	}
 	h := slog.NewTextHandler(io.MultiWriter(os.Stdout, w), &slog.HandlerOptions{Level: slog.LevelInfo})
 	slog.SetDefault(slog.New(h))
-	return func() error { return w.file.Close() }, nil
+	return w.Close, nil
 }

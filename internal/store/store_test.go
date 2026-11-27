@@ -1,7 +1,9 @@
 package store
 
 import (
+	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -96,5 +98,23 @@ func TestStoreBasics(t *testing.T) {
 	}
 	if _, err := st.GetLibrary(libID); err == nil {
 		t.Fatal("library should be deleted")
+	}
+}
+
+func TestDatabasePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows 不支持 POSIX 权限位")
+	}
+	st, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	info, err := os.Stat(st.path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+		t.Fatalf("db permissions too open: %o", perm)
 	}
 }

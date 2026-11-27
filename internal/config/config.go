@@ -15,7 +15,9 @@ type Config struct {
 	DataDir   string // 数据库、台账
 	ConfigDir string // 密钥、账号凭据
 	MediaDir  string // STRM 与附属文件输出根
-	LogDir    string
+	LogDir      string
+	LogMaxMB    int
+	LogKeepDays int
 
 
 	// redirect: 302 直连；proxy: 本机中转
@@ -42,7 +44,9 @@ func Load() *Config {
 		DataDir:    envStr("DATA_DIR", "/data"),
 		ConfigDir:  envStr("CONFIG_DIR", "/config"),
 		MediaDir:   envStr("MEDIA_DIR", "/media"),
-		LogDir:     envStr("LOG_DIR", "/logs"),
+		LogDir:      envStr("LOG_DIR", "/logs"),
+		LogMaxMB:    envInt("LOG_MAX_MB", 50),
+		LogKeepDays: envInt("LOG_KEEP_DAYS", 14),
 		PlayMode:   envStr("PLAY_MODE", "redirect"),
 		ReadEvery:  envMillis("P115_READ_INTERVAL_MS", 1000),
 		WriteEvery: envMillis("P115_WRITE_INTERVAL_MS", 3000),

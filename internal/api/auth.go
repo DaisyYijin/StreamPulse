@@ -25,7 +25,7 @@ func loadSecret(dir string) ([]byte, error) {
 	if _, err := rand.Read(b); err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
 	if err := os.WriteFile(p, b, 0o600); err != nil {

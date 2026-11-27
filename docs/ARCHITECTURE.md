@@ -15,7 +15,7 @@
 | 包 | 职责 |
 |---|---|
 | `config` | 环境变量 → 配置；默认值面向容器/fnOS |
-| `logx` | stdout + 10MB×3 滚动文件 |
+| `logx` | stdout + 按天/按大小滚动文件（`app-YYYY-MM-DD.log`，默认 50MB、保留 14 天） |
 | `store` | SQLite（modernc，纯 Go，WAL）；所有表结构内嵌 |
 | `pan115` | 扫码 Cookie、开放平台 DeviceCode+PKCE、列目录、取直链、节流 |
 | `p115svc` | 账号 → 客户端缓存；扫描串行锁；主号取链 |
@@ -81,7 +81,7 @@ P0 的播放端点与 115-Station 一样属于“pickcode 即弱凭据”，公�
 - PBKDF2-HMAC-SHA256（120k 次）存管理员密码；
 - HMAC-SHA256 自签 token，8 天；HttpOnly Cookie 或 `Authorization: Bearer`；
 - CSP、`X-Frame-Options: DENY`、`nosniff`；
-- 115 凭据只存本地 SQLite；日志不输出 Cookie/Token；
+- 115 凭据只存本地 SQLite（明文，依赖文件权限：`data/` 0700、`streampulse.db` 与 `jwt.key` 0600）；日志不输出 Cookie/Token；
 - Emby Webhook 可选 token（`emby_webhook_token`）。
 
 ## 8. 与参考项目的边界
