@@ -381,18 +381,18 @@ $('setupForm').addEventListener('submit', async (e) => {
   if (password.length < 8) { msg.textContent = '密码至少 8 位'; return; }
   if (password !== confirm) { msg.textContent = '两次输入的密码不一致'; return; }
   try {
-    const d = await publicJSON('/api/setup', {
+    await publicJSON('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username: username, password: password, confirm: confirm })
     });
-    token = d.token;
-    localStorage.setItem('sp_token', token);
     $('setupPass').value = '';
     $('setupConfirm').value = '';
-    showApp();
-    refreshAll();
-    loadSettings();
+    showLogin();
+    $('loginUser').value = username;
+    $('loginPass').value = '';
+    $('loginMsg').className = 'msg ok';
+    $('loginMsg').textContent = '管理员已创建，请登录';
   } catch (err) {
     msg.textContent = err.message;
   }

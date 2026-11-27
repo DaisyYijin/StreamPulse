@@ -35,6 +35,7 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	// 测试固定管理员密码（生产环境由首次启动随机生成）
 	_ = st.SetSetting("admin_user", "admin")
 	_ = st.SetSetting("admin_password_hash", hashPassword("pass"))
+	_ = st.SetSetting("admin_initialized", "1")
 	return app, st
 }
 
@@ -266,6 +267,7 @@ func TestLibraryRequiresPublicBase(t *testing.T) {
 func TestSetupFlow(t *testing.T) {
 	app, st := newTestApp(t)
 	_ = st.SetSetting("admin_password_hash", "")
+	_ = st.SetSetting("admin_initialized", "")
 	h := app.Handler()
 
 	w := doJSON(t, h, http.MethodGet, "/api/setup/status", "", nil)
@@ -289,12 +291,8 @@ func TestSetupFlow(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("setup = %d %s", w.Code, w.Body.String())
 	}
-	var out struct {
-		Token string `json:"token"`
-	}
-	_ = json.Unmarshal(w.Body.Bytes(), &out)
-	if out.Token == "" {
-		t.Fatal("setup should return token")
+	if !bytes.Contains(w.Body.Bytes(), []byte(`"ok":true`)) {
+		t.Fatalf("setup body = %s", w.Body.String())
 	}
 
 	w = doJSON(t, h, http.MethodGet, "/api/setup/status", "", nil)

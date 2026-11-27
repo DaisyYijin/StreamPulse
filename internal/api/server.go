@@ -49,8 +49,9 @@ func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepde
 	return a, nil
 }
 
+// initialized 以显式注册标记为准：旧版本自动生成的密码哈希不算注册完成。
 func (a *App) initialized() bool {
-	return a.Store.GetSetting("admin_password_hash", "") != ""
+	return a.Store.GetSetting("admin_initialized", "") == "1"
 }
 
 func (a *App) Handler() http.Handler {
@@ -173,13 +174,12 @@ func (a *App) handleSetup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	tok := issueToken(a.secret, user, 8*24*time.Hour)
-	http.SetCookie(w, &http.Cookie{
-		Name: "sp_token", Value: tok, Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
-		MaxAge: 8 * 24 * 3600,
-	})
+	if err := a.Store.SetSetting("admin_initialized", "1"); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	a.Log.Info("管理员账号已创建", "username", user)
-	writeJSON(w, http.StatusOK, map[string]string{"token": tok})
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleLogin(w http.ResponseWriter, r *http.Request) {

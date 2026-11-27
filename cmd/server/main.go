@@ -45,6 +45,10 @@ func main() {
 			fmt.Fprintln(os.Stderr, "重置失败:", err)
 			os.Exit(1)
 		}
+		if err := st.SetSetting("admin_initialized", ""); err != nil {
+			fmt.Fprintln(os.Stderr, "重置失败:", err)
+			os.Exit(1)
+		}
 		fmt.Println("管理员密码已清空。重启容器后打开网页，会重新进入「创建管理员」页面。")
 		return
 	}
