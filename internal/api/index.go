@@ -522,7 +522,9 @@ function renderAccountCard(a) {
   const av = p.face
     ? '<img class="avatar" src="' + esc(p.face) + '" alt="">'
     : '<div class="avatar fallback">' + esc(name.slice(0, 1).toUpperCase()) + '</div>';
-  const badges = ((p.privilege || p.vip) ? '<span class="badge vip">VIP' + (p.vip ? ' ' + p.vip : '') + '</span>' : '') +
+  const vipNum = Number(p.vip || 0);
+  const vipText = vipNum === 4294967295 ? 'VIP 永久' : (vipNum ? 'VIP ' + vipNum : '');
+  const badges = (vipText ? '<span class="badge vip">' + vipText + '</span>' : '') +
     (a.device ? '<span class="badge">' + esc(a.device) + '</span>' : '');
   const expire = p.expire ? '到期 ' + new Date(p.expire * 1000).toLocaleDateString() : '';
   const quotaText = p.total ? fmtBytes(p.used) + ' / ' + fmtBytes(p.total) : '';

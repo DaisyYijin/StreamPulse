@@ -2,10 +2,12 @@ package pan115
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
+	"strings"
 
 	driver "github.com/SheltonZhu/115driver/pkg/driver"
 )
@@ -109,6 +111,56 @@ func (c *Client) QRStatus(ctx context.Context, qr *QR) (*QRState, error) {
 
 // QRLogin 在扫码确认后换取 Cookie。
 // 端点：POST qrcodeapi.115.com/app/1.0/{app}/1.0/login/qrcode/，表单只带 account=uid。
+// cookieValue 兼容 115 的两种返回：
+//   "cookie": "UID=...; CID=..."
+//   "cookie": {"UID":"...","CID":"...","SEID":"...","KID":"..."}
+type cookieValue struct {
+	Text string
+}
+
+func (v *cookieValue) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if strings.HasPrefix(trimmed, `"`) {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		v.Text = s
+		return nil
+	}
+	if trimmed == "null" || trimmed == "" {
+		return nil
+	}
+	var m map[string]string
+	if err := json.Unmarshal(data, &m); err != nil {
+		return err
+	}
+	get := func(keys ...string) string {
+		for _, k := range keys {
+			if s := strings.TrimSpace(m[k]); s != "" {
+				return s
+			}
+		}
+		return ""
+	}
+	var parts []string
+	for _, kv := range []struct {
+		name string
+		keys []string
+	}{
+		{"UID", []string{"UID", "uid"}},
+		{"CID", []string{"CID", "cid"}},
+		{"SEID", []string{"SEID", "seid"}},
+		{"KID", []string{"KID", "kid"}},
+	} {
+		if val := get(kv.keys...); val != "" {
+			parts = append(parts, kv.name+"="+val)
+		}
+	}
+	v.Text = strings.Join(parts, "; ")
+	return nil
+}
+
 // QRLoginResult 是扫码换 Cookie 的结果。115 的登录响应同时带昵称/头像/VIP，
 // 小程序等没有 user/info 权限的会话也能从这里拿到账号资料。
 type QRLoginResult struct {
@@ -134,7 +186,7 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (*QRLoginRe
 		ErrNo int      `json:"errno"`
 		Code  int      `json:"code"`
 		Data  struct {
-			Cookie   string `json:"cookie"`
+			Cookie   cookieValue `json:"cookie"`
 			UserName string `json:"user_name"`
 			UserID   int64  `json:"user_id"`
 			IsVip    int64  `json:"is_vip"`
@@ -150,7 +202,7 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (*QRLoginRe
 	if err := c.do(ctx, http.MethodPost, endpoint, form, false, &r); err != nil {
 		return nil, err
 	}
-	if !bool(r.State) || r.Data.Cookie == "" {
+	if !bool(r.State) || r.Data.Cookie.Text == "" {
 		msg := r.Error
 		if msg == "" {
 			msg = "登录成功但未返回 Cookie"
@@ -175,7 +227,7 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (*QRLoginRe
 		face = r.Data.Face.FaceS
 	}
 	return &QRLoginResult{
-		Cookie:   r.Data.Cookie,
+		Cookie:   r.Data.Cookie.Text,
 		UserName: r.Data.UserName,
 		UserID:   r.Data.UserID,
 		Face:     face,

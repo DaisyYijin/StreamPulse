@@ -215,3 +215,31 @@ func TestSTRMFormat(t *testing.T) {
 		t.Fatalf("extra id = %q", extra)
 	}
 }
+
+func TestQRLoginCookieObject(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/app/1.0/android/1.0/login/qrcode/", func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+		if r.Form.Get("app") != "android" {
+			t.Errorf("app = %q", r.Form.Get("app"))
+		}
+		_, _ = w.Write([]byte(`{"state":1,"data":{"user_id":80000969,"user_name":"噗嗤","is_vip":4294967295,"cookie":{"UID":"1","CID":"2","SEID":"3","KID":"4"}}}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	c := New(Credential{}, time.Millisecond, time.Millisecond)
+	c.SetDriver(false)
+	c.QRAPI = srv.URL
+
+	res, err := c.QRLogin(context.Background(), &QR{UID: "u1"}, "115android")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Cookie != "UID=1; CID=2; SEID=3; KID=4" {
+		t.Fatalf("cookie = %q", res.Cookie)
+	}
+	if res.UserName != "噗嗤" || res.UserID != 80000969 || res.VIP != 4294967295 {
+		t.Fatalf("profile = %+v", res)
+	}
+}
