@@ -196,3 +196,16 @@ func TestScanOneDir(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestScanRejectsEmptyBaseURL(t *testing.T) {
+	st, err := store.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	lib := newLib(t, st)
+	lib.BaseURL = ""
+	if _, err := Run(context.Background(), Options{Library: lib, Source: &fakeSource{}, Store: st}); err == nil {
+		t.Fatal("expected error for empty base url")
+	}
+}

@@ -18,8 +18,6 @@ type Config struct {
 	LogDir    string
 
 
-	// 默认写进 STRM 的播放域名，如 http://192.168.1.10:2048
-	PublicBase string
 	// redirect: 302 直连；proxy: 本机中转
 	PlayMode string
 
@@ -45,7 +43,6 @@ func Load() *Config {
 		ConfigDir:  envStr("CONFIG_DIR", "/config"),
 		MediaDir:   envStr("MEDIA_DIR", "/media"),
 		LogDir:     envStr("LOG_DIR", "/logs"),
-		PublicBase: strings.TrimRight(envStr("PUBLIC_BASE", ""), "/"),
 		PlayMode:   envStr("PLAY_MODE", "redirect"),
 		ReadEvery:  envMillis("P115_READ_INTERVAL_MS", 1000),
 		WriteEvery: envMillis("P115_WRITE_INTERVAL_MS", 3000),
@@ -53,9 +50,6 @@ func Load() *Config {
 
 		IncrEnabled:  envBool("INCR_ENABLED", true),
 		IncrInterval: envMillis("INCR_INTERVAL_MS", 30000),
-	}
-	if c.PublicBase == "" {
-		c.PublicBase = "http://127.0.0.1:" + strconv.Itoa(c.StreamPort)
 	}
 	return c
 }

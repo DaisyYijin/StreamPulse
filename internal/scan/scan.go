@@ -73,6 +73,9 @@ func Run(ctx context.Context, opt Options) (Result, error) {
 	if lib == nil {
 		return Result{}, errors.New("library 为空")
 	}
+	if strings.TrimSpace(lib.BaseURL) == "" {
+		return Result{}, errors.New("媒体库未配置播放地址：请先在设置页填写播放地址，再扫描")
+	}
 	videoExts := splitExts(lib.VideoExts)
 	metaExts := splitExts(lib.MetaExts)
 	seen := map[string]bool{}

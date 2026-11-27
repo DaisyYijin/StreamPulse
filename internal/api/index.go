@@ -108,6 +108,7 @@ th{color:var(--muted);font-weight:600}
     <div class="card">
       <h2>设置</h2>
       <div class="row">
+        <div><label>播放地址（写入 STRM）</label><input id="publicBase" placeholder="http://192.168.1.10:2048"></div>
         <div><label>Emby 地址</label><input id="embyBase" placeholder="http://192.168.1.10:8096"></div>
         <div><label>Emby API Key</label><input id="embyApiKey" type="password" autocomplete="off"></div>
         <div><label>Webhook Token</label><input id="embyWebhookToken" type="password" autocomplete="off"></div>
@@ -247,6 +248,7 @@ $('openLogin').onclick = async () => {
 async function loadSettings() {
   try {
     const s = await api('/api/settings');
+    $('publicBase').value = s.publicBase || '';
     $('embyBase').value = s.embyBase || '';
     $('embyApiKey').placeholder = s.embyApiKeySet ? '已设置（留空不修改）' : 'API Key';
     $('embyWebhookToken').placeholder = s.embyWebhookTokenSet ? '已设置（留空不修改）' : 'Webhook Token';
@@ -261,6 +263,7 @@ $('saveSettings').onclick = async () => {
   $('setMsg').textContent = '保存中…';
   try {
     await api('/api/settings', { method: 'PUT', body: JSON.stringify({
+      publicBase: $('publicBase').value,
       embyBase: $('embyBase').value,
       embyApiKey: $('embyApiKey').value,
       embyWebhookToken: $('embyWebhookToken').value,
@@ -271,7 +274,7 @@ $('saveSettings').onclick = async () => {
       newPassword: $('adminPassword').value
     })});
     $('embyApiKey').value = ''; $('embyWebhookToken').value = ''; $('p115AppSecret').value = ''; $('adminPassword').value = '';
-    $('setMsg').textContent = '已保存';
+    $('setMsg').textContent = '已保存（播放地址修改后请重新扫描媒体库以更新 STRM）';
     loadSettings(); refreshAll();
   } catch (e) { $('setMsg').textContent = e.message; }
 };

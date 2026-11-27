@@ -20,7 +20,7 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	cfg := &config.Config{
 		Port: 1024, StreamPort: 2048, DataDir: dir, ConfigDir: dir, MediaDir: dir, LogDir: dir,
 		PlayMode: "redirect",
-		PublicBase: "http://h:2048", ReadEvery: time.Millisecond, WriteEvery: time.Millisecond,
+		ReadEvery: time.Millisecond, WriteEvery: time.Millisecond,
 	}
 	st, err := store.Open(dir)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestSettingsEmbyAndP115(t *testing.T) {
 	}
 
 	w = doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{
-		"embyBase": "http://emby:8096/", "embyApiKey": "key1", "embyWebhookToken": "wh1",
+		"publicBase": "http://nas:2048/", "embyBase": "http://emby:8096/", "embyApiKey": "key1", "embyWebhookToken": "wh1",
 		"embyDeleteRemote": true, "p115AppId": "app1", "p115AppSecret": "sec1",
 	})
 	if w.Code != 200 {
@@ -185,6 +185,9 @@ func TestSettingsEmbyAndP115(t *testing.T) {
 	}
 	if st.GetSetting("p115_app_id", "") != "app1" || st.GetSetting("p115_app_secret", "") != "sec1" {
 		t.Fatal("p115 settings not saved")
+	}
+	if got := st.GetSetting("public_base", ""); got != "http://nas:2048" {
+		t.Fatalf("public_base = %q", got)
 	}
 
 	// 空密钥 = 保持不变
@@ -231,5 +234,31 @@ func TestAdminCredentialsInSettings(t *testing.T) {
 	}
 	if w := doJSON(t, h, http.MethodPut, "/api/settings", login.Token, map[string]any{"newPassword": "123"}); w.Code != 400 {
 		t.Fatalf("short password = %d", w.Code)
+	}
+}
+
+func TestLibraryRequiresPublicBase(t *testing.T) {
+	app, st := newTestApp(t)
+	accID, _ := st.SaveAccount(&store.Account{Name: "main", Role: "main", AuthType: "cookie", Cookie: "x"})
+	h := app.Handler()
+	w := doJSON(t, h, http.MethodPost, "/api/login", "", map[string]string{"username": "admin", "password": "pass"})
+	var login struct {
+		Token string `json:"token"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &login)
+
+	lib := map[string]any{"name": "m", "accountId": accID, "remoteCid": "0", "localDir": t.TempDir()}
+	if w := doJSON(t, h, http.MethodPost, "/api/libraries", login.Token, lib); w.Code != 400 {
+		t.Fatalf("missing public base should be 400, got %d", w.Code)
+	}
+
+	_ = st.SetSetting("public_base", "http://nas:2048")
+	if w := doJSON(t, h, http.MethodPost, "/api/libraries", login.Token, lib); w.Code != 200 {
+		t.Fatalf("create with global base = %d %s", w.Code, w.Body.String())
+	}
+	var list []store.Library
+	_ = json.Unmarshal(doJSON(t, h, http.MethodGet, "/api/libraries", login.Token, nil).Body.Bytes(), &list)
+	if len(list) != 1 || list[0].BaseURL != "http://nas:2048" {
+		t.Fatalf("library base = %+v", list)
 	}
 }

@@ -370,7 +370,11 @@ func (a *App) handleSaveLibrary(w http.ResponseWriter, r *http.Request) {
 		in.AccountID = acc.ID
 	}
 	if in.BaseURL == "" {
-		in.BaseURL = a.Cfg.PublicBase
+		in.BaseURL = a.Store.GetSetting("public_base", "")
+	}
+	if in.BaseURL == "" {
+		writeErr(w, http.StatusBadRequest, "请先在设置页填写播放地址（写入 STRM 的地址）")
+		return
 	}
 	if in.STRMFormat == "" {
 		in.STRMFormat = "pick_code"
@@ -487,6 +491,7 @@ func (a *App) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"p115AppId":           a.Store.GetSetting("p115_app_id", ""),
 		"p115AppSecretSet":    a.Store.GetSetting("p115_app_secret", "") != "",
 		"adminUser":           a.Store.GetSetting("admin_user", "admin"),
+		"publicBase":          a.Store.GetSetting("public_base", ""),
 	})
 }
 
@@ -501,6 +506,7 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		P115AppId             string `json:"p115AppId"`
 		P115AppSecret         string `json:"p115AppSecret"`
 		AdminUser             string `json:"adminUser"`
+		PublicBase            string `json:"publicBase"`
 		NewPassword           string `json:"newPassword"`
 		ClearEmbyApiKey       bool   `json:"clearEmbyApiKey"`
 		ClearEmbyWebhookToken bool   `json:"clearEmbyWebhookToken"`
@@ -543,6 +549,8 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		secret = strings.TrimSpace(in.P115AppSecret)
 	}
 	_ = a.Store.SetSetting("p115_app_secret", secret)
+
+	_ = a.Store.SetSetting("public_base", strings.TrimRight(strings.TrimSpace(in.PublicBase), "/"))
 
 	if u := strings.TrimSpace(in.AdminUser); u != "" {
 		_ = a.Store.SetSetting("admin_user", u)

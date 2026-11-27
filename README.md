@@ -45,7 +45,7 @@ go run ./cmd/server
 首次启动会在日志里打印初始管理员账号（`admin` + 随机密码），**登录后请在「设置」里修改**。打开 `http://127.0.0.1:1024`，登录后：
 
 1. 「扫码登录 115」用 115 App 扫码；开放平台为可选通道，先在「设置」里填 AppID；
-2. 添加媒体库：远端 CID（`0` 为根）、本地目录、播放域名（如 `http://NAS_IP:2048`）；
+2. 先在「设置」里填**播放地址**（如 `http://NAS_IP:2048`，会写进 STRM），再添加媒体库：远端 CID（`0` 为根）、本地目录；
 3. 点「扫描」跑一次全量，STRM 会写入本地目录；Emby 配置好地址与 Key 后会自动刷库。
 
 > 生活事件增量的首轮只记录游标（基线），不会补历史文件；**请先跑一次全量扫描**。之后手机/网页上传、离线完成等变更会在一个轮询周期内同步。
@@ -53,9 +53,6 @@ go run ./cmd/server
 ### Docker Compose（拉取 GHCR 镜像）
 
 ```bash
-cp .env.example .env
-# 编辑 .env：设置 PUBLIC_BASE（播放器能访问到的地址）
-
 # GHCR 包默认私有，先登录（PAT 需 read:packages）
 echo "$CR_PAT" | docker login ghcr.io -u DaisyYijin --password-stdin
 
@@ -90,7 +87,6 @@ docker run -d --name streampulse \
 | `CONFIG_DIR` | `/config` | 密钥、配置 |
 | `MEDIA_DIR` | `/media` | STRM 输出根 |
 | `LOG_DIR` | `/logs` | 日志 |
-| `PUBLIC_BASE` | `http://127.0.0.1:2048` | 写进 STRM 的默认播放域名 |
 | `PLAY_MODE` | `redirect` | `redirect` 302 / `proxy` 本机中转 |
 | `P115_READ_INTERVAL_MS` | `1000` | 读接口最小间隔 |
 | `P115_WRITE_INTERVAL_MS` | `3000` | 写接口最小间隔 |
@@ -103,6 +99,7 @@ docker run -d --name streampulse \
 
 | 项 | 说明 |
 |---|---|
+| 播放地址 | 写进 STRM 的地址，如 `http://192.168.1.10:2048`；必须是播放器能访问到的 NAS 地址。修改后需重新扫描媒体库 |
 | Emby 地址 / API Key | 刷库、媒体库状态探测 |
 | Emby Webhook Token | 校验 Emby 回调；留空不校验 |
 | 删除联动同时删网盘 | 默认关闭；开启后进 115 回收站（可还原） |
