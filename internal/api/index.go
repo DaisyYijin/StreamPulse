@@ -198,6 +198,10 @@ tr:last-child td{border-bottom:0}
 .steps{margin:0;padding-left:20px;color:#3d4a44;font-size:14px}
 .steps li{margin:6px 0}
 
+.toast{position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:200;padding:10px 16px;border-radius:10px;font-size:13.5px;font-weight:650;color:#fff;background:#0f766e;box-shadow:0 12px 32px rgba(10,40,30,.22);max-width:80vw;text-align:center}
+.toast.err{background:#b91c1c}
+.toast.hide{display:none}
+
 .modal{position:fixed;inset:0;z-index:60;background:rgba(15,35,28,.38);backdrop-filter:blur(3px);display:grid;place-items:center;padding:18px}
 .modal-card{width:min(420px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px 22px;box-shadow:0 30px 80px rgba(10,40,30,.28)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
@@ -419,6 +423,8 @@ html[data-auth="in"] #app { display:flex }
 })();
 </script>
 
+<div id="toast" class="toast hide"></div>
+
 <div id="qrModal" class="modal hide">
   <div class="modal-card">
     <div class="modal-head">
@@ -576,6 +582,16 @@ function renderAccountCard(a) {
     '</div></div>';
 }
 
+let toastTimer = null;
+function toast(text, ok) {
+  const el = $('toast');
+  if (!el) return;
+  el.textContent = text;
+  el.className = 'toast' + (ok === false ? ' err' : '');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.add('hide'), 3000);
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -701,9 +717,10 @@ async function loadSettings() {
 }
 
 $('saveSettings').onclick = async () => {
-  const msg = $('setMsg');
-  msg.className = 'msg inline';
-  msg.textContent = '保存中…';
+  const btn = $('saveSettings');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '保存中…';
   try {
     if ($('adminPassword').value && $('adminPassword').value.length < 8) {
       throw new Error('新密码至少 8 位');
@@ -731,20 +748,22 @@ $('saveSettings').onclick = async () => {
     $('embyWebhookToken').value = '';
     $('accAppSecret').value = '';
     $('adminPassword').value = '';
-    msg.className = 'msg inline ok';
-    msg.textContent = '已保存';
+    toast('设置已保存');
     loadSettings();
     refreshAll();
   } catch (e) {
-    msg.className = 'msg inline';
-    msg.textContent = e.message;
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 };
 
 $('addLib').onclick = async () => {
-  const msg = $('libMsg');
-  msg.className = 'msg inline';
-  msg.textContent = '';
+  const btn = $('addLib');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '添加中…';
   try {
     await api('/api/libraries', {
       method: 'POST',
@@ -759,17 +778,22 @@ $('addLib').onclick = async () => {
     });
     $('libName').value = '';
     $('libDir').value = '';
+    toast('媒体库已添加');
     refreshAll();
   } catch (e) {
-    msg.textContent = e.message;
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 };
 
 window.scanLib = async (id) => {
   try {
     await api('/api/libraries/' + id + '/scan', { method: 'POST' });
+    toast('扫描任务已提交');
     refreshAll();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message, false); }
 };
 
 let qrTimer = null;
@@ -794,6 +818,7 @@ function pollQr(url) {
       const st = await api(url);
       if (st.status === 2) {
         closeQrModal();
+        toast('115 登录成功');
         refreshAll();
       } else if (st.status === 1) {
         $('qrMsg').textContent = '已扫码，请在手机上确认';
@@ -861,9 +886,10 @@ async function startOpenQr() {
 
 $('qrLogin').onclick = startQr;
 $('saveAccountSettings').onclick = async () => {
-  const msg = $('accSetMsg');
-  msg.className = 'msg inline';
-  msg.textContent = '保存中…';
+  const btn = $('saveAccountSettings');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '保存中…';
   try {
     const wait = Number($('accApiWait').value || 1);
     if (!Number.isFinite(wait) || wait < 1 || wait > 60) {
@@ -886,27 +912,30 @@ $('saveAccountSettings').onclick = async () => {
       })
     });
     $('accAppSecret').value = '';
-    msg.className = 'msg inline ok';
-    msg.textContent = '已保存';
+    toast('连接设置已保存');
     loadSettings();
   } catch (e) {
-    msg.className = 'msg inline';
-    msg.textContent = e.message;
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
   }
 };
 
 $('refreshAccount').onclick = async () => {
   try {
     await api('/api/accounts/refresh', { method: 'POST' });
+    toast('账号信息已刷新');
     refreshAll();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message, false); }
 };
 $('logout115').onclick = async () => {
   if (!confirm('退出 115 登录？媒体库配置会保留。')) return;
   try {
     await api('/api/accounts/115/logout', { method: 'POST' });
+    toast('已退出 115 登录');
     refreshAll();
-  } catch (e) { alert(e.message); }
+  } catch (e) { toast(e.message, false); }
 };
 $('openLogin').onclick = startOpenQr;
 $('qrRefresh').onclick = () => (qrMode === 'open' ? startOpenQr() : startQr());

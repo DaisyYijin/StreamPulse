@@ -741,8 +741,8 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		P115AppId             string `json:"p115AppId"`
 		P115AppSecret         string `json:"p115AppSecret"`
 		AdminUser             string `json:"adminUser"`
-		ApiWaitSec            int    `json:"apiWaitSec"`
 		PublicBase            string `json:"publicBase"`
+		ApiWaitSec            int    `json:"apiWaitSec"`
 		NewPassword           string `json:"newPassword"`
 		ClearEmbyApiKey       bool   `json:"clearEmbyApiKey"`
 		ClearEmbyWebhookToken bool   `json:"clearEmbyWebhookToken"`
@@ -760,6 +760,7 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "API 等待时间需在 1–60 秒之间")
 		return
 	}
+
 	e := a.Store.GetEmbyConfig()
 	e.Base = strings.TrimRight(strings.TrimSpace(in.EmbyBase), "/")
 	switch {
@@ -775,12 +776,7 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		e.WebhookToken = strings.TrimSpace(in.EmbyWebhookToken)
 	}
 	e.DeleteRemote = in.EmbyDeleteRemote
-	if err := a.Store.SaveEmbyConfig(e); err != nil {
-		writeErr(w, http.StatusInternalServerError, err.Error())
-		return
-	}
 
-	_ = a.Store.SetSetting("p115_app_id", strings.TrimSpace(in.P115AppId))
 	secret := a.Store.GetSetting("p115_app_secret", "")
 	switch {
 	case in.ClearP115AppSecret:
@@ -788,27 +784,41 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	case strings.TrimSpace(in.P115AppSecret) != "":
 		secret = strings.TrimSpace(in.P115AppSecret)
 	}
-	_ = a.Store.SetSetting("p115_app_secret", secret)
 
-	_ = a.Store.SetSetting("public_base", strings.TrimRight(strings.TrimSpace(in.PublicBase), "/"))
-	if in.ApiWaitSec > 0 {
-		_ = a.Store.SetSetting("api_wait_sec", fmt.Sprintf("%d", in.ApiWaitSec))
+	settings := map[string]string{
+		"emby_base":          e.Base,
+		"emby_api_key":       e.APIKey,
+		"emby_webhook_token": e.WebhookToken,
+		"emby_delete_remote": boolText(e.DeleteRemote),
+		"public_base":        strings.TrimRight(strings.TrimSpace(in.PublicBase), "/"),
+		"p115_app_id":        strings.TrimSpace(in.P115AppId),
+		"p115_app_secret":    secret,
 	}
-
+	if in.ApiWaitSec > 0 {
+		settings["api_wait_sec"] = fmt.Sprintf("%d", in.ApiWaitSec)
+	}
 	if u := strings.TrimSpace(in.AdminUser); u != "" {
-		_ = a.Store.SetSetting("admin_user", u)
+		settings["admin_user"] = u
 	}
 	if in.NewPassword != "" {
-		if len(in.NewPassword) < 8 {
-			writeErr(w, http.StatusBadRequest, "新密码至少 8 位")
-			return
-		}
-		if err := a.Store.SetSetting("admin_password_hash", hashPassword(in.NewPassword)); err != nil {
-			writeErr(w, http.StatusInternalServerError, err.Error())
-			return
-		}
+		settings["admin_password_hash"] = hashPassword(in.NewPassword)
+	}
+	start := time.Now()
+	if err := a.Store.SetMany(settings); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if d := time.Since(start); d > 300*time.Millisecond {
+		a.Log.Warn("保存设置较慢", "duration", d)
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func boolText(v bool) string {
+	if v {
+		return "1"
+	}
+	return "0"
 }
 
 // ---------- emby ----------

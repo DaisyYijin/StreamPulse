@@ -611,3 +611,27 @@ func (s *Store) LogoutMain() error {
 		auth_type='none', profile='', nickname='未登录', updated_at=?`, time.Now().Unix())
 	return err
 }
+
+// SetMany 在一个事务里写入多条设置，避免十几次独立提交在扫描占锁时排队。
+func (s *Store) SetMany(m map[string]string) error {
+	if len(m) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for k, v := range m {
+		if _, err := stmt.Exec(k, v); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
