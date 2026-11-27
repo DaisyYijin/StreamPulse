@@ -73,6 +73,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   app_id        TEXT NOT NULL DEFAULT '',
   uid           TEXT NOT NULL DEFAULT '',
   device        TEXT NOT NULL DEFAULT 'web',
+  profile       TEXT NOT NULL DEFAULT '',
   nickname      TEXT NOT NULL DEFAULT '',
   created_at    INTEGER NOT NULL,
   updated_at    INTEGER NOT NULL
@@ -164,6 +165,7 @@ func (s *Store) migrate() error {
 	}
 	// 旧库补列：失败（已存在）忽略。
 	_, _ = s.db.Exec(`ALTER TABLE accounts ADD COLUMN device TEXT NOT NULL DEFAULT 'web'`)
+	_, _ = s.db.Exec(`ALTER TABLE accounts ADD COLUMN profile TEXT NOT NULL DEFAULT ''`)
 	return nil
 }
 
@@ -197,6 +199,7 @@ type Account struct {
 	AppID        string `json:"appId"`
 	UID          string `json:"uid"`
 	Device       string `json:"device"`
+	Profile      string `json:"profile"`
 	Nickname     string `json:"nickname"`
 	CreatedAt    int64  `json:"createdAt"`
 	UpdatedAt    int64  `json:"updatedAt"`
@@ -209,23 +212,23 @@ func (s *Store) SaveAccount(a *Account) (int64, error) {
 	}
 	a.UpdatedAt = now
 	if a.ID == 0 {
-		res, err := s.db.Exec(`INSERT INTO accounts(name,role,auth_type,cookie,access_token,refresh_token,expires_at,app_id,uid,device,nickname,created_at,updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			a.Name, a.Role, a.AuthType, a.Cookie, a.AccessToken, a.RefreshToken, a.ExpiresAt, a.AppID, a.UID, a.deviceOrDefault(), a.Nickname, a.CreatedAt, a.UpdatedAt)
+		res, err := s.db.Exec(`INSERT INTO accounts(name,role,auth_type,cookie,access_token,refresh_token,expires_at,app_id,uid,device,profile,nickname,created_at,updated_at)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			a.Name, a.Role, a.AuthType, a.Cookie, a.AccessToken, a.RefreshToken, a.ExpiresAt, a.AppID, a.UID, a.deviceOrDefault(), a.Profile, a.Nickname, a.CreatedAt, a.UpdatedAt)
 		if err != nil {
 			return 0, err
 		}
 		return res.LastInsertId()
 	}
-	_, err := s.db.Exec(`UPDATE accounts SET name=?,role=?,auth_type=?,cookie=?,access_token=?,refresh_token=?,expires_at=?,app_id=?,uid=?,device=?,nickname=?,updated_at=? WHERE id=?`,
-		a.Name, a.Role, a.AuthType, a.Cookie, a.AccessToken, a.RefreshToken, a.ExpiresAt, a.AppID, a.UID, a.deviceOrDefault(), a.Nickname, a.UpdatedAt, a.ID)
+	_, err := s.db.Exec(`UPDATE accounts SET name=?,role=?,auth_type=?,cookie=?,access_token=?,refresh_token=?,expires_at=?,app_id=?,uid=?,device=?,profile=?,nickname=?,updated_at=? WHERE id=?`,
+		a.Name, a.Role, a.AuthType, a.Cookie, a.AccessToken, a.RefreshToken, a.ExpiresAt, a.AppID, a.UID, a.deviceOrDefault(), a.Profile, a.Nickname, a.UpdatedAt, a.ID)
 	return a.ID, err
 }
 
 func (s *Store) GetAccount(id int64) (*Account, error) {
 	a := &Account{}
-	err := s.db.QueryRow(`SELECT id,name,role,auth_type,cookie,access_token,refresh_token,expires_at,app_id,uid,device,nickname,created_at,updated_at FROM accounts WHERE id=?`, id).
-		Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.Cookie, &a.AccessToken, &a.RefreshToken, &a.ExpiresAt, &a.AppID, &a.UID, &a.Device, &a.Nickname, &a.CreatedAt, &a.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id,name,role,auth_type,cookie,access_token,refresh_token,expires_at,app_id,uid,device,profile,nickname,created_at,updated_at FROM accounts WHERE id=?`, id).
+		Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.Cookie, &a.AccessToken, &a.RefreshToken, &a.ExpiresAt, &a.AppID, &a.UID, &a.Device, &a.Profile, &a.Nickname, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -234,8 +237,8 @@ func (s *Store) GetAccount(id int64) (*Account, error) {
 
 func (s *Store) MainAccount() (*Account, error) {
 	a := &Account{}
-	err := s.db.QueryRow(`SELECT id,name,role,auth_type,cookie,access_token,refresh_token,expires_at,app_id,uid,device,nickname,created_at,updated_at FROM accounts ORDER BY CASE role WHEN 'main' THEN 0 ELSE 1 END, id LIMIT 1`).
-		Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.Cookie, &a.AccessToken, &a.RefreshToken, &a.ExpiresAt, &a.AppID, &a.UID, &a.Device, &a.Nickname, &a.CreatedAt, &a.UpdatedAt)
+	err := s.db.QueryRow(`SELECT id,name,role,auth_type,cookie,access_token,refresh_token,expires_at,app_id,uid,device,profile,nickname,created_at,updated_at FROM accounts ORDER BY CASE role WHEN 'main' THEN 0 ELSE 1 END, id LIMIT 1`).
+		Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.Cookie, &a.AccessToken, &a.RefreshToken, &a.ExpiresAt, &a.AppID, &a.UID, &a.Device, &a.Profile, &a.Nickname, &a.CreatedAt, &a.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +246,7 @@ func (s *Store) MainAccount() (*Account, error) {
 }
 
 func (s *Store) ListAccounts() ([]Account, error) {
-	rows, err := s.db.Query(`SELECT id,name,role,auth_type,expires_at,app_id,uid,device,nickname,created_at,updated_at FROM accounts ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id,name,role,auth_type,expires_at,app_id,uid,device,profile,nickname,created_at,updated_at FROM accounts ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +254,7 @@ func (s *Store) ListAccounts() ([]Account, error) {
 	out := make([]Account, 0)
 	for rows.Next() {
 		var a Account
-		if err := rows.Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.ExpiresAt, &a.AppID, &a.UID, &a.Device, &a.Nickname, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		if err := rows.Scan(&a.ID, &a.Name, &a.Role, &a.AuthType, &a.ExpiresAt, &a.AppID, &a.UID, &a.Device, &a.Profile, &a.Nickname, &a.CreatedAt, &a.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, a)

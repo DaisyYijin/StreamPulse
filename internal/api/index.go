@@ -184,6 +184,12 @@ tr:last-child td{border-bottom:0}
 .steps{margin:0;padding-left:20px;color:#3d4a44;font-size:14px}
 .steps li{margin:6px 0}
 
+.modal{position:fixed;inset:0;z-index:60;background:rgba(15,35,28,.38);backdrop-filter:blur(3px);display:grid;place-items:center;padding:18px}
+.modal-card{width:min(420px,100%);background:#fff;border:1px solid var(--line);border-radius:18px;padding:20px 22px;box-shadow:0 30px 80px rgba(10,40,30,.28)}
+.modal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.modal-head h3{font-size:17px;margin:0}
+.modal-close{border:0;background:transparent;font-size:24px;line-height:1;color:#6b7a72;cursor:pointer}
+
 @media (max-width:860px){
   .shell{display:block}
   .sidebar{position:static;height:auto;width:auto;border-right:0;border-bottom:1px solid var(--line)}
@@ -284,18 +290,6 @@ tr:last-child td{border-bottom:0}
         <div class="row-actions" style="margin-top:0">
           <button class="btn primary" id="qrLogin">扫码登录 115</button>
           <button class="btn ghost" id="openLogin">开放平台扫码（需 AppID）</button>
-          <select id="qrDevice" style="width:auto;min-width:200px">
-            <option value="web">网页端（会顶掉浏览器登录）</option>
-            <option value="115android">Android App</option>
-            <option value="115ios">iOS App</option>
-            <option value="tv">电视端</option>
-            <option value="alipaymini">支付宝小程序</option>
-            <option value="wechatmini">微信小程序</option>
-          </select>
-        </div>
-        <div id="qrBox" class="qr-box hide">
-          <div id="qrMsg" class="hint">请用 115 App 扫码</div>
-          <img id="qrImg" alt="二维码">
         </div>
         <div id="accList" class="list"></div>
       </div>
@@ -370,6 +364,32 @@ tr:last-child td{border-bottom:0}
       </div>
     </section>
   </main>
+</div>
+
+<div id="qrModal" class="modal hide">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h3>登录 115</h3>
+      <button class="modal-close" id="qrClose" aria-label="关闭">×</button>
+    </div>
+    <label>登录设备</label>
+    <select id="qrDevice">
+      <option value="web">网页端（会顶掉浏览器登录）</option>
+      <option value="115android">Android App</option>
+      <option value="115ios">iOS App</option>
+      <option value="tv">电视端</option>
+      <option value="alipaymini">支付宝小程序</option>
+      <option value="wechatmini">微信小程序</option>
+    </select>
+    <div class="qr-box" style="margin-top:14px">
+      <div id="qrMsg" class="hint" style="margin:0">正在获取二维码…</div>
+      <img id="qrImg" alt="二维码">
+      <div id="qrError" class="msg" style="min-height:0;text-align:center"></div>
+    </div>
+    <div class="row-actions" style="justify-content:center">
+      <button class="btn primary" id="qrRefresh">刷新二维码</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -450,6 +470,14 @@ async function api(path, opts) {
   try { data = txt ? JSON.parse(txt) : null; } catch (e) { data = txt; }
   if (!res.ok) throw new Error((data && data.error) || ('HTTP ' + res.status));
   return data;
+}
+
+function fmtBytes(n) {
+  if (!n) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  let i = 0, v = n;
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+  return v.toFixed(v >= 10 || i === 0 ? 0 : 1) + ' ' + units[i];
 }
 
 function esc(s) {
@@ -536,7 +564,14 @@ async function refreshAll() {
 
     const accs = (await api('/api/accounts')) || [];
     $('accList').innerHTML = accs.length
-      ? accs.map((a) => '<div class="list-item"><span>' + esc(a.name) + '</span><span class="muted">' + esc(a.authType) + (a.device ? ' · ' + esc(a.device) : '') + ' · ' + esc(a.nickname || '') + '</span></div>').join('')
+      ? accs.map((a) => {
+          let p = {};
+          try { p = JSON.parse(a.profile || '{}'); } catch (e) {}
+          const vip = (p.privilege || p.vip) ? ('会员' + (p.vip ? ' VIP' + p.vip : '')) : '普通用户';
+          const expire = p.expire ? ('到期 ' + new Date(p.expire * 1000).toLocaleDateString()) : '';
+          const cap = p.total ? (fmtBytes(p.used) + ' / ' + fmtBytes(p.total)) : '';
+          return '<div class="list-item"><div><b>' + esc(p.name || a.nickname || a.name) + '</b><div class="muted" style="font-size:12.5px">' + esc(vip) + (expire ? ' · ' + esc(expire) : '') + (a.device ? ' · ' + esc(a.device) : '') + '</div></div><div class="muted">' + esc(cap) + '</div></div>';
+        }).join('')
       : '<div class="muted" style="font-size:13px">还没有账号，先扫码登录 115。</div>';
 
     const libs = (await api('/api/libraries')) || [];
@@ -635,41 +670,72 @@ window.scanLib = async (id) => {
   } catch (e) { alert(e.message); }
 };
 
-function watchQR(url, doneMsg) {
-  $('qrBox').classList.remove('hide');
-  $('qrMsg').textContent = doneMsg;
-  const timer = setInterval(async () => {
+let qrTimer = null;
+
+function closeQrModal() {
+  if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
+  $('qrModal').classList.add('hide');
+  $('qrImg').removeAttribute('src');
+  $('qrError').textContent = '';
+  $('qrMsg').textContent = '正在获取二维码…';
+}
+
+function pollQr(url) {
+  if (qrTimer) { clearInterval(qrTimer); }
+  qrTimer = setInterval(async () => {
     try {
       const st = await api(url);
       if (st.status === 2) {
-        clearInterval(timer);
-        $('qrBox').classList.add('hide');
+        closeQrModal();
         refreshAll();
       } else if (st.status === 1) {
         $('qrMsg').textContent = '已扫码，请在手机上确认';
       } else if (st.status === -1) {
-        clearInterval(timer);
-        $('qrMsg').textContent = '二维码已过期，请重试';
+        clearInterval(qrTimer); qrTimer = null;
+        $('qrMsg').textContent = '二维码已过期';
+        $('qrError').textContent = '请点击「刷新二维码」重新获取';
       }
-    } catch (e) {}
+    } catch (e) {
+      $('qrError').textContent = e.message;
+    }
   }, 2000);
 }
 
-$('qrLogin').onclick = async () => {
+async function startQr() {
+  $('qrModal').classList.remove('hide');
+  $('qrError').textContent = '';
+  $('qrMsg').textContent = '正在获取二维码…';
   try {
     const q = await api('/api/accounts/qrcode', { method: 'POST', body: JSON.stringify({ device: $('qrDevice').value }) });
     $('qrImg').src = '/api/accounts/qrcode/' + encodeURIComponent(q.uid) + '/image';
-    watchQR('/api/accounts/qrcode/' + encodeURIComponent(q.uid), '请用 115 App 扫码');
-  } catch (e) { alert(e.message); }
-};
+    $('qrMsg').textContent = '请用 115 App 扫码';
+    pollQr('/api/accounts/qrcode/' + encodeURIComponent(q.uid));
+  } catch (e) {
+    $('qrMsg').textContent = '获取二维码失败';
+    $('qrError').textContent = e.message;
+  }
+}
 
-$('openLogin').onclick = async () => {
+async function startOpenQr() {
+  $('qrModal').classList.remove('hide');
+  $('qrError').textContent = '';
+  $('qrMsg').textContent = '正在获取授权二维码…';
   try {
     const q = await api('/api/accounts/open/start', { method: 'POST' });
     $('qrImg').src = '/api/qr?text=' + encodeURIComponent(q.content || '');
-    watchQR('/api/accounts/open/' + encodeURIComponent(q.uid), '请用 115 App 扫码授权');
-  } catch (e) { alert(e.message); }
-};
+    $('qrMsg').textContent = '请用 115 App 扫码授权';
+    pollQr('/api/accounts/open/' + encodeURIComponent(q.uid));
+  } catch (e) {
+    $('qrMsg').textContent = '获取二维码失败';
+    $('qrError').textContent = e.message;
+  }
+}
+
+$('qrLogin').onclick = startQr;
+$('openLogin').onclick = startOpenQr;
+$('qrRefresh').onclick = startQr;
+$('qrClose').onclick = closeQrModal;
+$('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) closeQrModal(); });
 
 boot();
 setInterval(() => { if (!$('app').classList.contains('hide')) refreshAll(); }, 5000);

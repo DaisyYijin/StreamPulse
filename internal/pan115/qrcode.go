@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
+
+	driver "github.com/SheltonZhu/115driver/pkg/driver"
 )
 
 // DeviceApp 把控制台的设备类型映射成 115 的 app 短名。
@@ -33,6 +35,13 @@ func DeviceApp(device string) string {
 
 // QRCreate 创建扫码会话。二维码内容为 https://115.com/scan/dg-{uid}。
 func (c *Client) QRCreate(ctx context.Context) (*QR, error) {
+	if c.useDriver() {
+		s, err := c.driverClient().QRCodeStart()
+		if err != nil {
+			return nil, fmt.Errorf("115 扫码 token 获取失败: %w", err)
+		}
+		return &QR{UID: s.UID, Time: s.Time, Sign: s.Sign, Content: s.QrcodeContent}, nil
+	}
 	var r struct {
 		State   flexBool `json:"state"`
 		Error   string   `json:"error"`
@@ -68,6 +77,14 @@ func (c *Client) QRCreate(ctx context.Context) (*QR, error) {
 
 // QRStatus 轮询扫码状态：0 未扫，1 已扫待确认，2 已确认，-1 过期，-2 取消。
 func (c *Client) QRStatus(ctx context.Context, qr *QR) (*QRState, error) {
+	if c.useDriver() {
+		s := &driver.QRCodeSession{UID: qr.UID, Time: qr.Time, Sign: qr.Sign}
+		st, err := c.driverClient().QRCodeStatus(s)
+		if err != nil {
+			return nil, err
+		}
+		return &QRState{Status: st.Status, Message: st.Msg, Version: st.Version}, nil
+	}
 	q := url.Values{}
 	q.Set("uid", qr.UID)
 	q.Set("time", strconv.FormatInt(qr.Time, 10))
@@ -93,6 +110,18 @@ func (c *Client) QRStatus(ctx context.Context, qr *QR) (*QRState, error) {
 // QRLogin 在扫码确认后换取 Cookie。
 // 端点：POST qrcodeapi.115.com/app/1.0/{app}/1.0/login/qrcode/，表单只带 account=uid。
 func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (string, error) {
+	if c.useDriver() {
+		s := &driver.QRCodeSession{UID: qr.UID, Time: qr.Time, Sign: qr.Sign}
+		cr, err := c.driverClient().QRCodeLoginWithApp(s, driver.LoginApp(DeviceApp(device)))
+		if err != nil {
+			return "", fmt.Errorf("115 登录失败: %w", err)
+		}
+		cookie := cr.Cookie()
+		if cookie == "" {
+			return "", fmt.Errorf("115 登录未返回 Cookie")
+		}
+		return cookie, nil
+	}
 	app := DeviceApp(device)
 	form := url.Values{}
 	form.Set("account", qr.UID)

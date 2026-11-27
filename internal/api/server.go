@@ -317,6 +317,25 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// 登录成功后拉一次账号详情（昵称/会员/容量），失败不影响登录。
+	if acc, err := a.Store.GetAccount(id); err == nil {
+		if cl, err := a.Svc.Client(id); err == nil {
+			if p, err := cl.GetProfile(r.Context()); err == nil {
+				if b, err := json.Marshal(p); err == nil {
+					acc.Profile = string(b)
+				}
+				if p.Name != "" {
+					acc.Nickname = p.Name
+				}
+				if p.UserID != 0 {
+					acc.UID = fmt.Sprintf("%d", p.UserID)
+				}
+				_, _ = a.Store.SaveAccount(acc)
+			} else {
+				a.Log.Warn("获取 115 账号详情失败", "err", err)
+			}
+		}
+	}
 	a.qrMu.Lock()
 	delete(a.qr, uid)
 	a.qrMu.Unlock()
