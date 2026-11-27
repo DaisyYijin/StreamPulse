@@ -328,6 +328,18 @@ html[data-auth="in"] #app { display:flex }
           <button class="btn ghost" id="logout115">退出 115 登录</button>
         </div>
       </div>
+      <div class="card">
+        <div class="card-head"><h2>连接设置</h2><span class="hint">保存后立即生效</span></div>
+        <div class="grid">
+          <div><label>API 等待时间（秒）</label><input id="accApiWait" type="number" min="1" max="60" placeholder="1"><p class="section-note">扫描网盘、生成 STRM 时每次请求的等待时间；写操作至少 3 秒。</p></div>
+          <div><label>开放平台 AppID</label><input id="accAppId" autocomplete="off" placeholder="在 open.115.com 申请"></div>
+          <div><label>AppSecret</label><input id="accAppSecret" type="password" autocomplete="off" placeholder="留空不修改"></div>
+        </div>
+        <div class="row-actions">
+          <button class="btn primary" id="saveAccountSettings">保存连接设置</button>
+          <span id="accSetMsg" class="msg inline"></span>
+        </div>
+      </div>
     </section>
 
     <section id="view-libraries" class="view">
@@ -372,18 +384,10 @@ html[data-auth="in"] #app { display:flex }
         <div class="card-head"><h2>播放与 Emby</h2></div>
         <div class="grid">
           <div><label>播放地址（写入 STRM）</label><input id="publicBase" placeholder="http://192.168.1.10:2048"></div>
-          <div><label>API 等待时间（秒）</label><input id="apiWaitSec" type="number" min="1" max="60" placeholder="1"><p class="section-note">扫描网盘、生成 STRM 时每次请求的等待时间；写操作至少 3 秒。</p></div>
           <div><label>Emby 地址</label><input id="embyBase" placeholder="http://192.168.1.10:8096"></div>
           <div><label>Emby API Key</label><input id="embyApiKey" type="password" autocomplete="off"></div>
           <div><label>Emby Webhook Token</label><input id="embyWebhookToken" type="password" autocomplete="off"></div>
           <div class="full check"><input type="checkbox" id="embyDeleteRemote"><label for="embyDeleteRemote" style="margin:0">删除联动同时删网盘（进 115 回收站）</label></div>
-        </div>
-      </div>
-      <div class="card">
-        <div class="card-head"><h2>115 开放平台</h2><span class="hint">只使用扫码 Cookie 时可以不填</span></div>
-        <div class="grid">
-          <div><label>AppID</label><input id="p115AppId" autocomplete="off"></div>
-          <div><label>AppSecret</label><input id="p115AppSecret" type="password" autocomplete="off"></div>
         </div>
       </div>
       <div class="card">
@@ -419,11 +423,6 @@ html[data-auth="in"] #app { display:flex }
         <option value="alipaymini">支付宝小程序</option>
         <option value="wechatmini">微信小程序</option>
       </select>
-    </div>
-    <div id="appIdRow" class="hide">
-      <label>开放平台 AppID</label>
-      <input id="openAppId" placeholder="在 open.115.com 申请">
-      <p class="section-note">填写 AppID 后，开放平台账号优先于扫码账号。</p>
     </div>
     <div class="qr-box" style="margin-top:14px">
       <div id="qrMsg" class="hint" style="margin:0">正在获取二维码…</div>
@@ -676,15 +675,14 @@ async function loadSettings() {
   try {
     const s = await api('/api/settings');
     $('publicBase').value = s.publicBase || '';
-    $('apiWaitSec').value = s.apiWaitSec || '1';
+    $('accApiWait').value = s.apiWaitSec || '1';
     $('embyBase').value = s.embyBase || '';
     $('embyApiKey').placeholder = s.embyApiKeySet ? '已设置（留空不修改）' : 'API Key';
     $('embyWebhookToken').placeholder = s.embyWebhookTokenSet ? '已设置（留空不修改）' : 'Webhook Token';
     $('embyDeleteRemote').checked = !!s.embyDeleteRemote;
-    $('p115AppId').value = s.p115AppId || '';
-    $('p115AppSecret').placeholder = s.p115AppSecretSet ? '已设置（留空不修改）' : 'App Secret';
+    $('accAppId').value = s.p115AppId || '';
+    $('accAppSecret').placeholder = s.p115AppSecretSet ? '已设置（留空不修改）' : 'App Secret';
     $('adminUser').value = s.adminUser || 'admin';
-    if ($('openAppId') && !$('openAppId').value) $('openAppId').value = s.p115AppId || '';
     $('who').textContent = s.adminUser || '';
   } catch (e) {}
 }
@@ -697,7 +695,7 @@ $('saveSettings').onclick = async () => {
     if ($('adminPassword').value && $('adminPassword').value.length < 8) {
       throw new Error('新密码至少 8 位');
     }
-    const wait = Number($('apiWaitSec').value || 1);
+    const wait = Number($('accApiWait').value || 1);
     if (!Number.isFinite(wait) || wait < 1 || wait > 60) {
       throw new Error('API 等待时间需在 1–60 秒之间');
     }
@@ -705,20 +703,20 @@ $('saveSettings').onclick = async () => {
       method: 'PUT',
       body: JSON.stringify({
         publicBase: $('publicBase').value,
-        apiWaitSec: Number($('apiWaitSec').value || 1),
+        apiWaitSec: Number($('accApiWait').value || 1),
         embyBase: $('embyBase').value,
         embyApiKey: $('embyApiKey').value,
         embyWebhookToken: $('embyWebhookToken').value,
         embyDeleteRemote: $('embyDeleteRemote').checked,
-        p115AppId: $('p115AppId').value,
-        p115AppSecret: $('p115AppSecret').value,
+        p115AppId: $('accAppId').value,
+        p115AppSecret: $('accAppSecret').value,
         adminUser: $('adminUser').value,
         newPassword: $('adminPassword').value
       })
     });
     $('embyApiKey').value = '';
     $('embyWebhookToken').value = '';
-    $('p115AppSecret').value = '';
+    $('accAppSecret').value = '';
     $('adminPassword').value = '';
     msg.className = 'msg inline ok';
     msg.textContent = '已保存';
@@ -810,7 +808,6 @@ async function startQr() {
   qrMode = 'cookie';
   $('qrTitle').textContent = '登录 115';
   $('deviceRow').classList.remove('hide');
-  $('appIdRow').classList.add('hide');
   $('qrModal').classList.remove('hide');
   $('qrError').textContent = '';
   $('qrMsg').textContent = '正在获取二维码…';
@@ -829,12 +826,17 @@ async function startOpenQr() {
   qrMode = 'open';
   $('qrTitle').textContent = '开放平台授权';
   $('deviceRow').classList.add('hide');
-  $('appIdRow').classList.remove('hide');
   $('qrModal').classList.remove('hide');
   $('qrError').textContent = '';
   $('qrMsg').textContent = '正在获取授权二维码…';
   try {
-    const q = await api('/api/accounts/open/start', { method: 'POST', body: JSON.stringify({ appId: $('openAppId').value }) });
+    const appId = $('accAppId').value.trim();
+    if (!appId) {
+      $('qrMsg').textContent = '请先在账号页填写 AppID';
+      $('qrError').textContent = '';
+      return;
+    }
+    const q = await api('/api/accounts/open/start', { method: 'POST', body: JSON.stringify({ appId: appId }) });
     $('qrImg').src = '/api/qr?text=' + encodeURIComponent(q.content || '');
     $('qrMsg').textContent = '请用 115 App 扫码授权';
     pollQr('/api/accounts/open/' + encodeURIComponent(q.uid));
@@ -845,6 +847,41 @@ async function startOpenQr() {
 }
 
 $('qrLogin').onclick = startQr;
+$('saveAccountSettings').onclick = async () => {
+  const msg = $('accSetMsg');
+  msg.className = 'msg inline';
+  msg.textContent = '保存中…';
+  try {
+    const wait = Number($('accApiWait').value || 1);
+    if (!Number.isFinite(wait) || wait < 1 || wait > 60) {
+      throw new Error('API 等待时间需在 1–60 秒之间');
+    }
+    const cur = await api('/api/settings');
+    await api('/api/settings', {
+      method: 'PUT',
+      body: JSON.stringify({
+        publicBase: cur.publicBase || '',
+        embyBase: cur.embyBase || '',
+        embyApiKey: '',
+        embyWebhookToken: '',
+        embyDeleteRemote: !!cur.embyDeleteRemote,
+        p115AppId: $('accAppId').value,
+        p115AppSecret: $('accAppSecret').value,
+        adminUser: cur.adminUser || 'admin',
+        newPassword: '',
+        apiWaitSec: wait
+      })
+    });
+    $('accAppSecret').value = '';
+    msg.className = 'msg inline ok';
+    msg.textContent = '已保存';
+    loadSettings();
+  } catch (e) {
+    msg.className = 'msg inline';
+    msg.textContent = e.message;
+  }
+};
+
 $('refreshAccount').onclick = async () => {
   try {
     await api('/api/accounts/refresh', { method: 'POST' });
