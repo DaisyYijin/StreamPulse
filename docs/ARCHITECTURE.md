@@ -88,9 +88,35 @@ P0 的播放端点与 115-Station 一样属于“pickcode 即弱凭据”，公�
 
 本项目为独立实现；协议端点依据公开文档与行为观察，具体见 `internal/pan115` 注释。
 
-## 9. 后续设计要点
+## 9. 生活事件增量（P1）
 
-- **事件增量**：`sync_events` 存游标与 pending；消费时按 `fid` 定位台账，避免全盘扫描。
-- **深度删除**：Emby `library.deleted` → 校验媒体库根/祖先链 → 只删台账命中的 STRM → 网盘回收站；空目录沿父链清理，但保护库根。
+```
+每 30s ─> GET proapi/android/behavior/detail（405 切 webapi/behavior/detail）
+        ─> 过滤浏览/标星类事件（3/4/7/8/9/10/19）
+        ─> 事件 id <= 游标即停（新→旧）
+        ─> 按 file_id 去重，写 sync_events（UNIQUE 保幂等）
+        ─> cid 命中 dirs 表 → 对该目录执行 ScanOneDir
+        ─> 全部成功且目标目录 <= 10 个才推进游标
+```
+
+- **首轮 baseline**：只记录最新事件 id，不处理历史，避免扫描风暴；因此使用前必须先跑一次全量。
+- **失败重试**：扫描失败或目标目录超限时不推进游标；已记录事件仍会重新进入目标集合。
+- **已知缺口**：自身扫描/整理产生的 115 事件尚未抑制，可能引发一次多余目录同步（幂等，无副作用）。
+
+## 10. 深度删除（P1）
+
+Emby `library.deleted` → `deepdel.Handle`：
+
+1. **类型白名单**：只接受 Movie / Episode / Season / Series。
+2. **路径校验**：必须落在某个媒体库 `LocalDir` 内，且不等于库根；嵌套库取最长匹配。
+3. **台账命中**：只处理 `synced_files.strm_path` 精确等于 Path（或位于 Path 目录下）的行；未命中直接拒绝。
+4. 删除 STRM + 同名 sidecar（nfo/srt/ass/ssa/vtt/jpg/png/webp），同步删台账行。
+5. 从文件父目录向上删空目录，**库根永不删除**。
+6. **网盘删除**：仅当 `EMBY_DELETE_REMOTE=true`；走 `/rb/delete` 进 115 回收站，可还原。
+7. 任一步拒绝都会返回 `Rejected`，不做部分删除（本地删除按文件粒度继续并记录 warning）。
+
+## 11. 后续设计要点
+
 - **整理**：识别（三级校验）与执行（批量 move/delete）分离；模板引擎与 YAML 分类独立于同步链路。
 - **转码代理**：独立子服务，避免污染 302 热路径；配置 path-map 与清晰度档位。
+- **事件抑制**：为自身写操作打时间窗/目录标记，消费时跳过。

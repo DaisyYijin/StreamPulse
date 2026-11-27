@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"streampulse/internal/config"
+	"streampulse/internal/deepdel"
 	"streampulse/internal/emby"
 	"streampulse/internal/p115svc"
 	"streampulse/internal/pan115"
@@ -24,6 +25,7 @@ type App struct {
 	Store *store.Store
 	Svc   *p115svc.Service
 	Emby  *emby.Client
+	Deep  *deepdel.Service
 	Log   *slog.Logger
 
 	secret []byte
@@ -33,13 +35,13 @@ type App struct {
 	opena map[string]*pan115.OpenAuth
 }
 
-func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, eb *emby.Client, log *slog.Logger) (*App, error) {
+func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, eb *emby.Client, deep *deepdel.Service, log *slog.Logger) (*App, error) {
 	secret, err := loadSecret(cfg.ConfigDir)
 	if err != nil {
 		return nil, err
 	}
 	a := &App{
-		Cfg: cfg, Store: st, Svc: svc, Emby: eb, Log: log, secret: secret,
+		Cfg: cfg, Store: st, Svc: svc, Emby: eb, Deep: deep, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
 	}
 	a.ensureAdmin()
@@ -486,7 +488,7 @@ func (a *App) handleEmbyStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
-	token := a.Store.GetSetting("emby_webhook_token", "")
+	token := a.Store.GetSetting("emby_webhook_token", a.Cfg.EmbyWebhookToken)
 	if token != "" {
 		if r.URL.Query().Get("token") != token && r.Header.Get("X-Emby-Token") != token {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -508,8 +510,23 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 			_ = a.Emby.RefreshLibrary(ctx, "")
 		}()
 	case strings.Contains(wh.Event, "library.deleted"):
-		// P1：深度删除。P0 只记录，不动物理文件。
-		a.Log.Info("收到删除事件，深度删除将在 P1 启用", "name", wh.Item.Name, "path", wh.Item.Path)
+		if a.Deep == nil {
+			a.Log.Warn("收到删除事件，但深度删除未启用", "name", wh.Item.Name)
+			break
+		}
+		item := deepdel.Item{Type: wh.Item.Type, Name: wh.Item.Name, Path: wh.Item.Path}
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+			defer cancel()
+			res, err := a.Deep.Handle(ctx, item)
+			if err != nil {
+				a.Log.Error("深度删除失败", "name", item.Name, "path", item.Path, "err", err)
+				return
+			}
+			a.Log.Info("深度删除", "name", item.Name, "matched", res.Matched,
+				"local", res.DeletedLocal, "remote", res.DeletedRemote,
+				"dirs", res.RemovedDirs, "rejected", res.Rejected)
+		}()
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

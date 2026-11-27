@@ -35,6 +35,14 @@ type Config struct {
 	ReadEvery  time.Duration
 	WriteEvery time.Duration
 
+	// 生活事件增量
+	IncrEnabled  bool
+	IncrInterval time.Duration
+
+	// Emby 删除联动（默认只删本地，不删网盘）
+	EmbyDeleteRemote bool
+	EmbyWebhookToken string
+
 	TrustProxy bool
 }
 
@@ -57,6 +65,11 @@ func Load() *Config {
 		ReadEvery:  envMillis("P115_READ_INTERVAL_MS", 1000),
 		WriteEvery: envMillis("P115_WRITE_INTERVAL_MS", 3000),
 		TrustProxy: envBool("TRUST_PROXY", false),
+
+		IncrEnabled:      envBool("INCR_ENABLED", true),
+		IncrInterval:     envMillis("INCR_INTERVAL_MS", 30000),
+		EmbyDeleteRemote: envBool("EMBY_DELETE_REMOTE", false),
+		EmbyWebhookToken: envStr("EMBY_WEBHOOK_TOKEN", ""),
 	}
 	if c.PublicBase == "" {
 		c.PublicBase = "http://127.0.0.1:" + strconv.Itoa(c.StreamPort)

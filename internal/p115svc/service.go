@@ -133,3 +133,24 @@ func (s *Service) ListRemoteDir(ctx context.Context, accountID int64, cid string
 	}
 	return c.ListDir(ctx, cid)
 }
+
+// ListBehavior 读取 115 生活事件（供增量消费）。
+func (s *Service) ListBehavior(ctx context.Context, accountID int64, limit int) ([]pan115.LifeEvent, error) {
+	c, err := s.Client(accountID)
+	if err != nil {
+		return nil, err
+	}
+	return c.ListBehavior(ctx, limit)
+}
+
+// DeleteFiles 把网盘文件移入回收站（供深度删除）。
+func (s *Service) DeleteFiles(ctx context.Context, accountID int64, fids []string) error {
+	if len(fids) == 0 {
+		return nil
+	}
+	c, err := s.Client(accountID)
+	if err != nil {
+		return err
+	}
+	return c.DeleteToRecycle(ctx, fids)
+}

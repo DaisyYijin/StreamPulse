@@ -493,3 +493,22 @@ func (s *Store) DeleteLibrary(id int64) error {
 	_, err := s.db.Exec(`DELETE FROM synced_files WHERE library_id=?`, id)
 	return err
 }
+
+// ---------- sync events ----------
+
+// AddEvent 记录一条生活事件；重复 event_id 返回 false。
+func (s *Store) AddEvent(accountID int64, eventID, kind, payload string) (bool, error) {
+	res, err := s.db.Exec(`INSERT OR IGNORE INTO sync_events(account_id,event_id,kind,payload,status,created_at)
+		VALUES(?,?,?,?,'done',?)`, accountID, eventID, kind, payload, time.Now().Unix())
+	if err != nil {
+		return false, err
+	}
+	n, _ := res.RowsAffected()
+	return n > 0, nil
+}
+
+func (s *Store) CountEvents(accountID int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM sync_events WHERE account_id=?`, accountID).Scan(&n)
+	return n, err
+}

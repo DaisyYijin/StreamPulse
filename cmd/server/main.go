@@ -13,7 +13,9 @@ import (
 
 	"streampulse/internal/api"
 	"streampulse/internal/config"
+	"streampulse/internal/deepdel"
 	"streampulse/internal/emby"
+	"streampulse/internal/incr"
 	"streampulse/internal/logx"
 	"streampulse/internal/p115svc"
 	"streampulse/internal/scheduler"
@@ -52,7 +54,8 @@ func main() {
 
 	svc := p115svc.New(st, cfg)
 	eb := emby.New(cfg.EmbyBase, cfg.EmbyKey)
-	app, err := api.New(cfg, st, svc, eb, log)
+	deep := &deepdel.Service{Store: st, Svc: svc, Log: log, DeleteRemote: cfg.EmbyDeleteRemote}
+	app, err := api.New(cfg, st, svc, eb, deep, log)
 	if err != nil {
 		log.Error("初始化 API 失败", "err", err)
 		os.Exit(1)
@@ -88,6 +91,11 @@ func main() {
 	}()
 
 	scheduler.New(st, svc, log).Start(ctx)
+	if cfg.IncrEnabled {
+		incremental := &incr.Service{Store: st, Src: svc, Log: log, Interval: cfg.IncrInterval}
+		incremental.Start(ctx)
+		log.Info("生活事件增量已启用", "interval", cfg.IncrInterval)
+	}
 
 	<-ctx.Done()
 	log.Info("正在关闭…")
