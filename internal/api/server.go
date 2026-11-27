@@ -318,7 +318,8 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	// 登录成功后拉一次账号详情（昵称/会员/容量），失败不影响登录。
+	// 登录成功后拉一次账号详情（昵称/会员/容量）。
+	// 小程序等非网页端会话可能没有 user/info 权限，失败时至少保存 Cookie 里的 UID。
 	if acc, err := a.Store.GetAccount(id); err == nil {
 		if cl, err := a.Svc.Client(id); err == nil {
 			if p, err := cl.GetProfile(r.Context()); err == nil {
@@ -331,10 +332,13 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 				if p.UserID != 0 {
 					acc.UID = fmt.Sprintf("%d", p.UserID)
 				}
-				_, _ = a.Store.SaveAccount(acc)
 			} else {
-				a.Log.Warn("获取 115 账号详情失败", "err", err)
+				a.Log.Warn("获取 115 账号详情失败（该设备类型可能没有 user/info 权限）", "device", qr.Device, "err", err)
+				if acc.UID == "" {
+					acc.UID = cookieUID(cookie)
+				}
 			}
+			_, _ = a.Store.SaveAccount(acc)
 		}
 	}
 	a.qrMu.Lock()
@@ -724,6 +728,16 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------- helpers ----------
+
+func cookieUID(cookie string) string {
+	for _, part := range strings.Split(cookie, ";") {
+		part = strings.TrimSpace(part)
+		if strings.HasPrefix(part, "UID=") {
+			return strings.TrimPrefix(part, "UID=")
+		}
+	}
+	return ""
+}
 
 func writeJSON(w http.ResponseWriter, code int, v any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")

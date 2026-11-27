@@ -75,6 +75,9 @@ body{
 h2{font-size:21px;margin:0 0 6px;letter-spacing:-.02em}
 .hint{color:var(--muted);font-size:13px;margin:0 0 18px}
 
+.boot-splash{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;background:var(--bg)}
+.boot-splash .logo{width:56px;height:56px;border-radius:18px;font-size:24px}
+
 /* ---------- auth ---------- */
 .auth{
   min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:28px 18px;
@@ -221,7 +224,12 @@ tr:last-child td{border-bottom:0}
 </head>
 <body>
 
-<div id="auth" class="auth">
+<div id="bootSplash" class="boot-splash">
+  <div class="logo">S</div>
+  <div class="brand-name">StreamPulse</div>
+</div>
+
+<div id="auth" class="auth hide">
   <div class="auth-card">
     <div class="brand">
       <div class="logo">S</div>
@@ -406,6 +414,7 @@ tr:last-child td{border-bottom:0}
       <div id="qrMsg" class="hint" style="margin:0">正在获取二维码…</div>
       <img id="qrImg" alt="二维码">
       <div id="qrError" class="msg" style="min-height:0;text-align:center"></div>
+      <p class="section-note" style="text-align:center;margin:0">小程序会话可能读不到账号详情，建议 Android / iOS / 网页端。</p>
     </div>
     <div class="row-actions" style="justify-content:center">
       <button class="btn primary" id="qrRefresh">刷新二维码</button>
@@ -418,7 +427,13 @@ const $ = (id) => document.getElementById(id);
 const VIEWS = ['dashboard', 'accounts', 'libraries', 'tasks', 'settings'];
 let token = localStorage.getItem('sp_token') || '';
 
+function hideSplash() {
+  const el = $('bootSplash');
+  if (el) el.classList.add('hide');
+}
+
 function showLogin() {
+  hideSplash();
   $('auth').classList.remove('hide');
   $('app').classList.add('hide');
   $('loginPane').classList.remove('hide');
@@ -426,6 +441,7 @@ function showLogin() {
 }
 
 function showSetup() {
+  hideSplash();
   $('auth').classList.remove('hide');
   $('app').classList.add('hide');
   $('loginPane').classList.add('hide');
@@ -433,6 +449,7 @@ function showSetup() {
 }
 
 function showApp() {
+  hideSplash();
   $('auth').classList.add('hide');
   $('app').classList.remove('hide');
 }
@@ -517,9 +534,13 @@ function renderAccountCard(a) {
   const expire = p.expire ? '到期 ' + new Date(p.expire * 1000).toLocaleDateString() : '';
   const quotaText = p.total ? fmtBytes(p.used) + ' / ' + fmtBytes(p.total) : '';
   const pct = p.total ? Math.min(100, Math.round(p.used / p.total * 100)) : 0;
+  const hasDetail = !!(p.name || p.total || p.expire || p.vip);
+  const sub = hasDetail
+    ? ([quotaText, expire].filter(Boolean).join(' · ') || '已登录')
+    : ('已登录' + (a.uid ? ' · UID ' + a.uid : '') + ' · 详情不可用（建议用 Android / iOS 重新登录）');
   return '<div class="account-card">' + av +
     '<div class="account-meta"><div class="account-name">' + esc(name) + badges + '</div>' +
-    '<div class="quota-text">' + esc([quotaText, expire].filter(Boolean).join(' · ') || '已登录') + '</div>' +
+    '<div class="quota-text">' + esc(sub) + '</div>' +
     (p.total ? '<div class="quota"><i style="width:' + pct + '%"></i></div>' : '') +
     '</div></div>';
 }
@@ -535,6 +556,7 @@ async function boot() {
     const s = await publicJSON('/api/setup/status');
     if (!s.initialized) { showSetup(); return; }
   } catch (e) {}
+  hideSplash();
   if (token) { enterApp(); } else { showLogin(); }
 }
 
@@ -791,6 +813,9 @@ async function startOpenQr() {
 $('qrLogin').onclick = startQr;
 $('openLogin').onclick = startOpenQr;
 $('qrRefresh').onclick = startQr;
+$('qrDevice').addEventListener('change', () => {
+  if (!$('qrModal').classList.contains('hide')) startQr();
+});
 $('qrClose').onclick = closeQrModal;
 $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) closeQrModal(); });
 
