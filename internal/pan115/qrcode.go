@@ -170,6 +170,7 @@ type QRLoginResult struct {
 	Face     string
 	VIP      int64
 	Email    string
+	Mobile   string
 }
 
 // QRLogin 在扫码确认后换取 Cookie。
@@ -191,6 +192,7 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (*QRLoginRe
 			UserID   int64  `json:"user_id"`
 			IsVip    int64  `json:"is_vip"`
 			Email    string `json:"email"`
+			Mobile   string `json:"mobile"`
 			Face     struct {
 				FaceL string `json:"face_l"`
 				FaceM string `json:"face_m"`
@@ -233,5 +235,6 @@ func (c *Client) QRLogin(ctx context.Context, qr *QR, device string) (*QRLoginRe
 		Face:     face,
 		VIP:      r.Data.IsVip,
 		Email:    r.Data.Email,
+		Mobile:   r.Data.Mobile,
 	}, nil
 }

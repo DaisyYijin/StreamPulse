@@ -594,3 +594,20 @@ func (s *Store) SaveEmbyConfig(c EmbyConfig) error {
 	}
 	return s.SetSetting("emby_delete_remote", v)
 }
+
+// Stats 返回台账统计与最近扫描时间。
+func (s *Store) Stats() (files, orphans int, lastScan int64, err error) {
+	err = s.db.QueryRow(`SELECT COUNT(*), COALESCE(SUM(CASE WHEN status='orphan' THEN 1 ELSE 0 END),0) FROM synced_files`).Scan(&files, &orphans)
+	if err != nil {
+		return
+	}
+	_ = s.db.QueryRow(`SELECT COALESCE(MAX(last_scan_at),0) FROM libraries`).Scan(&lastScan)
+	return
+}
+
+// LogoutMain 清空主账号凭据但保留账号行，媒体库关联不变。
+func (s *Store) LogoutMain() error {
+	_, err := s.db.Exec(`UPDATE accounts SET cookie='', access_token='', refresh_token='', expires_at=0,
+		auth_type='none', profile='', nickname='未登录', updated_at=?`, time.Now().Unix())
+	return err
+}

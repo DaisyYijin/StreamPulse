@@ -190,7 +190,11 @@ tr:last-child td{border-bottom:0}
 .quota{height:7px;background:#edf3f0;border-radius:99px;overflow:hidden;margin-top:9px}
 .quota i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px}
 .quota-text{font-size:12.5px;color:var(--muted);margin-top:6px}
-.account-list{display:grid;gap:10px;margin-top:14px}
+.account-list{display:grid;gap:10px;margin-top:0}
+.stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.stat{background:#f8fbf9;border:1px solid var(--line);border-radius:12px;padding:12px 14px;min-width:0}
+.stat b{display:block;font-size:19px;letter-spacing:-.02em;font-weight:750;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.stat span{font-size:12px;color:var(--muted)}
 .list-item{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fbf9;border:1px solid var(--line);border-radius:10px;font-size:13.5px}
 .qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:16px;padding:18px;background:#f8fbf9;border:1px dashed #d8e5df;border-radius:14px}
 .qr-box img{width:200px;height:200px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 8px 20px rgba(20,60,45,.10)}
@@ -214,6 +218,7 @@ tr:last-child td{border-bottom:0}
   .sidebar-foot{border-top:0;padding:0 14px 10px;justify-content:flex-end}
   .content{padding:18px 14px 44px;max-width:none}
   .grid{grid-template-columns:1fr}
+  .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .card{padding:16px}
   .auth-card{padding:26px 22px 22px}
 }
@@ -320,11 +325,17 @@ html[data-auth="in"] #app { display:flex }
     <section id="view-accounts" class="view">
       <div class="page-head"><h1>115 账号</h1><p>扫码登录，Cookie 保存在本地数据库</p></div>
       <div class="card">
-        <div class="row-actions" style="margin-top:0">
-          <button class="btn primary" id="qrLogin">扫码登录 115</button>
-          <button class="btn ghost" id="openLogin">开放平台扫码（需 AppID）</button>
-        </div>
         <div id="accList" class="account-list"></div>
+        <div class="row-actions" style="margin-top:16px">
+          <button class="btn primary" id="qrLogin">扫码登录 115</button>
+          <button class="btn ghost" id="openLogin">开放平台扫码</button>
+          <button class="btn ghost" id="refreshAccount">刷新账号信息</button>
+          <button class="btn ghost" id="logout115">退出 115 登录</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>账号统计</h2></div>
+        <div class="stats-grid" id="accountStats"></div>
       </div>
     </section>
 
@@ -518,12 +529,22 @@ function fmtBytes(n) {
   return v.toFixed(v >= 10 || i === 0 ? 0 : 1) + ' ' + units[i];
 }
 
+function maskMobile(s) {
+  return s ? String(s).replace(/^(\d{3})\d+(\d{4})$/, '$1****$2') : '';
+}
+
+function maskEmail(s) {
+  if (!s) return '';
+  const i = String(s).indexOf('@');
+  return i > 1 ? String(s).slice(0, 1) + '***' + String(s).slice(i) : String(s);
+}
+
 function parseProfile(a) {
   try { return JSON.parse((a && a.profile) || '{}'); } catch (e) { return {}; }
 }
 
 function renderAccountCard(a) {
-  if (!a) return '<span class="muted">尚未登录 115</span>';
+  if (!a || a.authType === 'none') return '<span class="muted">尚未登录 115</span>';
   const p = parseProfile(a);
   const name = p.name || a.nickname || a.name || '115 用户';
   const av = p.face
@@ -536,9 +557,13 @@ function renderAccountCard(a) {
     : (a.device ? '<span class="badge">' + esc(a.device) + '</span>' : '');
   const badges = (vipText ? '<span class="badge vip">' + vipText + '</span>' : '') + sourceBadge;
   const expire = p.expire ? '到期 ' + new Date(p.expire * 1000).toLocaleDateString() : '';
-  const quotaText = p.total ? fmtBytes(p.used) + ' / ' + fmtBytes(p.total) : '容量信息不可用';
+  const quotaText = p.total
+    ? (fmtBytes(p.used) + ' / ' + fmtBytes(p.total) + ' · 剩余 ' + fmtBytes(Math.max(0, p.total - p.used)))
+    : '容量信息不可用';
   const pct = p.total ? Math.min(100, Math.round(p.used / p.total * 100)) : 0;
-  const sub = [quotaText, expire].filter(Boolean).join(' · ');
+  const contact = [maskMobile(p.mobile), maskEmail(p.email)].filter(Boolean).join(' · ');
+  const uidLine = a.uid ? 'UID ' + a.uid : '';
+  const sub = [quotaText, expire, contact, uidLine].filter(Boolean).join(' · ');
   return '<div class="account-card">' + av +
     '<div class="account-meta"><div class="account-name">' + esc(name) + badges + '</div>' +
     '<div class="quota-text">' + esc(sub) + '</div>' +
@@ -627,6 +652,12 @@ async function refreshAll() {
       '<span>媒体库 <b>' + s.libraries + '</b> 个</span>' +
       '<span>播放模式 <b>' + esc(s.playMode) + '</b></span>' +
       '<span>Emby ' + (s.emby ? '<b>已配置</b>' : '未配置') + '</span>';
+
+    $('accountStats').innerHTML =
+      '<div class="stat"><b>' + s.libraries + '</b><span>媒体库</span></div>' +
+      '<div class="stat"><b>' + s.files + '</b><span>已同步文件</span></div>' +
+      '<div class="stat"><b>' + s.orphans + '</b><span>失效文件</span></div>' +
+      '<div class="stat"><b>' + (s.lastScan ? new Date(s.lastScan * 1000).toLocaleString() : '—') + '</b><span>最近扫描</span></div>';
 
     const accs = (await api('/api/accounts')) || [];
     const main = accs[0];
@@ -821,6 +852,19 @@ async function startOpenQr() {
 }
 
 $('qrLogin').onclick = startQr;
+$('refreshAccount').onclick = async () => {
+  try {
+    await api('/api/accounts/refresh', { method: 'POST' });
+    refreshAll();
+  } catch (e) { alert(e.message); }
+};
+$('logout115').onclick = async () => {
+  if (!confirm('退出 115 登录？媒体库配置会保留。')) return;
+  try {
+    await api('/api/accounts/115/logout', { method: 'POST' });
+    refreshAll();
+  } catch (e) { alert(e.message); }
+};
 $('openLogin').onclick = startOpenQr;
 $('qrRefresh').onclick = () => (qrMode === 'open' ? startOpenQr() : startQr());
 $('qrDevice').addEventListener('change', () => {

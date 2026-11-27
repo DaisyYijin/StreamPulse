@@ -75,6 +75,8 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("POST /api/accounts/open/start", auth(http.HandlerFunc(a.handleOpenStart)))
 	mux.Handle("GET /api/accounts/open/{uid}", auth(http.HandlerFunc(a.handleOpenPoll)))
 	mux.Handle("DELETE /api/accounts/{id}", auth(http.HandlerFunc(a.handleAccountDelete)))
+	mux.Handle("POST /api/accounts/refresh", auth(http.HandlerFunc(a.handleRefreshAccount)))
+	mux.Handle("POST /api/accounts/115/logout", auth(http.HandlerFunc(a.handleLogout115)))
 
 	mux.Handle("GET /api/dirs", auth(http.HandlerFunc(a.handleDirs)))
 
@@ -224,10 +226,14 @@ func (a *App) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	accs, _ := a.Store.ListAccounts()
 	libs, _ := a.Store.ListLibraries()
+	files, orphans, lastScan, _ := a.Store.Stats()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"version":   "0.1.0-p0",
 		"accounts":  len(accs),
 		"libraries": len(libs),
+		"files":     files,
+		"orphans":   orphans,
+		"lastScan":  lastScan,
 		"emby":      a.emby().Enabled(),
 		"playMode":  a.Cfg.PlayMode,
 	})
@@ -242,6 +248,81 @@ func (a *App) handleAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, accs)
+}
+
+func mergeProfile(dst *pan115.Profile, src *pan115.Profile) {
+	if src.Name != "" {
+		dst.Name = src.Name
+	}
+	if src.Face != "" {
+		dst.Face = src.Face
+	}
+	if src.UserID != 0 {
+		dst.UserID = src.UserID
+	}
+	if src.Total > 0 {
+		dst.Total, dst.Used = src.Total, src.Used
+	}
+	if src.Expire > 0 {
+		dst.Expire, dst.Forever = src.Expire, src.Forever
+	}
+	if src.VIP != 0 {
+		dst.VIP = src.VIP
+	}
+	if src.Privilege {
+		dst.Privilege = true
+	}
+	if src.Email != "" {
+		dst.Email = src.Email
+	}
+	if src.Mobile != "" {
+		dst.Mobile = src.Mobile
+	}
+}
+
+func (a *App) handleRefreshAccount(w http.ResponseWriter, r *http.Request) {
+	acc, err := a.Store.MainAccount()
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "还没有 115 账号")
+		return
+	}
+	cl, err := a.Svc.Client(acc.ID)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	p, err := cl.GetProfile(r.Context())
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, "获取账号信息失败: "+err.Error())
+		return
+	}
+	var prof pan115.Profile
+	if acc.Profile != "" {
+		_ = json.Unmarshal([]byte(acc.Profile), &prof)
+	}
+	mergeProfile(&prof, p)
+	if b, err := json.Marshal(prof); err == nil {
+		acc.Profile = string(b)
+	}
+	if p.Name != "" {
+		acc.Nickname = p.Name
+	}
+	if p.UserID != 0 {
+		acc.UID = fmt.Sprintf("%d", p.UserID)
+	}
+	_, _ = a.Store.SaveAccount(acc)
+	writeJSON(w, http.StatusOK, acc)
+}
+
+func (a *App) handleLogout115(w http.ResponseWriter, r *http.Request) {
+	if err := a.Store.LogoutMain(); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if acc, err := a.Store.MainAccount(); err == nil {
+		a.Svc.Invalidate(acc.ID)
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }
 
 func (a *App) handleAccountDelete(w http.ResponseWriter, r *http.Request) {
@@ -324,6 +405,8 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		Face:      login.Face,
 		VIP:       int(login.VIP),
 		Privilege: login.VIP > 0,
+		Email:     login.Email,
+		Mobile:    login.Mobile,
 	}
 	profBytes, _ := json.Marshal(prof)
 	nickname := login.UserName
