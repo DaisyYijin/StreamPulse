@@ -402,18 +402,25 @@ html[data-auth="in"] #app { display:flex }
 <div id="qrModal" class="modal hide">
   <div class="modal-card">
     <div class="modal-head">
-      <h3>登录 115</h3>
+      <h3 id="qrTitle">登录 115</h3>
       <button class="modal-close" id="qrClose" aria-label="关闭">×</button>
     </div>
-    <label>登录设备</label>
-    <select id="qrDevice">
-      <option value="web">网页端（会顶掉浏览器登录）</option>
-      <option value="115android">Android App</option>
-      <option value="115ios">iOS App</option>
-      <option value="tv">电视端</option>
-      <option value="alipaymini">支付宝小程序</option>
-      <option value="wechatmini">微信小程序</option>
-    </select>
+    <div id="deviceRow">
+      <label>登录设备</label>
+      <select id="qrDevice">
+        <option value="web">网页端（会顶掉浏览器登录）</option>
+        <option value="115android">Android App</option>
+        <option value="115ios">iOS App</option>
+        <option value="tv">电视端</option>
+        <option value="alipaymini">支付宝小程序</option>
+        <option value="wechatmini">微信小程序</option>
+      </select>
+    </div>
+    <div id="appIdRow" class="hide">
+      <label>开放平台 AppID</label>
+      <input id="openAppId" placeholder="在 open.115.com 申请">
+      <p class="section-note">填写 AppID 后，开放平台账号优先于扫码账号。</p>
+    </div>
     <div class="qr-box" style="margin-top:14px">
       <div id="qrMsg" class="hint" style="margin:0">正在获取二维码…</div>
       <img id="qrImg" alt="二维码">
@@ -524,19 +531,18 @@ function renderAccountCard(a) {
     : '<div class="avatar fallback">' + esc(name.slice(0, 1).toUpperCase()) + '</div>';
   const vipNum = Number(p.vip || 0);
   const vipText = vipNum === 4294967295 ? 'VIP 永久' : (vipNum ? 'VIP ' + vipNum : '');
-  const badges = (vipText ? '<span class="badge vip">' + vipText + '</span>' : '') +
-    (a.device ? '<span class="badge">' + esc(a.device) + '</span>' : '');
+  const sourceBadge = a.authType === 'openapi'
+    ? '<span class="badge">开放平台</span>'
+    : (a.device ? '<span class="badge">' + esc(a.device) + '</span>' : '');
+  const badges = (vipText ? '<span class="badge vip">' + vipText + '</span>' : '') + sourceBadge;
   const expire = p.expire ? '到期 ' + new Date(p.expire * 1000).toLocaleDateString() : '';
-  const quotaText = p.total ? fmtBytes(p.used) + ' / ' + fmtBytes(p.total) : '';
+  const quotaText = p.total ? fmtBytes(p.used) + ' / ' + fmtBytes(p.total) : '容量信息不可用';
   const pct = p.total ? Math.min(100, Math.round(p.used / p.total * 100)) : 0;
-  const hasDetail = !!(p.name || p.total || p.expire || p.vip);
-  const sub = hasDetail
-    ? ([quotaText, expire].filter(Boolean).join(' · ') || '已登录')
-    : ('已登录' + (a.uid ? ' · UID ' + a.uid : '') + ' · 详情不可用（建议用 Android / iOS 重新登录）');
+  const sub = [quotaText, expire].filter(Boolean).join(' · ');
   return '<div class="account-card">' + av +
     '<div class="account-meta"><div class="account-name">' + esc(name) + badges + '</div>' +
     '<div class="quota-text">' + esc(sub) + '</div>' +
-    (p.total ? '<div class="quota"><i style="width:' + pct + '%"></i></div>' : '') +
+    '<div class="quota"><i style="width:' + pct + '%"></i></div>' +
     '</div></div>';
 }
 
@@ -659,6 +665,7 @@ async function loadSettings() {
     $('p115AppId').value = s.p115AppId || '';
     $('p115AppSecret').placeholder = s.p115AppSecretSet ? '已设置（留空不修改）' : 'App Secret';
     $('adminUser').value = s.adminUser || 'admin';
+    if ($('openAppId') && !$('openAppId').value) $('openAppId').value = s.p115AppId || '';
     $('who').textContent = s.adminUser || '';
   } catch (e) {}
 }
@@ -732,6 +739,7 @@ window.scanLib = async (id) => {
 
 let qrTimer = null;
 let qrBusy = false;
+let qrMode = 'cookie';
 
 function closeQrModal() {
   if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
@@ -775,6 +783,10 @@ function pollQr(url) {
 }
 
 async function startQr() {
+  qrMode = 'cookie';
+  $('qrTitle').textContent = '登录 115';
+  $('deviceRow').classList.remove('hide');
+  $('appIdRow').classList.add('hide');
   $('qrModal').classList.remove('hide');
   $('qrError').textContent = '';
   $('qrMsg').textContent = '正在获取二维码…';
@@ -790,11 +802,15 @@ async function startQr() {
 }
 
 async function startOpenQr() {
+  qrMode = 'open';
+  $('qrTitle').textContent = '开放平台授权';
+  $('deviceRow').classList.add('hide');
+  $('appIdRow').classList.remove('hide');
   $('qrModal').classList.remove('hide');
   $('qrError').textContent = '';
   $('qrMsg').textContent = '正在获取授权二维码…';
   try {
-    const q = await api('/api/accounts/open/start', { method: 'POST' });
+    const q = await api('/api/accounts/open/start', { method: 'POST', body: JSON.stringify({ appId: $('openAppId').value }) });
     $('qrImg').src = '/api/qr?text=' + encodeURIComponent(q.content || '');
     $('qrMsg').textContent = '请用 115 App 扫码授权';
     pollQr('/api/accounts/open/' + encodeURIComponent(q.uid));
@@ -806,7 +822,7 @@ async function startOpenQr() {
 
 $('qrLogin').onclick = startQr;
 $('openLogin').onclick = startOpenQr;
-$('qrRefresh').onclick = startQr;
+$('qrRefresh').onclick = () => (qrMode === 'open' ? startOpenQr() : startQr());
 $('qrDevice').addEventListener('change', () => {
   if (!$('qrModal').classList.contains('hide')) startQr();
 });

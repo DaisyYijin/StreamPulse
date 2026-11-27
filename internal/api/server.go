@@ -305,6 +305,11 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": st.Status, "message": st.Message})
 		return
 	}
+	// 开放平台账号优先：已配置 AppID 且当前是开放平台账号时，不允许扫码覆盖。
+	if cur, err := a.Store.MainAccount(); err == nil && cur.AuthType == "openapi" && a.Store.GetSetting("p115_app_id", "") != "" {
+		writeErr(w, http.StatusConflict, "当前是开放平台账号（AppID 权限更高）。如需改用扫码登录，请先在设置中清除 AppID")
+		return
+	}
 	login, err := c.QRLogin(r.Context(), qr, qr.Device)
 	if err != nil {
 		a.Log.Warn("115 扫码换 Cookie 失败", "device", qr.Device, "err", err)
@@ -385,9 +390,21 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *App) handleOpenStart(w http.ResponseWriter, r *http.Request) {
-	appID := a.Store.GetSetting("p115_app_id", "")
+	var in struct {
+		AppID string `json:"appId"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil && err != io.EOF {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	appID := strings.TrimSpace(in.AppID)
+	if appID != "" {
+		_ = a.Store.SetSetting("p115_app_id", appID)
+	} else {
+		appID = a.Store.GetSetting("p115_app_id", "")
+	}
 	if appID == "" {
-		writeErr(w, http.StatusBadRequest, "请先在设置页填写 115 开放平台 AppID")
+		writeErr(w, http.StatusBadRequest, "请填写 115 开放平台 AppID")
 		return
 	}
 	c := pan115.New(pan115.Credential{}, time.Second, 3*time.Second)

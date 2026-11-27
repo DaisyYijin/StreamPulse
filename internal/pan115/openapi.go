@@ -37,7 +37,7 @@ func (c *Client) OpenLoginStart(ctx context.Context, appID string) (*OpenAuth, e
 	form := url.Values{}
 	form.Set("client_id", appID)
 	form.Set("code_challenge", challenge)
-	form.Set("code_challenge_method", "S256")
+	form.Set("code_challenge_method", "sha256")
 	var r struct {
 		State flexBool `json:"state"`
 		Error string `json:"error"`
