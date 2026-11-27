@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -30,6 +31,24 @@ func (p streamProvider) DownloadURL(ctx context.Context, pickcode string) (strin
 
 func main() {
 	cfg := config.Load()
+
+	// 一次性重置管理员密码：保留账号、媒体库与设置，只清掉登录凭据。
+	// 用法：docker compose run --rm streampulse --reset-admin
+	if len(os.Args) > 1 && os.Args[1] == "--reset-admin" {
+		st, err := store.Open(cfg.DataDir)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "打开数据库失败:", err)
+			os.Exit(1)
+		}
+		defer st.Close()
+		if err := st.SetSetting("admin_password_hash", ""); err != nil {
+			fmt.Fprintln(os.Stderr, "重置失败:", err)
+			os.Exit(1)
+		}
+		fmt.Println("管理员密码已清空。重启容器后打开网页，会重新进入「创建管理员」页面。")
+		return
+	}
+
 	if msg := cfg.Validate(); msg != "" {
 		slog.Error("配置错误", "error", msg)
 		os.Exit(1)

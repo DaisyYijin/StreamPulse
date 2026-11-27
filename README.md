@@ -114,6 +114,19 @@ docker run -d --name streampulse \
 
 安全说明：115 Cookie / Token 以明文存 SQLite（`data/streampulse.db`）。程序会把 `data/` 收紧到 `0700`、数据库与 `config/jwt.key` 收紧到 `0600`，安全边界依赖宿主机文件权限；备份时请一起备份 `data/` 与 `config/`。
 
+### 忘记管理员密码 / 重新初始化
+
+旧版本曾自动生成随机密码并写入日志；升级后如果直接看到登录页、又不知道密码，可以只清空登录凭据（账号、媒体库、设置都保留）：
+
+```bash
+docker compose run --rm streampulse --reset-admin
+docker compose restart streampulse
+```
+
+然后打开 `http://NAS_IP:1024`，会重新进入「创建管理员」页面。
+
+如果确认数据都不需要，也可以直接删除 `./data` 目录，效果更彻底。
+
 ## 飞牛 fnOS 打包
 
 ```bash
