@@ -138,7 +138,7 @@ func TestOpenAPIFlow(t *testing.T) {
 		if r.Form.Get("client_id") != "app1" {
 			t.Errorf("client_id = %q", r.Form.Get("client_id"))
 		}
-		if r.Form.Get("code_challenge_method") != "S256" {
+		if r.Form.Get("code_challenge_method") != "sha256" {
 			t.Errorf("method = %q", r.Form.Get("code_challenge_method"))
 		}
 		_, _ = w.Write([]byte(`{"state":true,"data":{"uid":"ou","time":1,"sign":"os","qrcode":"https://qr"}}`))
