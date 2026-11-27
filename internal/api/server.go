@@ -99,7 +99,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("Content-Security-Policy",
-			"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+			"default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -291,7 +291,8 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 	qr := a.qr[uid]
 	a.qrMu.Unlock()
 	if qr == nil {
-		writeErr(w, http.StatusNotFound, "扫码会话不存在或已过期")
+		// 登录成功后会话会被删除；前端可能还有一次在途轮询，这里按“已结束”返回而不是 404。
+		writeJSON(w, http.StatusOK, map[string]any{"status": -1, "message": "扫码会话已结束"})
 		return
 	}
 	c := pan115.New(pan115.Credential{}, time.Second, 3*time.Second)
@@ -310,8 +311,8 @@ func (a *App) handleQRPoll(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	id, err := a.Store.SaveAccount(&store.Account{
-		Name: "115 主账号", Role: "main", AuthType: "cookie", Cookie: cookie, Device: qr.Device, Nickname: "扫码登录",
+	id, err := a.Store.UpsertMainAccount(&store.Account{
+		Name: "115 主账号", Role: "main", AuthType: "cookie", Cookie: cookie, Device: qr.Device, Nickname: "115 用户",
 	})
 	if err != nil {
 		writeErr(w, http.StatusInternalServerError, err.Error())
@@ -380,7 +381,7 @@ func (a *App) handleOpenPoll(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"status": 1, "message": "等待扫码确认"})
 		return
 	}
-	id, err := a.Store.SaveAccount(&store.Account{
+	id, err := a.Store.UpsertMainAccount(&store.Account{
 		Name: "115 开放平台", Role: "main", AuthType: "openapi",
 		AccessToken: cr.AccessToken, RefreshToken: cr.RefreshToken, ExpiresAt: cr.ExpiresAt,
 		AppID: cr.AppID, UID: cr.UID, Nickname: "开放平台",

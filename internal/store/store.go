@@ -245,6 +245,20 @@ func (s *Store) MainAccount() (*Account, error) {
 	return a, nil
 }
 
+// UpsertMainAccount 保证只有一个主账号行：已有则原地更新，保留 ID 与媒体库关联。
+func (s *Store) UpsertMainAccount(a *Account) (int64, error) {
+	if cur, err := s.MainAccount(); err == nil {
+		a.ID = cur.ID
+		a.CreatedAt = cur.CreatedAt
+	}
+	id, err := s.SaveAccount(a)
+	if err == nil {
+		// 单账号模式：保留当前主账号，清掉历史遗留的其它账号行。
+		_, _ = s.db.Exec(`DELETE FROM accounts WHERE id <> ?`, id)
+	}
+	return id, err
+}
+
 func (s *Store) ListAccounts() ([]Account, error) {
 	rows, err := s.db.Query(`SELECT id,name,role,auth_type,expires_at,app_id,uid,device,profile,nickname,created_at,updated_at FROM accounts ORDER BY id`)
 	if err != nil {

@@ -177,6 +177,20 @@ tr:last-child td{border-bottom:0}
 .check{display:flex;align-items:center;gap:8px;font-size:13px;color:#3d4a44;margin-top:12px}
 .check input{width:auto;margin:0}
 .list{margin-top:14px;display:grid;gap:8px}
+.avatar{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#e6f6f2;border:1px solid var(--line);flex:none}
+.avatar.small{width:30px;height:30px}
+.avatar.fallback{display:grid;place-items:center;font-weight:750;color:var(--accent);font-size:15px}
+.side-user{display:flex;align-items:center;gap:8px;min-width:0}
+.account-card{display:flex;gap:14px;align-items:center}
+.account-card .avatar{width:58px;height:58px;font-size:22px}
+.account-meta{min-width:0;flex:1}
+.account-name{font-weight:700;font-size:15.5px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.badge{font-size:11px;padding:2px 8px;border-radius:99px;background:var(--accent-soft);color:var(--accent);font-weight:650}
+.badge.vip{background:#fff7e6;color:#b45309}
+.quota{height:7px;background:#edf3f0;border-radius:99px;overflow:hidden;margin-top:9px}
+.quota i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px}
+.quota-text{font-size:12.5px;color:var(--muted);margin-top:6px}
+.account-list{display:grid;gap:10px;margin-top:14px}
 .list-item{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fbf9;border:1px solid var(--line);border-radius:10px;font-size:13.5px}
 .qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:16px;padding:18px;background:#f8fbf9;border:1px dashed #d8e5df;border-radius:14px}
 .qr-box img{width:200px;height:200px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 8px 20px rgba(20,60,45,.10)}
@@ -263,7 +277,10 @@ tr:last-child td{border-bottom:0}
       <button data-view="settings">设置</button>
     </nav>
     <div class="sidebar-foot">
-      <span id="who" class="muted"></span>
+      <div class="side-user">
+        <img id="sideAvatar" class="avatar small hide" alt="">
+        <span id="who" class="muted"></span>
+      </div>
       <button class="btn ghost" id="logout">退出</button>
     </div>
   </aside>
@@ -273,6 +290,10 @@ tr:last-child td{border-bottom:0}
       <div class="page-head"><h1>概览</h1><p>账号、媒体库与同步状态</p></div>
       <div class="card">
         <div id="status" class="status-line">加载中…</div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>当前账号</h2></div>
+        <div id="accountCard" class="muted">尚未登录 115</div>
       </div>
       <div class="card">
         <div class="card-head"><h2>快速开始</h2></div>
@@ -291,7 +312,7 @@ tr:last-child td{border-bottom:0}
           <button class="btn primary" id="qrLogin">扫码登录 115</button>
           <button class="btn ghost" id="openLogin">开放平台扫码（需 AppID）</button>
         </div>
-        <div id="accList" class="list"></div>
+        <div id="accList" class="account-list"></div>
       </div>
     </section>
 
@@ -480,6 +501,29 @@ function fmtBytes(n) {
   return v.toFixed(v >= 10 || i === 0 ? 0 : 1) + ' ' + units[i];
 }
 
+function parseProfile(a) {
+  try { return JSON.parse((a && a.profile) || '{}'); } catch (e) { return {}; }
+}
+
+function renderAccountCard(a) {
+  if (!a) return '<span class="muted">尚未登录 115</span>';
+  const p = parseProfile(a);
+  const name = p.name || a.nickname || a.name || '115 用户';
+  const av = p.face
+    ? '<img class="avatar" src="' + esc(p.face) + '" alt="">'
+    : '<div class="avatar fallback">' + esc(name.slice(0, 1).toUpperCase()) + '</div>';
+  const badges = ((p.privilege || p.vip) ? '<span class="badge vip">VIP' + (p.vip ? ' ' + p.vip : '') + '</span>' : '') +
+    (a.device ? '<span class="badge">' + esc(a.device) + '</span>' : '');
+  const expire = p.expire ? '到期 ' + new Date(p.expire * 1000).toLocaleDateString() : '';
+  const quotaText = p.total ? fmtBytes(p.used) + ' / ' + fmtBytes(p.total) : '';
+  const pct = p.total ? Math.min(100, Math.round(p.used / p.total * 100)) : 0;
+  return '<div class="account-card">' + av +
+    '<div class="account-meta"><div class="account-name">' + esc(name) + badges + '</div>' +
+    '<div class="quota-text">' + esc([quotaText, expire].filter(Boolean).join(' · ') || '已登录') + '</div>' +
+    (p.total ? '<div class="quota"><i style="width:' + pct + '%"></i></div>' : '') +
+    '</div></div>';
+}
+
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -563,16 +607,16 @@ async function refreshAll() {
       '<span>Emby ' + (s.emby ? '<b>已配置</b>' : '未配置') + '</span>';
 
     const accs = (await api('/api/accounts')) || [];
-    $('accList').innerHTML = accs.length
-      ? accs.map((a) => {
-          let p = {};
-          try { p = JSON.parse(a.profile || '{}'); } catch (e) {}
-          const vip = (p.privilege || p.vip) ? ('会员' + (p.vip ? ' VIP' + p.vip : '')) : '普通用户';
-          const expire = p.expire ? ('到期 ' + new Date(p.expire * 1000).toLocaleDateString()) : '';
-          const cap = p.total ? (fmtBytes(p.used) + ' / ' + fmtBytes(p.total)) : '';
-          return '<div class="list-item"><div><b>' + esc(p.name || a.nickname || a.name) + '</b><div class="muted" style="font-size:12.5px">' + esc(vip) + (expire ? ' · ' + esc(expire) : '') + (a.device ? ' · ' + esc(a.device) : '') + '</div></div><div class="muted">' + esc(cap) + '</div></div>';
-        }).join('')
-      : '<div class="muted" style="font-size:13px">还没有账号，先扫码登录 115。</div>';
+    const main = accs[0];
+    $('accountCard').innerHTML = renderAccountCard(main);
+    $('accList').innerHTML = main ? renderAccountCard(main) : '<div class="muted" style="font-size:13px">还没有账号，先扫码登录 115。</div>';
+    const p = parseProfile(main);
+    if (p.face) {
+      $('sideAvatar').src = p.face;
+      $('sideAvatar').classList.remove('hide');
+    } else {
+      $('sideAvatar').classList.add('hide');
+    }
 
     const libs = (await api('/api/libraries')) || [];
     $('libs').innerHTML = libs.length
@@ -671,6 +715,7 @@ window.scanLib = async (id) => {
 };
 
 let qrTimer = null;
+let qrBusy = false;
 
 function closeQrModal() {
   if (qrTimer) { clearInterval(qrTimer); qrTimer = null; }
@@ -682,7 +727,10 @@ function closeQrModal() {
 
 function pollQr(url) {
   if (qrTimer) { clearInterval(qrTimer); }
+  qrBusy = false;
   qrTimer = setInterval(async () => {
+    if (qrBusy) return;
+    qrBusy = true;
     try {
       const st = await api(url);
       if (st.status === 2) {
@@ -691,12 +739,21 @@ function pollQr(url) {
       } else if (st.status === 1) {
         $('qrMsg').textContent = '已扫码，请在手机上确认';
       } else if (st.status === -1) {
+        if ($('qrModal').classList.contains('hide')) return;
         clearInterval(qrTimer); qrTimer = null;
-        $('qrMsg').textContent = '二维码已过期';
+        $('qrMsg').textContent = '扫码会话已结束';
         $('qrError').textContent = '请点击「刷新二维码」重新获取';
       }
     } catch (e) {
+      if ($('qrModal').classList.contains('hide')) return;
+      if (e.message.indexOf('404') >= 0 || e.message.indexOf('会话') >= 0) {
+        closeQrModal();
+        refreshAll();
+        return;
+      }
       $('qrError').textContent = e.message;
+    } finally {
+      qrBusy = false;
     }
   }, 2000);
 }
