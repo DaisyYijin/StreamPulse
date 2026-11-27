@@ -1,0 +1,35 @@
+[
+  {
+    "stepTitle": "欢迎使用 StreamPulse",
+    "items": [
+      { "type": "tips", "helpText": "StreamPulse 把 115 网盘媒体映射成本地 STRM，供 Emby / Jellyfin 播放。" },
+      { "type": "tips", "helpText": "安装后请在浏览器打开 http://NAS_IP:6060，登录并扫码绑定 115 账号。" }
+    ]
+  },
+  {
+    "stepTitle": "媒体目录",
+    "items": [
+      {
+        "type": "text",
+        "field": "wizard_media_dir",
+        "label": "STRM 输出目录",
+        "initValue": "/vol1/1000/Media",
+        "rules": [{ "required": true, "message": "请选择或填写媒体目录" }]
+      }
+    ]
+  },
+  {
+    "stepTitle": "管理员密码",
+    "items": [
+      {
+        "type": "password",
+        "field": "wizard_admin_password",
+        "label": "管理员密码",
+        "rules": [
+          { "required": true, "message": "请设置管理员密码" },
+          { "min": 8, "message": "至少 8 位" }
+        ]
+      }
+    ]
+  }
+]

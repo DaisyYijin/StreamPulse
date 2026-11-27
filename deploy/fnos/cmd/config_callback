@@ -1,0 +1,6 @@
+#!/bin/bash
+if [ -n "${wizard_media_dir:-}" ]; then
+  printf "%s" "$wizard_media_dir" > "${TRIM_PKGVAR}/media_dir"
+fi
+"$(dirname "$0")/main" start
+exit 0

@@ -1,0 +1,5 @@
+#!/bin/bash
+# 安装前检查：仅确认端口与目录可用。
+set -u
+mkdir -p "${TRIM_PKGVAR}/data" "${TRIM_PKGVAR}/config" "${TRIM_PKGVAR}/logs"
+exit 0

@@ -1,0 +1,12 @@
+/streampulse
+/streampulse.exe
+/dist/
+/data/
+/logs/
+/media/
+*.db
+*.db-wal
+*.db-shm
+*.log
+.DS_Store
+Thumbs.db

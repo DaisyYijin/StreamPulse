@@ -1,0 +1,68 @@
+#!/bin/bash
+# fnOS 应用生命周期脚本：start | stop | status
+set -u
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
+
+check_process() {
+  [ -n "${1:-}" ] && kill -0 "$1" 2>/dev/null
+}
+
+running() {
+  [ -f "$PID_FILE" ] || return 1
+  pid="$(head -n 1 "$PID_FILE" | tr -d '[:space:]')"
+  if check_process "$pid"; then
+    return 0
+  fi
+  rm -f "$PID_FILE"
+  return 1
+}
+
+start() {
+  running && return 0
+  log "starting streampulse"
+  cd "$TRIM_APPDEST" || exit 1
+
+  # 媒体目录可在安装向导里改；这里读取用户保存的值，缺省用 fnOS 默认存储空间
+  MEDIA_DIR="$(cat "${TRIM_PKGVAR}/media_dir" 2>/dev/null || echo '/vol1/1000/Media')"
+
+  PORT=6060 \
+  STREAM_PORT=6086 \
+  DATA_DIR="${TRIM_PKGVAR}/data" \
+  CONFIG_DIR="${TRIM_PKGVAR}/config" \
+  LOG_DIR="${TRIM_PKGVAR}/logs" \
+  MEDIA_DIR="$MEDIA_DIR" \
+  AUTH_USER="${AUTH_USER:-admin}" \
+  AUTH_PASSWORD="${AUTH_PASSWORD:-}" \
+  TZ=Asia/Shanghai \
+  ./streampulse >> "$LOG_FILE" 2>&1 &
+
+  echo $! > "$PID_FILE"
+  log "started pid=$!"
+}
+
+stop() {
+  if ! running; then
+    log "not running"
+    return 0
+  fi
+  pid="$(cat "$PID_FILE")"
+  log "stopping pid=$pid"
+  kill -TERM "$pid" 2>/dev/null
+  for _ in $(seq 1 10); do
+    check_process "$pid" || break
+    sleep 1
+  done
+  check_process "$pid" && kill -KILL "$pid" 2>/dev/null
+  rm -f "$PID_FILE"
+}
+
+case "${1:-}" in
+  start) start ;;
+  stop) stop ;;
+  status) running && exit 0 || exit 3 ;;
+  *) exit 1 ;;
+esac
