@@ -51,7 +51,26 @@ go run ./cmd/server
 
 > 生活事件增量的首轮只记录游标（基线），不会补历史文件；**请先跑一次全量扫描**。之后手机/网页上传、离线完成等变更会在一个轮询周期内同步。
 
-### Docker
+### Docker Compose（拉取 GHCR 镜像）
+
+```bash
+cp .env.example .env
+# 编辑 .env：至少设置 AUTH_PASSWORD、PUBLIC_BASE、MEDIA_DIR
+
+# GHCR 包默认私有，先登录（PAT 需 read:packages）
+echo "$CR_PAT" | docker login ghcr.io -u DaisyYijin --password-stdin
+
+docker compose pull
+docker compose up -d
+docker compose logs -f streampulse
+```
+
+镜像：`ghcr.io/daisyijin/streampulse:latest`，由 GitHub Actions 在 `main` 分支构建。
+不想每次登录的话，可在 GitHub → Packages → streampulse → Package settings 把可见性改为 Public。
+
+媒体目录注意：`MEDIA_DIR` 必须与 Emby 容器挂载的是**同一个宿主机路径**，否则 Emby 找不到 STRM。
+
+### 本地构建
 
 ```bash
 docker build -t streampulse .
