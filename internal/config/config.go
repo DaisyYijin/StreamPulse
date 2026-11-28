@@ -23,6 +23,9 @@ type Config struct {
 	// redirect: 302 直连；proxy: 本机中转
 	PlayMode string
 
+	// Emby 反代端口(PlaybackInfo 直连改写);0 = 关闭
+	EmbyProxyPort int
+
 	ReadEvery  time.Duration
 	WriteEvery time.Duration
 
@@ -47,7 +50,8 @@ func Load() *Config {
 		LogDir:      envStr("LOG_DIR", "/logs"),
 		LogMaxMB:    envInt("LOG_MAX_MB", 50),
 		LogKeepDays: envInt("LOG_KEEP_DAYS", 14),
-		PlayMode:   envStr("PLAY_MODE", "redirect"),
+		PlayMode:      envStr("PLAY_MODE", "redirect"),
+		EmbyProxyPort: envIntZero("EMBY_PROXY_PORT"),
 		ReadEvery:  envMillis("P115_READ_INTERVAL_MS", 1000),
 		WriteEvery: envMillis("P115_WRITE_INTERVAL_MS", 3000),
 		TrustProxy: envBool("TRUST_PROXY", false),
@@ -63,7 +67,23 @@ func (c *Config) Validate() string {
 	if c.Port == c.StreamPort {
 		return "PORT 与 STREAM_PORT 不能相同"
 	}
+	if c.EmbyProxyPort != 0 && (c.EmbyProxyPort == c.Port || c.EmbyProxyPort == c.StreamPort) {
+		return "EMBY_PROXY_PORT 不能与 PORT / STREAM_PORT 相同"
+	}
 	return ""
+}
+
+// envIntZero 解析非负整数;非法或缺省返回 0(端口类可选项用)。
+func envIntZero(k string) int {
+	v := strings.TrimSpace(os.Getenv(k))
+	if v == "" {
+		return 0
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
 }
 
 func envStr(k, def string) string {

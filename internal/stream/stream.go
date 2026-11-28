@@ -21,6 +21,13 @@ type cacheItem struct {
 	expire time.Time
 }
 
+// flight 是进行中的取链:并发同 key 请求合并成一次上游调用(防缓存击穿)。
+type flight struct {
+	done chan struct{}
+	url  string
+	err  error
+}
+
 type Server struct {
 	provider Provider
 	mode     string // redirect | proxy
@@ -29,6 +36,9 @@ type Server struct {
 	mu    sync.Mutex
 	cache map[string]cacheItem
 	ttl   time.Duration
+
+	fmu     sync.Mutex
+	flights map[string]*flight
 }
 
 func New(provider Provider, mode string, log *slog.Logger) *Server {
@@ -38,7 +48,12 @@ func New(provider Provider, mode string, log *slog.Logger) *Server {
 	if mode != "proxy" {
 		mode = "redirect"
 	}
-	return &Server{provider: provider, mode: mode, log: log, cache: map[string]cacheItem{}, ttl: 50 * time.Minute}
+	return &Server{
+		provider: provider, mode: mode, log: log,
+		cache:   map[string]cacheItem{},
+		ttl:     50 * time.Minute,
+		flights: map[string]*flight{},
+	}
 }
 
 // Handler 返回播放端口的路由。独立端口，不与管理后台共用。
@@ -84,23 +99,79 @@ func (s *Server) handlePlay(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, u, http.StatusFound)
 }
 
+// resolve 取直链:缓存 → HEAD 失效校验 → singleflight 合并并发回源。
+// 直链与 UA 绑定,缓存 key 带 UA。
 func (s *Server) resolve(ctx context.Context, pickcode, ua string) (string, error) {
 	key := pickcode + "|" + ua
 	s.mu.Lock()
 	if it, ok := s.cache[key]; ok && time.Now().Before(it.expire) {
+		u := it.url
 		s.mu.Unlock()
-		return it.url, nil
+		// 命中缓存也 HEAD 校验:链接可能已被 115 吊销,直接 302 死链
+		// 客户端体验更差。探测必须用与播放请求一致的 UA(115 直链与 UA
+		// 绑定);HEAD 网络错误不判死,照常给出。
+		if s.headOK(ctx, u, ua) {
+			return u, nil
+		}
+		s.mu.Lock()
+		delete(s.cache, key)
+		s.mu.Unlock()
+		s.log.Info("直链已失效，重新取链", "pickcode", pickcode)
+	} else {
+		s.mu.Unlock()
 	}
-	s.mu.Unlock()
+
+	// singleflight:同 key 并发请求共享一次上游取链
+	s.fmu.Lock()
+	if f, ok := s.flights[key]; ok {
+		s.fmu.Unlock()
+		select {
+		case <-f.done:
+		case <-ctx.Done():
+			return "", ctx.Err()
+		}
+		if f.err != nil {
+			return "", f.err
+		}
+		return f.url, nil
+	}
+	f := &flight{done: make(chan struct{})}
+	s.flights[key] = f
+	s.fmu.Unlock()
+
+	defer func() {
+		s.fmu.Lock()
+		delete(s.flights, key)
+		s.fmu.Unlock()
+	}()
 
 	u, err := s.provider.DownloadURL(ctx, pickcode)
+	if err == nil {
+		s.mu.Lock()
+		s.cache[key] = cacheItem{url: u, expire: time.Now().Add(s.ttl)}
+		s.mu.Unlock()
+	}
+	f.url, f.err = u, err
+	close(f.done)
 	if err != nil {
 		return "", err
 	}
-	s.mu.Lock()
-	s.cache[key] = cacheItem{url: u, expire: time.Now().Add(s.ttl)}
-	s.mu.Unlock()
 	return u, nil
+}
+
+// headOK 对缓存直链做 HEAD 校验;2xx 视为存活,网络错误视为存活(不挡播放)。
+func (s *Server) headOK(ctx context.Context, u, ua string) bool {
+	req, err := http.NewRequestWithContext(ctx, http.MethodHead, u, nil)
+	if err != nil {
+		return true
+	}
+	req.Header.Set("User-Agent", ua)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return true
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode >= 200 && resp.StatusCode < 300
 }
 
 // proxy 是可选中转模式：保留 Range，逐段转发；上游 401/403 时刷新一次直链。

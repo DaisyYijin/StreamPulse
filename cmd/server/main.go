@@ -14,6 +14,7 @@ import (
 
 	"streampulse/internal/api"
 	"streampulse/internal/config"
+	"streampulse/internal/embyproxy"
 	"streampulse/internal/deepdel"
 	"streampulse/internal/incr"
 	"streampulse/internal/logx"
@@ -103,6 +104,19 @@ func main() {
 		Handler:           stream.New(streamProvider{svc: svc}, cfg.PlayMode, log).Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
+	// Emby 反代(可选):EMBY_PROXY_PORT 非零时开启,PlaybackInfo 直连改写
+	var embyProxySrv *http.Server
+	if cfg.EmbyProxyPort != 0 {
+		proxyConf := func() embyproxy.Config {
+			e := st.GetEmbyConfig()
+			return embyproxy.Config{Base: e.Base, Key: e.APIKey}
+		}
+		embyProxySrv = &http.Server{
+			Addr:              ":" + strconv.Itoa(cfg.EmbyProxyPort),
+			Handler:           embyproxy.New(proxyConf, streamProvider{svc: svc}, cfg.MediaDir, log).Handler(),
+			ReadHeaderTimeout: 10 * time.Second,
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
@@ -121,6 +135,15 @@ func main() {
 			stop()
 		}
 	}()
+	if embyProxySrv != nil {
+		go func() {
+			log.Info("Emby 反代监听（PlaybackInfo 直连改写）", "addr", embyProxySrv.Addr)
+			if err := embyProxySrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("Emby 反代退出", "err", err)
+				stop()
+			}
+		}()
+	}
 
 	scheduler.New(st, log).Start(ctx)
 	app.StartWorkers(ctx)
@@ -133,4 +156,7 @@ func main() {
 	defer cancel()
 	_ = apiSrv.Shutdown(shutdownCtx)
 	_ = streamSrv.Shutdown(shutdownCtx)
+	if embyProxySrv != nil {
+		_ = embyProxySrv.Shutdown(shutdownCtx)
+	}
 }
