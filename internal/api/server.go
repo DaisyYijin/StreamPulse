@@ -210,6 +210,16 @@ func minInt(a, b int) int {
 	return b
 }
 
+// handleScrapeRecords 刮削运行记录。
+func (a *App) handleScrapeRecords(w http.ResponseWriter, r *http.Request) {
+	records, err := a.Store.ListScrapeRecords(50)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, records)
+}
+
 func sleepCtx(ctx context.Context, d time.Duration) {
 	select {
 	case <-ctx.Done():
@@ -273,6 +283,7 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
 	mux.Handle("GET /api/emby/webhook/status", auth(http.HandlerFunc(a.handleWebhookStatus)))
 	mux.Handle("GET /api/deepdel/records", auth(http.HandlerFunc(a.handleDeepDelRecords)))
+	mux.Handle("GET /api/scrape/records", auth(http.HandlerFunc(a.handleScrapeRecords)))
 	mux.Handle("GET /api/settings", auth(http.HandlerFunc(a.handleGetSettings)))
 	mux.Handle("PUT /api/settings", auth(http.HandlerFunc(a.handleSaveSettings)))
 
