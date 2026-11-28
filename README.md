@@ -106,7 +106,7 @@ docker run -d --name streampulse \
 | Emby 地址 / API Key | 刷库、媒体库状态探测 |
 | Emby Webhook Token | 校验 Emby 回调；留空不校验 |
 | 删除联动同时删网盘 | 默认关闭；开启后进 115 回收站（可还原） |
-| 115 开放平台 AppID / AppSecret | 仅使用开放平台扫码时需要；不填只用扫码 Cookie |
+| 115 开放平台 AppID | 仅使用开放平台扫码时需要；不填只用扫码 Cookie |
 | 管理员用户名 / 新密码 | 首次打开时创建；之后可在这里修改用户名与密码（至少 8 位） |
 
 密钥类字段留空表示不修改；要清空请调用 API 时带 `clearEmbyApiKey` 等标志。
