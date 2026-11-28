@@ -22,6 +22,7 @@ import (
 	"streampulse/internal/pan115"
 	"streampulse/internal/safego"
 	"streampulse/internal/scan"
+	"streampulse/internal/scrape"
 	"streampulse/internal/store"
 	"streampulse/internal/strm"
 )
@@ -45,6 +46,7 @@ type App struct {
 	// 任务队列:手动操作只入队(202),worker 串行执行
 	executors map[string]func(ctx context.Context, t *store.Task)
 	bus       *eventbus.Bus
+	Scraper   *scrape.Service
 
 	// Emby 定向刷新节流
 	embyMu      sync.Mutex
@@ -60,6 +62,7 @@ func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepde
 		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Incr: incrSvc, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
 		bus: eventbus.New(), lastRefresh: map[string]int64{},
+		Scraper: &scrape.Service{Store: st, Log: log},
 	}
 	a.registerExecutors()
 	// 增量落盘 → 按库定向刷新 Emby(节流,防 30 秒一轮把 Emby 刷爆)
@@ -141,6 +144,57 @@ func taskTimeout(kind string) time.Duration {
 	}
 }
 
+// handleScrape 手动刮削:入队(重复点击合并)。
+func (a *App) handleScrape(w http.ResponseWriter, r *http.Request) {
+	id, _ := parseInt64(r.PathValue("id"))
+	if _, err := a.Store.GetLibrary(id); err != nil {
+		writeErr(w, http.StatusNotFound, "媒体库不存在")
+		return
+	}
+	if a.Store.GetSetting("tmdb_api_key", "") == "" {
+		writeErr(w, http.StatusBadRequest, "请先在设置页填写 TMDB API Key")
+		return
+	}
+	payload, _ := json.Marshal(scrapePayload{LibraryID: id})
+	taskID, reused, err := a.Store.EnqueueTask("scrape", id, fmt.Sprintf("scrape:%d", id), string(payload))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"taskId": taskID, "reused": reused})
+}
+
+func (a *App) execScrape(ctx context.Context, t *store.Task) {
+	var p scrapePayload
+	_ = json.Unmarshal([]byte(t.Payload), &p)
+	lib, err := a.Store.GetLibrary(p.LibraryID)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", "媒体库不存在（可能已被删除）")
+		return
+	}
+	_ = a.Store.SetTaskProgress(t.ID, "刮削中 "+lib.Name)
+	sum, err := a.Scraper.ScrapeLibrary(ctx, lib.ID, "")
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", err.Error())
+		return
+	}
+	if err := a.emby().RefreshByPath(ctx, lib.LocalDir); err != nil {
+		a.Log.Warn("刮削后 Emby 刷新失败", "err", err)
+	}
+	msg := fmt.Sprintf("刮削完成：成功 %d，失败 %d，已存在 %d", sum.OK, sum.Failed, sum.Skipped)
+	if len(sum.Details) > 0 && sum.Failed > 0 {
+		msg += "；" + strings.Join(sum.Details[:minInt(3, len(sum.Details))], "；")
+	}
+	_ = a.Store.UpdateTask(t.ID, "done", msg)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
 func sleepCtx(ctx context.Context, d time.Duration) {
 	select {
 	case <-ctx.Done():
@@ -185,6 +239,7 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("DELETE /api/libraries/{id}", auth(http.HandlerFunc(a.handleDeleteLibrary)))
 	mux.Handle("POST /api/libraries/{id}/scan", auth(http.HandlerFunc(a.handleScan)))
 	mux.Handle("POST /api/libraries/{id}/sync-dir", auth(http.HandlerFunc(a.handleSyncDir)))
+	mux.Handle("POST /api/libraries/{id}/scrape", auth(http.HandlerFunc(a.handleScrape)))
 	mux.Handle("GET /api/sync/status", auth(http.HandlerFunc(a.handleSyncStatus)))
 	mux.Handle("GET /api/sync/rounds", auth(http.HandlerFunc(a.handleSyncRounds)))
 	mux.Handle("POST /api/sync/full", auth(http.HandlerFunc(a.handleFullSync)))
@@ -1019,12 +1074,33 @@ type fullSyncPayload struct {
 	LibraryIDs []int64 `json:"libraryIds"`
 }
 
+type scrapePayload struct {
+	LibraryID int64 `json:"libraryId"`
+}
+
 func (a *App) registerExecutors() {
 	a.executors = map[string]func(ctx context.Context, t *store.Task){
 		"scan":      a.execScan,
 		"sync-dir":  a.execSyncDir,
 		"full-sync": a.execFullSync,
+		"scrape":    a.execScrape,
 	}
+	// 同步完成(该库开了刮削且配了 Key)→ 自动入队刮削
+	a.bus.Subscribe(eventbus.EventSyncDone, func(payload any) {
+		ev, ok := payload.(eventbus.SyncDoneEvent)
+		if !ok || ev.Written <= 0 {
+			return
+		}
+		lib, err := a.Store.GetLibrary(ev.LibraryID)
+		if err != nil || !lib.Scrape {
+			return
+		}
+		if a.Store.GetSetting("tmdb_api_key", "") == "" {
+			return
+		}
+		payload2, _ := json.Marshal(scrapePayload{LibraryID: lib.ID})
+		_, _, _ = a.Store.EnqueueTask("scrape", lib.ID, fmt.Sprintf("scrape:%d", lib.ID), string(payload2))
+	})
 }
 
 func (a *App) execScan(ctx context.Context, t *store.Task) {
@@ -1166,6 +1242,8 @@ func (a *App) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		"adminUser":           a.Store.GetSetting("admin_user", "admin"),
 		"apiWaitSec":          a.Store.GetSetting("api_wait_sec", "1"),
 		"publicBase":          a.Store.GetSetting("public_base", ""),
+		"tmdbApiKeySet":       a.Store.GetSetting("tmdb_api_key", "") != "",
+		"tmdbLanguage":        a.Store.GetSetting("tmdb_language", "zh-CN"),
 	})
 }
 
@@ -1182,10 +1260,13 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		AdminUser             string `json:"adminUser"`
 		PublicBase            string `json:"publicBase"`
 		ApiWaitSec            int    `json:"apiWaitSec"`
+		TmdbApiKey            string `json:"tmdbApiKey"`
+		TmdbLanguage          string `json:"tmdbLanguage"`
 		NewPassword           string `json:"newPassword"`
 		ClearEmbyApiKey       bool   `json:"clearEmbyApiKey"`
 		ClearEmbyWebhookToken bool   `json:"clearEmbyWebhookToken"`
 		ClearP115AppSecret    bool   `json:"clearP115AppSecret"`
+		ClearTmdbApiKey       bool   `json:"clearTmdbApiKey"`
 	}
 	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
 		writeErr(w, http.StatusBadRequest, "请求格式错误")
@@ -1232,6 +1313,16 @@ func (a *App) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 		"public_base":        strings.TrimRight(strings.TrimSpace(in.PublicBase), "/"),
 		"p115_app_id":        strings.TrimSpace(in.P115AppId),
 		"p115_app_secret":    secret,
+	}
+	// TMDB:留空保持不变,显式 clearTmdbApiKey 清空
+	switch {
+	case in.ClearTmdbApiKey:
+		settings["tmdb_api_key"] = ""
+	case strings.TrimSpace(in.TmdbApiKey) != "":
+		settings["tmdb_api_key"] = strings.TrimSpace(in.TmdbApiKey)
+	}
+	if lang := strings.TrimSpace(in.TmdbLanguage); lang != "" {
+		settings["tmdb_language"] = lang
 	}
 	if in.ApiWaitSec > 0 {
 		settings["api_wait_sec"] = fmt.Sprintf("%d", in.ApiWaitSec)

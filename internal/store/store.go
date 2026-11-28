@@ -287,6 +287,7 @@ type Library struct {
 	ScanMode   string `json:"scanMode"`
 	Cron       string `json:"cron"`
 	Enabled    bool   `json:"enabled"`
+	Scrape     bool   `json:"scrape"`
 	LastScanAt int64  `json:"lastScanAt"`
 	CreatedAt  int64  `json:"createdAt"`
 	UpdatedAt  int64  `json:"updatedAt"`
@@ -299,34 +300,35 @@ func (s *Store) SaveLibrary(l *Library) (int64, error) {
 	}
 	l.UpdatedAt = now
 	if l.ID == 0 {
-		res, err := s.db.Exec(`INSERT INTO libraries(name,account_id,remote_cid,local_dir,base_url,strm_format,keep_ext,video_exts,meta_exts,min_size,scan_mode,cron,enabled,created_at,updated_at)
-			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-			l.Name, l.AccountID, l.RemoteCID, l.LocalDir, l.BaseURL, l.STRMFormat, b2i(l.KeepExt), l.VideoExts, l.MetaExts, l.MinSize, l.ScanMode, l.Cron, b2i(l.Enabled), l.CreatedAt, l.UpdatedAt)
+		res, err := s.db.Exec(`INSERT INTO libraries(name,account_id,remote_cid,local_dir,base_url,strm_format,keep_ext,video_exts,meta_exts,min_size,scan_mode,cron,enabled,scrape,created_at,updated_at)
+			VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+			l.Name, l.AccountID, l.RemoteCID, l.LocalDir, l.BaseURL, l.STRMFormat, b2i(l.KeepExt), l.VideoExts, l.MetaExts, l.MinSize, l.ScanMode, l.Cron, b2i(l.Enabled), b2i(l.Scrape), l.CreatedAt, l.UpdatedAt)
 		if err != nil {
 			return 0, err
 		}
 		return res.LastInsertId()
 	}
-	_, err := s.db.Exec(`UPDATE libraries SET name=?,account_id=?,remote_cid=?,local_dir=?,base_url=?,strm_format=?,keep_ext=?,video_exts=?,meta_exts=?,min_size=?,scan_mode=?,cron=?,enabled=?,updated_at=? WHERE id=?`,
-		l.Name, l.AccountID, l.RemoteCID, l.LocalDir, l.BaseURL, l.STRMFormat, b2i(l.KeepExt), l.VideoExts, l.MetaExts, l.MinSize, l.ScanMode, l.Cron, b2i(l.Enabled), l.UpdatedAt, l.ID)
+	_, err := s.db.Exec(`UPDATE libraries SET name=?,account_id=?,remote_cid=?,local_dir=?,base_url=?,strm_format=?,keep_ext=?,video_exts=?,meta_exts=?,min_size=?,scan_mode=?,cron=?,enabled=?,scrape=?,updated_at=? WHERE id=?`,
+		l.Name, l.AccountID, l.RemoteCID, l.LocalDir, l.BaseURL, l.STRMFormat, b2i(l.KeepExt), l.VideoExts, l.MetaExts, l.MinSize, l.ScanMode, l.Cron, b2i(l.Enabled), b2i(l.Scrape), l.UpdatedAt, l.ID)
 	return l.ID, err
 }
 
 func (s *Store) GetLibrary(id int64) (*Library, error) {
 	l := &Library{}
-	var keep, enabled int
-	err := s.db.QueryRow(`SELECT id,name,account_id,remote_cid,local_dir,base_url,strm_format,keep_ext,video_exts,meta_exts,min_size,scan_mode,cron,enabled,last_scan_at,created_at,updated_at FROM libraries WHERE id=?`, id).
-		Scan(&l.ID, &l.Name, &l.AccountID, &l.RemoteCID, &l.LocalDir, &l.BaseURL, &l.STRMFormat, &keep, &l.VideoExts, &l.MetaExts, &l.MinSize, &l.ScanMode, &l.Cron, &enabled, &l.LastScanAt, &l.CreatedAt, &l.UpdatedAt)
+	var keep, enabled, scrape int
+	err := s.db.QueryRow(`SELECT id,name,account_id,remote_cid,local_dir,base_url,strm_format,keep_ext,video_exts,meta_exts,min_size,scan_mode,cron,enabled,scrape,last_scan_at,created_at,updated_at FROM libraries WHERE id=?`, id).
+		Scan(&l.ID, &l.Name, &l.AccountID, &l.RemoteCID, &l.LocalDir, &l.BaseURL, &l.STRMFormat, &keep, &l.VideoExts, &l.MetaExts, &l.MinSize, &l.ScanMode, &l.Cron, &enabled, &scrape, &l.LastScanAt, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
 	l.KeepExt = keep != 0
 	l.Enabled = enabled != 0
+	l.Scrape = scrape != 0
 	return l, nil
 }
 
 func (s *Store) ListLibraries() ([]Library, error) {
-	rows, err := s.db.Query(`SELECT id,name,account_id,remote_cid,local_dir,base_url,strm_format,keep_ext,video_exts,meta_exts,min_size,scan_mode,cron,enabled,last_scan_at,created_at,updated_at FROM libraries ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id,name,account_id,remote_cid,local_dir,base_url,strm_format,keep_ext,video_exts,meta_exts,min_size,scan_mode,cron,enabled,scrape,last_scan_at,created_at,updated_at FROM libraries ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -334,12 +336,13 @@ func (s *Store) ListLibraries() ([]Library, error) {
 	out := make([]Library, 0)
 	for rows.Next() {
 		var l Library
-		var keep, enabled int
-		if err := rows.Scan(&l.ID, &l.Name, &l.AccountID, &l.RemoteCID, &l.LocalDir, &l.BaseURL, &l.STRMFormat, &keep, &l.VideoExts, &l.MetaExts, &l.MinSize, &l.ScanMode, &l.Cron, &enabled, &l.LastScanAt, &l.CreatedAt, &l.UpdatedAt); err != nil {
+		var keep, enabled, scrape int
+		if err := rows.Scan(&l.ID, &l.Name, &l.AccountID, &l.RemoteCID, &l.LocalDir, &l.BaseURL, &l.STRMFormat, &keep, &l.VideoExts, &l.MetaExts, &l.MinSize, &l.ScanMode, &l.Cron, &enabled, &scrape, &l.LastScanAt, &l.CreatedAt, &l.UpdatedAt); err != nil {
 			return nil, err
 		}
 		l.KeepExt = keep != 0
 		l.Enabled = enabled != 0
+		l.Scrape = scrape != 0
 		out = append(out, l)
 	}
 	return out, rows.Err()
@@ -1101,4 +1104,49 @@ func jsonUnmarshalStrings(s string) []string {
 		return nil
 	}
 	return out
+}
+
+// ---------- scrape records ----------
+
+type ScrapeRecord struct {
+	ID        int64  `json:"id"`
+	LibraryID int64  `json:"libraryId"`
+	OK        int    `json:"ok"`
+	Failed    int    `json:"failed"`
+	Skipped   int    `json:"skipped"`
+	Message   string `json:"message"`
+	CreatedAt int64  `json:"createdAt"`
+}
+
+func (s *Store) SaveScrapeRecord(r *ScrapeRecord) error {
+	if r.CreatedAt == 0 {
+		r.CreatedAt = time.Now().Unix()
+	}
+	res, err := s.db.Exec(`INSERT INTO scrape_records(library_id,ok,failed,skipped,message,created_at) VALUES(?,?,?,?,?,?)`,
+		r.LibraryID, r.OK, r.Failed, r.Skipped, r.Message, r.CreatedAt)
+	if err != nil {
+		return err
+	}
+	r.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *Store) ListScrapeRecords(limit int) ([]ScrapeRecord, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT id,library_id,ok,failed,skipped,message,created_at FROM scrape_records ORDER BY id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ScrapeRecord, 0)
+	for rows.Next() {
+		var r ScrapeRecord
+		if err := rows.Scan(&r.ID, &r.LibraryID, &r.OK, &r.Failed, &r.Skipped, &r.Message, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }

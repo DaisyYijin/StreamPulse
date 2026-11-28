@@ -21,6 +21,7 @@ var migrations = []migration{
 	{2, "task queue columns", migrateV2},
 	{3, "event suppress / path cache / event lifecycle", migrateV3},
 	{4, "deep delete records", migrateV4},
+	{5, "scrape toggle & records", migrateV5},
 }
 
 func (s *Store) migrate() error {
@@ -120,6 +121,21 @@ func migrateV4(tx *sql.Tx) error {
 	  video_count  INTEGER NOT NULL DEFAULT 0,
 	  remote_count INTEGER NOT NULL DEFAULT 0,
 	  created_at   INTEGER NOT NULL
+	)`)
+	return err
+}
+
+// v5 刮削:每库开关 + 运行记录。
+func migrateV5(tx *sql.Tx) error {
+	_, _ = tx.Exec(`ALTER TABLE libraries ADD COLUMN scrape INTEGER NOT NULL DEFAULT 0`)
+	_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS scrape_records (
+	  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+	  library_id INTEGER NOT NULL,
+	  ok         INTEGER NOT NULL DEFAULT 0,
+	  failed     INTEGER NOT NULL DEFAULT 0,
+	  skipped    INTEGER NOT NULL DEFAULT 0,
+	  message    TEXT NOT NULL DEFAULT '',
+	  created_at INTEGER NOT NULL
 	)`)
 	return err
 }
