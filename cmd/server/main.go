@@ -23,6 +23,9 @@ import (
 	"streampulse/internal/stream"
 )
 
+// version 由构建注入:go build -ldflags "-X main.version=0.2.0"
+var version = "dev"
+
 type streamProvider struct{ svc *p115svc.Service }
 
 func (p streamProvider) DownloadURL(ctx context.Context, pickcode string) (string, error) {
@@ -80,6 +83,10 @@ func main() {
 	if !cfg.IncrEnabled && st.GetSetting("incr_enabled", "") == "" {
 		_ = st.SetSetting("incr_enabled", "0")
 	}
+	// 启动自愈:上次进程中断遗留的 running 任务标为 failed
+	if err := st.RecoverStuckTasks(); err != nil {
+		log.Warn("恢复遗留任务状态失败", "err", err)
+	}
 	app, err := api.New(cfg, st, svc, deep, incremental, log)
 	if err != nil {
 		log.Error("初始化 API 失败", "err", err)
@@ -115,9 +122,10 @@ func main() {
 		}
 	}()
 
-	scheduler.New(st, svc, log).Start(ctx)
+	scheduler.New(st, log).Start(ctx)
+	app.StartWorkers(ctx)
 	incremental.Start(ctx)
-	log.Info("生活事件增量已启动", "interval", cfg.IncrInterval)
+	log.Info("生活事件增量已启动", "interval", cfg.IncrInterval, "version", version)
 
 	<-ctx.Done()
 	log.Info("正在关闭…")

@@ -2,7 +2,7 @@ name: docker
 
 on:
   push:
-    branches: [main, rewrite]
+    branches: [main]
     tags: ["v*"]
   workflow_dispatch:
 

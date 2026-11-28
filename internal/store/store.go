@@ -3,7 +3,6 @@ package store
 import (
 	"database/sql"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -24,7 +23,8 @@ func Open(dataDir string) (*Store, error) {
 	// 目录可能是旧版本以 0755 创建的，显式收紧
 	_ = os.Chmod(dataDir, 0o700)
 	p := filepath.Join(dataDir, "streampulse.db")
-	db, err := sql.Open("sqlite", "file:"+p+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)")
+	db, err := sql.Open("sqlite", "file:"+p+
+		"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(10000)&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)")
 	if err != nil {
 		return nil, err
 	}
@@ -159,15 +159,7 @@ CREATE TABLE IF NOT EXISTS local_dirs (
 );
 `
 
-func (s *Store) migrate() error {
-	if _, err := s.db.Exec(schema); err != nil {
-		return fmt.Errorf("migrate: %w", err)
-	}
-	// 旧库补列：失败（已存在）忽略。
-	_, _ = s.db.Exec(`ALTER TABLE accounts ADD COLUMN device TEXT NOT NULL DEFAULT 'web'`)
-	_, _ = s.db.Exec(`ALTER TABLE accounts ADD COLUMN profile TEXT NOT NULL DEFAULT ''`)
-	return nil
-}
+// migrate 已迁移到 migrate.go(版本化迁移框架);schema 常量保留在那里使用。
 
 // ---------- settings ----------
 
@@ -466,6 +458,8 @@ type Task struct {
 	LibraryID int64  `json:"libraryId"`
 	Status    string `json:"status"`
 	Message   string `json:"message"`
+	DedupeKey string `json:"dedupeKey,omitempty"`
+	Payload   string `json:"payload,omitempty"`
 	StartedAt int64  `json:"startedAt"`
 	EndedAt   int64  `json:"endedAt"`
 	CreatedAt int64  `json:"createdAt"`
@@ -477,6 +471,71 @@ func (s *Store) CreateTask(kind string, libraryID int64) (int64, error) {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// EnqueueTask 入队一条任务;dedupeKey 非空且已有同键排队任务时返回既有任务
+// (reused=true),不产生重复排队。payload 是执行参数 JSON。
+func (s *Store) EnqueueTask(kind string, libraryID int64, dedupeKey, payload string) (id int64, reused bool, err error) {
+	now := time.Now().Unix()
+	if dedupeKey != "" {
+		res, err := s.db.Exec(`INSERT INTO tasks(kind,library_id,status,dedupe_key,payload,created_at)
+			VALUES(?,?,'queued',?,?,?)
+			ON CONFLICT(dedupe_key) WHERE status='queued' AND dedupe_key <> '' DO NOTHING`,
+			kind, libraryID, dedupeKey, payload, now)
+		if err == nil {
+			if n, _ := res.RowsAffected(); n > 0 {
+				id, _ := res.LastInsertId()
+				return id, false, nil
+			}
+			// 冲突(已有排队任务):查出那条返回
+			var exist int64
+			qerr := s.db.QueryRow(`SELECT id FROM tasks WHERE dedupe_key=? AND status='queued' LIMIT 1`, dedupeKey).Scan(&exist)
+			if qerr == nil {
+				return exist, true, nil
+			}
+			// 查不到说明并发下刚被取走,落回普通插入
+		}
+	}
+	res, err := s.db.Exec(`INSERT INTO tasks(kind,library_id,status,dedupe_key,payload,created_at) VALUES(?,?,'queued',?,?,?)`,
+		kind, libraryID, dedupeKey, payload, now)
+	if err != nil {
+		return 0, false, err
+	}
+	id, err = res.LastInsertId()
+	return id, false, err
+}
+
+// ClaimNextTask 原子取出最早一条排队任务并置为 running;无任务返回 (nil, nil)。
+func (s *Store) ClaimNextTask() (*Task, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }() // Commit 后 Rollback 无效,安全
+	var t Task
+	err = tx.QueryRow(`SELECT id,kind,library_id,dedupe_key,payload FROM tasks WHERE status='queued' ORDER BY id LIMIT 1`).
+		Scan(&t.ID, &t.Kind, &t.LibraryID, &t.DedupeKey, &t.Payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().Unix()
+	if _, err := tx.Exec(`UPDATE tasks SET status='running',message='',started_at=CASE WHEN started_at=0 THEN ? ELSE started_at END WHERE id=?`, now, t.ID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	t.Status = "running"
+	return &t, nil
+}
+
+// SetTaskProgress 运行中刷新 message(不动 started_at/ended_at)。
+func (s *Store) SetTaskProgress(id int64, message string) error {
+	_, err := s.db.Exec(`UPDATE tasks SET message=? WHERE id=? AND status='running'`, message, id)
+	return err
 }
 
 func (s *Store) UpdateTask(id int64, status, message string) error {
@@ -491,11 +550,17 @@ func (s *Store) UpdateTask(id int64, status, message string) error {
 	return err
 }
 
+// RecoverStuckTasks 启动自愈:上次进程中断遗留的 running 任务标为 failed。
+func (s *Store) RecoverStuckTasks() error {
+	_, err := s.db.Exec(`UPDATE tasks SET status='failed',message='进程中断',ended_at=? WHERE status='running'`, time.Now().Unix())
+	return err
+}
+
 func (s *Store) ListTasks(limit int) ([]Task, error) {
 	if limit <= 0 {
 		limit = 50
 	}
-	rows, err := s.db.Query(`SELECT id,kind,library_id,status,message,started_at,ended_at,created_at FROM tasks ORDER BY id DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT id,kind,library_id,status,message,dedupe_key,payload,started_at,ended_at,created_at FROM tasks ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -503,7 +568,7 @@ func (s *Store) ListTasks(limit int) ([]Task, error) {
 	out := make([]Task, 0)
 	for rows.Next() {
 		var t Task
-		if err := rows.Scan(&t.ID, &t.Kind, &t.LibraryID, &t.Status, &t.Message, &t.StartedAt, &t.EndedAt, &t.CreatedAt); err != nil {
+		if err := rows.Scan(&t.ID, &t.Kind, &t.LibraryID, &t.Status, &t.Message, &t.DedupeKey, &t.Payload, &t.StartedAt, &t.EndedAt, &t.CreatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, t)

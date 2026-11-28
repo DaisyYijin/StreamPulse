@@ -42,6 +42,8 @@ type Client struct {
 
 	read  *ratelimit.Limiter
 	write *ratelimit.Limiter
+	fast  *ratelimit.Limiter // 播放取直链独立通道
+	brk   breaker
 
 	mu         sync.RWMutex
 	cred       Credential
@@ -60,6 +62,7 @@ func New(cred Credential, readEvery, writeEvery time.Duration) *Client {
 		UserAgent:  DefaultUserAgent,
 		read:       ratelimit.New(readEvery),
 		write:      ratelimit.New(writeEvery),
+		fast:       ratelimit.New(fastInterval),
 		cred:       cred,
 		driverMode: true,
 	}
@@ -159,13 +162,14 @@ func (c *Client) cookieHeader() string {
 }
 
 func (c *Client) do(ctx context.Context, method, rawURL string, form url.Values, write bool, out any) error {
-	lim := c.read
+	kind := gateRead
 	if write {
-		lim = c.write
+		kind = gateWrite
 	}
-	if err := lim.Wait(ctx); err != nil {
-		return err
-	}
+	return c.gated(ctx, kind, func() error { return c.doOnce(ctx, method, rawURL, form, out) })
+}
+
+func (c *Client) doOnce(ctx context.Context, method, rawURL string, form url.Values, out any) error {
 	var body io.Reader
 	if form != nil {
 		body = strings.NewReader(form.Encode())
@@ -243,7 +247,12 @@ func (c *Client) listWithDriver(ctx context.Context, cid string) ([]Entry, error
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	files, err := c.driverClient().ListWithLimit(cid, int64(c.PageLimit()))
+	var files *[]driver.File
+	err := c.gated(ctx, gateRead, func() error {
+		f, err := c.driverClient().ListWithLimit(cid, int64(c.PageLimit()))
+		files = f
+		return err
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -316,11 +325,19 @@ func (c *Client) listWithHTTP(ctx context.Context, cid string) ([]Entry, error) 
 // FileDetail 查单个文件。
 func (c *Client) FileDetail(ctx context.Context, fid string) (*FileDetail, error) {
 	if c.useDriver() {
-		f, err := c.driverClient().GetFile(fid)
+		var det *FileDetail
+		err := c.gated(ctx, gateRead, func() error {
+			f, err := c.driverClient().GetFile(fid)
+			if err != nil {
+				return err
+			}
+			det = &FileDetail{FID: f.FileID, Name: f.Name, Size: f.Size, Pickcode: f.PickCode, SHA1: f.Sha1}
+			return nil
+		})
 		if err != nil {
 			return nil, err
 		}
-		return &FileDetail{FID: f.FileID, Name: f.Name, Size: f.Size, Pickcode: f.PickCode, SHA1: f.Sha1}, nil
+		return det, nil
 	}
 	q := url.Values{}
 	q.Set("fid", fid)
@@ -353,14 +370,23 @@ func (c *Client) DownloadURL(ctx context.Context, pickcode string) (string, erro
 		return "", errors.New("pickcode 为空")
 	}
 	if c.useDriver() {
-		info, err := c.driverClient().Download(pickcode)
+		// 播放取链走 fast 通道:独立 200ms 间隔,不被后台扫描的 1s 读队列饿死
+		var url string
+		err := c.gated(ctx, gateFast, func() error {
+			info, err := c.driverClient().Download(pickcode)
+			if err != nil {
+				return err
+			}
+			if info.Url.Url == "" {
+				return errors.New("115 取直链响应里没有 url")
+			}
+			url = info.Url.Url
+			return nil
+		})
 		if err != nil {
 			return "", err
 		}
-		if info.Url.Url == "" {
-			return "", errors.New("115 取直链响应里没有 url")
-		}
-		return info.Url.Url, nil
+		return url, nil
 	}
 	payload, _ := json.Marshal(map[string]string{"pickcode": pickcode})
 	form := url.Values{}

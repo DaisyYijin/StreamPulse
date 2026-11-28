@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"streampulse/internal/config"
+	"streampulse/internal/incr"
 	"streampulse/internal/pan115"
 	"streampulse/internal/scan"
 	"streampulse/internal/store"
+	"streampulse/internal/synclock"
 )
 
 // Service 负责把台账里的账号变成可用的 115 客户端，并串行化扫描。
@@ -21,11 +23,28 @@ type Service struct {
 
 	mu      sync.Mutex
 	clients map[int64]*pan115.Client
-	scanMu  sync.Mutex // 视频串行：同一进程内扫描不并发
+	Sync    *synclock.Lock // 重活互斥：扫描/增量/目录同步同一把礼让锁
 }
 
 func New(st *store.Store, cfg *config.Config) *Service {
-	return &Service{Store: st, Cfg: cfg, clients: map[int64]*pan115.Client{}}
+	return &Service{Store: st, Cfg: cfg, clients: map[int64]*pan115.Client{}, Sync: synclock.New()}
+}
+
+// SyncStatus 供状态页展示"被谁占着、占多久、几个人在等"。
+func (s *Service) SyncStatus() synclock.Status { return s.Sync.Describe() }
+
+// RequestYield 让正在跑的重活尽快收工（增量请求让路时用）。
+func (s *Service) RequestYield() { s.Sync.RequestYield() }
+
+// ThrottleStatus 返回当前账号客户端的节流/熔断状态;没有缓存客户端时返回 nil。
+func (s *Service) ThrottleStatus() *pan115.ThrottleStatus {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, c := range s.clients {
+		st := c.ThrottleStatus()
+		return &st
+	}
+	return nil
 }
 
 func (s *Service) Client(accountID int64) (*pan115.Client, error) {
@@ -102,10 +121,13 @@ func (s *Service) MainDownloadURL(ctx context.Context, pickcode string) (string,
 	return c.DownloadURL(ctx, pickcode)
 }
 
-// ScanLibrary 执行一次完整扫描。串行锁保证视频请求不会互相打爆 115。
+// ScanLibrary 执行一次完整扫描。礼让锁保证同一进程内重活串行，
+// 且扫描让路给排队中的增量（Yield 查点在 scan.Run 的目录循环里）。
 func (s *Service) ScanLibrary(ctx context.Context, lib *store.Library) (scan.Result, error) {
-	s.scanMu.Lock()
-	defer s.scanMu.Unlock()
+	if err := s.Sync.Lock(ctx, "scan:"+lib.Name); err != nil {
+		return scan.Result{}, err
+	}
+	defer s.Sync.Unlock()
 	acc, err := s.Store.GetAccount(lib.AccountID)
 	if err != nil {
 		return scan.Result{}, err
@@ -123,13 +145,17 @@ func (s *Service) ScanLibrary(ctx context.Context, lib *store.Library) (scan.Res
 		Source:  c,
 		Store:   s.Store,
 		UID:     uid,
+		Yield:   s.Sync.YieldRequested,
 	})
 }
 
-// ScanDir 供「目录行同步 STRM」。
+// ScanDir 供「目录行同步 STRM」与增量消费。
+// 礼让锁有人排队（或已被重活占用）时礼貌让路，事件保持 pending 下轮重放。
 func (s *Service) ScanDir(ctx context.Context, lib *store.Library, cid string) (scan.Result, error) {
-	s.scanMu.Lock()
-	defer s.scanMu.Unlock()
+	if !s.Sync.TryLockPolite("syncdir:" + lib.Name) {
+		return scan.Result{}, incr.ErrBusy
+	}
+	defer s.Sync.Unlock()
 	acc, err := s.Store.GetAccount(lib.AccountID)
 	if err != nil {
 		return scan.Result{}, err
@@ -144,6 +170,9 @@ func (s *Service) ScanDir(ctx context.Context, lib *store.Library, cid string) (
 	}
 	return scan.ScanOneDir(ctx, scan.Options{Library: lib, Source: c, Store: s.Store, UID: uid}, cid)
 }
+
+// ErrBusy 表示礼让锁被占用且有人排队，本次礼貌放弃。
+var ErrBusy = errors.New("有任务正在占用 115 通道，本轮已让路")
 
 // ListRemoteDir 供目录选择器。
 func (s *Service) ListRemoteDir(ctx context.Context, accountID int64, cid string) ([]pan115.Entry, error) {

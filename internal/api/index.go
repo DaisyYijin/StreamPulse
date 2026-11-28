@@ -4,12 +4,19 @@ import (
 	"net/http"
 	"net/url"
 
+	"streampulse/internal/api/web"
+
 	qrcode "github.com/skip2/go-qrcode"
 )
 
 func (a *App) handleIndex(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(indexHTML))
+	// Vue 3 单文件 SPA(go:embed);旧版内嵌页保留在 /legacy 作为回退。
+	if r.URL.Path == "/legacy" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write([]byte(indexHTML))
+		return
+	}
+	web.Handler().ServeHTTP(w, r)
 }
 
 func (a *App) handleQRImage(w http.ResponseWriter, r *http.Request) {

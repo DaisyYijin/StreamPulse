@@ -15,9 +15,11 @@ import (
 	"streampulse/internal/config"
 	"streampulse/internal/deepdel"
 	"streampulse/internal/emby"
+	"streampulse/internal/eventbus"
 	"streampulse/internal/incr"
 	"streampulse/internal/p115svc"
 	"streampulse/internal/pan115"
+	"streampulse/internal/safego"
 	"streampulse/internal/store"
 )
 
@@ -36,6 +38,10 @@ type App struct {
 	opena map[string]*pan115.OpenAuth
 
 	setupMu sync.Mutex
+
+	// 任务队列:手动操作只入队(202),worker 串行执行
+	executors map[string]func(ctx context.Context, t *store.Task)
+	bus       *eventbus.Bus
 }
 
 func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, incrSvc *incr.Service, log *slog.Logger) (*App, error) {
@@ -46,9 +52,67 @@ func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepde
 	a := &App{
 		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Incr: incrSvc, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
+		bus: eventbus.New(),
 	}
+	a.registerExecutors()
 	// 首次启动不生成密码：由 /api/setup 让用户自己创建管理员。
 	return a, nil
+}
+
+// Bus 暴露事件总线(同步完成 → 刮削 → 刷库 联动用)。
+func (a *App) Bus() *eventbus.Bus { return a.bus }
+
+// StartWorkers 启动后台任务 worker 与事件消费。ctx 结束即停。
+func (a *App) StartWorkers(ctx context.Context) {
+	safego.Go("task-worker", a.Log, func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+			t, err := a.Store.ClaimNextTask()
+			if err != nil {
+				a.Log.Warn("取任务失败", "err", err)
+				sleepCtx(ctx, 2*time.Second)
+				continue
+			}
+			if t == nil {
+				sleepCtx(ctx, 2*time.Second)
+				continue
+			}
+			safego.Go("task:"+t.Kind, a.Log, func() { a.runTask(ctx, t) })
+		}
+	})
+}
+
+func (a *App) runTask(ctx context.Context, t *store.Task) {
+	exec, ok := a.executors[t.Kind]
+	if !ok {
+		_ = a.Store.UpdateTask(t.ID, "failed", "未知任务类型: "+t.Kind)
+		return
+	}
+	tctx, cancel := context.WithTimeout(ctx, taskTimeout(t.Kind))
+	defer cancel()
+	exec(tctx, t)
+}
+
+func taskTimeout(kind string) time.Duration {
+	switch kind {
+	case "sync-dir":
+		return 2 * time.Hour
+	case "scrape":
+		return 4 * time.Hour
+	default:
+		return 12 * time.Hour
+	}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(d):
+	}
 }
 
 // initialized 以显式注册标记为准：旧版本自动生成的密码哈希不算注册完成。
@@ -649,39 +713,22 @@ func (a *App) handleDeleteLibrary(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleScan(w http.ResponseWriter, r *http.Request) {
 	id, _ := parseInt64(r.PathValue("id"))
-	lib, err := a.Store.GetLibrary(id)
-	if err != nil {
+	if _, err := a.Store.GetLibrary(id); err != nil {
 		writeErr(w, http.StatusNotFound, "媒体库不存在")
 		return
 	}
-	taskID, _ := a.Store.CreateTask("scan", lib.ID)
-	go a.runScan(taskID, lib)
-	writeJSON(w, http.StatusAccepted, map[string]int64{"taskId": taskID})
-}
-
-func (a *App) runScan(taskID int64, lib *store.Library) {
-	_ = a.Store.UpdateTask(taskID, "running", "扫描中")
-	ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
-	defer cancel()
-	res, err := a.Svc.ScanLibrary(ctx, lib)
+	payload, _ := json.Marshal(scanPayload{LibraryID: id})
+	taskID, reused, err := a.Store.EnqueueTask("scan", id, fmt.Sprintf("scan:%d", id), string(payload))
 	if err != nil {
-		_ = a.Store.UpdateTask(taskID, "failed", err.Error())
-		a.Log.Error("扫描失败", "library", lib.Name, "err", err)
+		writeErr(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	if err := a.emby().RefreshLibrary(ctx, ""); err != nil {
-		a.Log.Warn("Emby 刷新失败", "err", err)
-	}
-	msg := fmt.Sprintf("扫描 %d，写入 %d，跳过 %d，改名 %d，附属 %d，失效 %d",
-		res.Scanned, res.Written, res.Skipped, res.Renamed, res.Meta, res.Orphans)
-	_ = a.Store.UpdateTask(taskID, "done", msg)
-	a.Log.Info("扫描完成", "library", lib.Name, "message", msg)
+	writeJSON(w, http.StatusAccepted, map[string]any{"taskId": taskID, "reused": reused})
 }
 
 func (a *App) handleSyncDir(w http.ResponseWriter, r *http.Request) {
 	id, _ := parseInt64(r.PathValue("id"))
-	lib, err := a.Store.GetLibrary(id)
-	if err != nil {
+	if _, err := a.Store.GetLibrary(id); err != nil {
 		writeErr(w, http.StatusNotFound, "媒体库不存在")
 		return
 	}
@@ -693,19 +740,13 @@ func (a *App) handleSyncDir(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusBadRequest, "cid 必填")
 		return
 	}
-	taskID, _ := a.Store.CreateTask("sync-dir", lib.ID)
-	go func() {
-		_ = a.Store.UpdateTask(taskID, "running", "同步目录")
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Hour)
-		defer cancel()
-		res, err := a.Svc.ScanDir(ctx, lib, in.CID)
-		if err != nil {
-			_ = a.Store.UpdateTask(taskID, "failed", err.Error())
-			return
-		}
-		_ = a.Store.UpdateTask(taskID, "done", fmt.Sprintf("目录同步完成：%d 个视频，写入 %d", res.Scanned, res.Written))
-	}()
-	writeJSON(w, http.StatusAccepted, map[string]int64{"taskId": taskID})
+	payload, _ := json.Marshal(syncDirPayload{LibraryID: id, CID: in.CID})
+	taskID, reused, err := a.Store.EnqueueTask("sync-dir", id, fmt.Sprintf("syncdir:%d:%s", id, in.CID), string(payload))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"taskId": taskID, "reused": reused})
 }
 
 // ---------- sync ----------
@@ -715,7 +756,16 @@ func (a *App) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"enabled": false})
 		return
 	}
-	writeJSON(w, http.StatusOK, a.Incr.Status())
+	st := a.Incr.Status()
+	// 平铺增量状态 + 附加锁占用与 115 通道状态(前端按字段读,向后兼容)
+	data, _ := json.Marshal(st)
+	var m map[string]any
+	_ = json.Unmarshal(data, &m)
+	m["lock"] = a.Svc.SyncStatus()
+	if ts := a.Svc.ThrottleStatus(); ts != nil {
+		m["throttle"] = ts
+	}
+	writeJSON(w, http.StatusOK, m)
 }
 
 func (a *App) handleIncremental(w http.ResponseWriter, r *http.Request) {
@@ -786,47 +836,141 @@ func (a *App) handleFullSync(w http.ResponseWriter, r *http.Request) {
 	for _, id := range in.LibraryIDs {
 		want[id] = true
 	}
-	var selected []*store.Library
+	var selected []int64
+	names := []string{}
 	for i := range libs {
 		if !libs[i].Enabled {
 			continue
 		}
 		if len(want) == 0 || want[libs[i].ID] {
-			selected = append(selected, &libs[i])
+			selected = append(selected, libs[i].ID)
+			names = append(names, libs[i].Name)
 		}
 	}
 	if len(selected) == 0 {
 		writeErr(w, http.StatusBadRequest, "没有可同步的媒体库")
 		return
 	}
-	taskID, _ := a.Store.CreateTask("full-sync", 0)
-	go func() {
-		_ = a.Store.UpdateTask(taskID, "running", fmt.Sprintf("全量同步中（%d 个媒体库）", len(selected)))
-		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
-		defer cancel()
-		var scanned, written, skipped, orphans, failed int
-		for _, lib := range selected {
-			res, err := a.Svc.ScanLibrary(ctx, lib)
-			if err != nil {
-				failed++
-				a.Log.Warn("全量同步失败", "library", lib.Name, "err", err)
-				continue
-			}
-			scanned += res.Scanned
-			written += res.Written
-			skipped += res.Skipped
-			orphans += res.Orphans
+	payload, _ := json.Marshal(fullSyncPayload{LibraryIDs: selected})
+	taskID, reused, err := a.Store.EnqueueTask("full-sync", 0, "full-sync", string(payload))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	_ = a.Store.SetTaskProgress(taskID, fmt.Sprintf("全量同步排队（%d 个媒体库）", len(selected)))
+	writeJSON(w, http.StatusAccepted, map[string]any{"taskId": taskID, "reused": reused, "libraries": names})
+}
+
+// ---------- 任务执行器（worker 串行调用） ----------
+
+type scanPayload struct {
+	LibraryID int64 `json:"libraryId"`
+}
+
+type syncDirPayload struct {
+	LibraryID int64  `json:"libraryId"`
+	CID       string `json:"cid"`
+}
+
+type fullSyncPayload struct {
+	LibraryIDs []int64 `json:"libraryIds"`
+}
+
+func (a *App) registerExecutors() {
+	a.executors = map[string]func(ctx context.Context, t *store.Task){
+		"scan":      a.execScan,
+		"sync-dir":  a.execSyncDir,
+		"full-sync": a.execFullSync,
+	}
+}
+
+func (a *App) execScan(ctx context.Context, t *store.Task) {
+	var p scanPayload
+	_ = json.Unmarshal([]byte(t.Payload), &p)
+	lib, err := a.Store.GetLibrary(p.LibraryID)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", "媒体库不存在（可能已被删除）")
+		return
+	}
+	_ = a.Store.SetTaskProgress(t.ID, "扫描中 "+lib.Name)
+	start := time.Now()
+	res, err := a.Svc.ScanLibrary(ctx, lib)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", err.Error())
+		a.Log.Error("扫描失败", "library", lib.Name, "err", err)
+		return
+	}
+	if err := a.emby().RefreshLibrary(ctx, ""); err != nil {
+		a.Log.Warn("Emby 刷新失败", "err", err)
+	}
+	msg := fmt.Sprintf("扫描 %d，写入 %d，跳过 %d，改名 %d，附属 %d，失效 %d，耗时 %.0fs",
+		res.Scanned, res.Written, res.Skipped, res.Renamed, res.Meta, res.Orphans, time.Since(start).Seconds())
+	_ = a.Store.UpdateTask(t.ID, "done", msg)
+	a.Log.Info("扫描完成", "library", lib.Name, "message", msg)
+	a.bus.Publish(eventbus.EventSyncDone, eventbus.SyncDoneEvent{
+		LibraryID: lib.ID, LibraryName: lib.Name, Written: res.Written,
+	})
+}
+
+func (a *App) execSyncDir(ctx context.Context, t *store.Task) {
+	var p syncDirPayload
+	_ = json.Unmarshal([]byte(t.Payload), &p)
+	lib, err := a.Store.GetLibrary(p.LibraryID)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", "媒体库不存在（可能已被删除）")
+		return
+	}
+	_ = a.Store.SetTaskProgress(t.ID, "同步目录 "+p.CID)
+	res, err := a.Svc.ScanDir(ctx, lib, p.CID)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", err.Error())
+		return
+	}
+	_ = a.Store.UpdateTask(t.ID, "done", fmt.Sprintf("目录同步完成：%d 个视频，写入 %d", res.Scanned, res.Written))
+}
+
+func (a *App) execFullSync(ctx context.Context, t *store.Task) {
+	var p fullSyncPayload
+	if err := json.Unmarshal([]byte(t.Payload), &p); err != nil || len(p.LibraryIDs) == 0 {
+		_ = a.Store.UpdateTask(t.ID, "failed", "任务参数无效")
+		return
+	}
+	var scanned, written, skipped, orphans, failed int
+	for i, libID := range p.LibraryIDs {
+		if ctx.Err() != nil {
+			_ = a.Store.UpdateTask(t.ID, "failed", "已取消")
+			return
 		}
-		_ = a.emby().RefreshLibrary(ctx, "")
-		msg := fmt.Sprintf("全量同步完成：扫描 %d，写入 %d，跳过 %d，失效 %d，失败 %d", scanned, written, skipped, orphans, failed)
-		status := "done"
-		if failed > 0 && written == 0 && scanned == 0 {
-			status = "failed"
+		lib, err := a.Store.GetLibrary(libID)
+		if err != nil {
+			failed++
+			continue
 		}
-		_ = a.Store.UpdateTask(taskID, status, msg)
-		a.Log.Info("全量同步结束", "message", msg)
-	}()
-	writeJSON(w, http.StatusAccepted, map[string]int64{"taskId": taskID})
+		_ = a.Store.SetTaskProgress(t.ID, fmt.Sprintf("全量同步 %d/%d：%s", i+1, len(p.LibraryIDs), lib.Name))
+		res, err := a.Svc.ScanLibrary(ctx, lib)
+		if err != nil {
+			failed++
+			a.Log.Warn("全量同步失败", "library", lib.Name, "err", err)
+			continue
+		}
+		scanned += res.Scanned
+		written += res.Written
+		skipped += res.Skipped
+		orphans += res.Orphans
+		a.bus.Publish(eventbus.EventSyncDone, eventbus.SyncDoneEvent{
+			LibraryID: lib.ID, LibraryName: lib.Name, Written: res.Written,
+		})
+	}
+	if err := a.emby().RefreshLibrary(ctx, ""); err != nil {
+		a.Log.Warn("Emby 刷新失败", "err", err)
+	}
+	msg := fmt.Sprintf("全量同步完成：扫描 %d，写入 %d，跳过 %d，失效 %d，失败 %d", scanned, written, skipped, orphans, failed)
+	status := "done"
+	if failed > 0 && written == 0 && scanned == 0 {
+		status = "failed"
+	}
+	_ = a.Store.UpdateTask(t.ID, status, msg)
+	a.Log.Info("全量同步结束", "message", msg)
 }
 
 // ---------- tasks ----------

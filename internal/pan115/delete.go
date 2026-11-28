@@ -14,7 +14,9 @@ func (c *Client) DeleteToRecycle(ctx context.Context, fids []string) error {
 		return nil
 	}
 	if c.useDriver() {
-		return c.driverClient().Delete(fids...)
+		return c.gated(ctx, gateWrite, func() error {
+			return c.driverClient().Delete(fids...)
+		})
 	}
 	form := url.Values{}
 	for i, fid := range fids {

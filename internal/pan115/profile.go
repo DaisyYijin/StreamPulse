@@ -32,32 +32,51 @@ func (c *Client) GetProfile(ctx context.Context) (*Profile, error) {
 	var p Profile
 	var errs []string
 
-	if u, err := d.GetUser(); err == nil {
-		p.UserID = u.UserID
-		p.Name = u.UserName
-		p.Face = u.Face
-		p.VIP = u.Vip
-		p.Expire = u.Expire
-		p.Forever = u.Forever
-		p.Privilege = u.IsPrivilege
-	} else {
-		errs = append(errs, "user: "+err.Error())
+	err := c.gated(ctx, gateRead, func() error {
+		if u, err := d.GetUser(); err == nil {
+			p.UserID = u.UserID
+			p.Name = u.UserName
+			p.Face = u.Face
+			p.VIP = u.Vip
+			p.Expire = u.Expire
+			p.Forever = u.Forever
+			p.Privilege = u.IsPrivilege
+		} else {
+			errs = append(errs, "user: "+err.Error())
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	for attempt := 0; attempt < 3; attempt++ {
-		if info, err := d.GetInfo(); err == nil {
+		var ok bool
+		var infoErr error
+		err := c.gated(ctx, gateRead, func() error {
+			info, err := d.GetInfo()
+			if err != nil {
+				infoErr = err
+				return err
+			}
 			p.Total = info.SpaceInfo.AllTotal.Size
 			p.Used = info.SpaceInfo.AllUse.Size
+			ok = true
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		if ok {
 			break
-		} else {
-			if attempt == 2 {
-				errs = append(errs, "info: "+err.Error())
-			}
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(500 * time.Millisecond):
-			}
+		}
+		if attempt == 2 {
+			errs = append(errs, "info: "+infoErr.Error())
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
 		}
 	}
 

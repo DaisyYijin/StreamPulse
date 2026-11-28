@@ -43,12 +43,17 @@ type Status struct {
 }
 
 type Result struct {
-	Events      int  `json:"events"`
-	NewEvents   int  `json:"newEvents"`
-	ScannedDirs int  `json:"scannedDirs"`
-	Baseline    bool `json:"baseline"`
-	Errors      int  `json:"errors"`
+	Events      int    `json:"events"`
+	NewEvents   int    `json:"newEvents"`
+	ScannedDirs int    `json:"scannedDirs"`
+	Baseline    bool   `json:"baseline"`
+	Errors      int    `json:"errors"`
+	Busy        bool   `json:"busy,omitempty"`   // 礼让锁被重活占用,整轮放弃
+	Yielded     bool   `json:"yielded,omitempty"` // 有任务排队,消费中途让路
 }
+
+// ErrBusy 表示 115 通道被扫描等重活占用;增量整轮放弃,事件保持 pending 下轮重放。
+var ErrBusy = errors.New("115 通道被占用，本轮增量让路")
 
 func (s *Service) Start(ctx context.Context) {
 	go func() {
@@ -200,7 +205,17 @@ func (s *Service) PollOnce(ctx context.Context) (res Result, err error) {
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
+		// 礼让查点：手动任务入队后,增量就地收工,事件保持 pending。
+		if y, ok := s.Src.(Yielder); ok && y.YieldRequested() {
+			res.Yielded = true
+			break
+		}
 		if _, err := s.Src.ScanDir(ctx, t.lib, t.cid); err != nil {
+			if errors.Is(err, ErrBusy) {
+				// 扫描等重活占着锁(或有人在排队),整轮放弃,游标不推进。
+				res.Busy = true
+				break
+			}
 			res.Errors++
 			s.Log.Warn("增量扫描目录失败", "library", t.lib.Name, "cid", t.cid, "err", err)
 			continue
@@ -209,11 +224,16 @@ func (s *Service) PollOnce(ctx context.Context) (res Result, err error) {
 		n++
 	}
 
-	// 有失败或目标目录超过单轮上限时不推进游标，下一轮继续。
-	if res.Errors == 0 && len(targets) <= maxDirs {
+	// 有失败、让路或目标目录超过单轮上限时不推进游标，下一轮继续。
+	if res.Errors == 0 && !res.Busy && !res.Yielded && len(targets) <= maxDirs {
 		_ = s.Store.SetSetting(cursorKey(acc.ID), latest)
 	}
 	return res, nil
+}
+
+// Yielder 可选能力:礼让锁状态查询(生产实现是 p115svc,测试可不给)。
+type Yielder interface {
+	YieldRequested() bool
 }
 
 type dirTarget struct {

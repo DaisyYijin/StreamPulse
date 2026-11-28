@@ -31,6 +31,9 @@ type Options struct {
 	Store   *store.Store
 	UID     string // 附加账号的 UID 前缀，主号留空
 	Logger  *slog.Logger
+	// Yield 非空时在目录循环之间调用；返回 true 表示有人在排队（增量请求
+	// 让路），扫描就地停下，剩余目录留待下次扫描补齐。
+	Yield func() bool
 }
 
 type metaJob struct {
@@ -116,6 +119,12 @@ func Run(ctx context.Context, opt Options) (Result, error) {
 	for _, d := range dirs {
 		if ctx.Err() != nil {
 			return res, ctx.Err()
+		}
+		if opt.Yield != nil && opt.Yield() {
+			// 礼让：有人排队，停止本轮扫描；台账里没见到的文件不会误标
+			// orphan（只对 seen 之外且状态 ok 的行标记，下面按 seen 判断）。
+			res.Warnings = append(res.Warnings, "已让路给排队中的任务，本轮扫描提前结束")
+			return res, nil
 		}
 		entries, err := opt.Source.ListDir(ctx, d.CID)
 		if err != nil {

@@ -2,32 +2,33 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
-	"streampulse/internal/p115svc"
 	"streampulse/internal/store"
 )
 
 // Scheduler 是自研 5 段 Cron：分 时 日 月 周。
 // 支持 *、*/n、a-b、a-b/n、逗号列表。进程内每分钟最多触发一次。
+// 命中只入队（kind=scan,dedupe=scan:<id>），执行交给统一的任务 worker——
+// 排队中的重复任务自动合并，定时与手动点击互不重复。
 type Scheduler struct {
 	Store *store.Store
-	Svc   *p115svc.Service
 	Log   *slog.Logger
 
 	mu   sync.Mutex
 	last map[int64]string // libraryID -> "2006-01-02 15:04"
 }
 
-func New(st *store.Store, svc *p115svc.Service, log *slog.Logger) *Scheduler {
+func New(st *store.Store, log *slog.Logger) *Scheduler {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Scheduler{Store: st, Svc: svc, Log: log, last: map[int64]string{}}
+	return &Scheduler{Store: st, Log: log, last: map[int64]string{}}
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
@@ -73,20 +74,17 @@ func (s *Scheduler) tick(ctx context.Context, now time.Time) {
 		s.last[lib.ID] = stamp
 		s.mu.Unlock()
 
-		go func(lib store.Library) {
-			taskID, _ := s.Store.CreateTask("cron-scan", lib.ID)
-			_ = s.Store.UpdateTask(taskID, "running", "定时扫描")
-			c, cancel := context.WithTimeout(ctx, 12*time.Hour)
-			defer cancel()
-			res, err := s.Svc.ScanLibrary(c, &lib)
-			if err != nil {
-				_ = s.Store.UpdateTask(taskID, "failed", err.Error())
-				s.Log.Error("定时扫描失败", "library", lib.Name, "err", err)
-				return
-			}
-			_ = s.Store.UpdateTask(taskID, "done", "定时扫描完成")
-			s.Log.Info("定时扫描完成", "library", lib.Name, "written", res.Written)
-		}(*lib)
+		payload := fmt.Sprintf(`{"libraryId":%d}`, lib.ID)
+		taskID, reused, err := s.Store.EnqueueTask("scan", lib.ID, fmt.Sprintf("scan:%d", lib.ID), payload)
+		if err != nil {
+			s.Log.Warn("定时扫描入队失败", "library", lib.Name, "err", err)
+			continue
+		}
+		if reused {
+			s.Log.Info("定时扫描命中排队中的任务，已合并", "library", lib.Name, "task", taskID)
+		} else {
+			s.Log.Info("定时扫描已入队", "library", lib.Name, "task", taskID)
+		}
 	}
 }
 
