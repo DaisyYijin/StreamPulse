@@ -337,7 +337,6 @@ html[data-auth="in"] #app { display:flex }
         <div class="grid">
           <div><label>API 等待时间（秒）</label><input id="accApiWait" type="number" min="1" max="60" placeholder="1"><p class="section-note">扫描网盘、生成 STRM 时每次请求的等待时间；写操作至少 3 秒。</p></div>
           <div><label>开放平台 AppID</label><input id="accAppId" autocomplete="off" placeholder="在 open.115.com 申请"></div>
-          <div><label>AppSecret</label><input id="accAppSecret" type="password" autocomplete="off" placeholder="留空不修改"></div>
         </div>
         <div class="row-actions">
           <button class="btn primary" id="saveAccountSettings">保存连接设置</button>
@@ -710,7 +709,6 @@ async function loadSettings() {
     $('embyWebhookToken').placeholder = s.embyWebhookTokenSet ? '已设置（留空不修改）' : 'Webhook Token';
     $('embyDeleteRemote').checked = !!s.embyDeleteRemote;
     $('accAppId').value = s.p115AppId || '';
-    $('accAppSecret').placeholder = s.p115AppSecretSet ? '已设置（留空不修改）' : 'App Secret';
     $('adminUser').value = s.adminUser || 'admin';
     $('who').textContent = s.adminUser || '';
   } catch (e) {}
@@ -739,14 +737,12 @@ $('saveSettings').onclick = async () => {
         embyWebhookToken: $('embyWebhookToken').value,
         embyDeleteRemote: $('embyDeleteRemote').checked,
         p115AppId: $('accAppId').value,
-        p115AppSecret: $('accAppSecret').value,
         adminUser: $('adminUser').value,
         newPassword: $('adminPassword').value
       })
     });
     $('embyApiKey').value = '';
     $('embyWebhookToken').value = '';
-    $('accAppSecret').value = '';
     $('adminPassword').value = '';
     toast('设置已保存');
     loadSettings();
@@ -905,13 +901,11 @@ $('saveAccountSettings').onclick = async () => {
         embyWebhookToken: '',
         embyDeleteRemote: !!cur.embyDeleteRemote,
         p115AppId: $('accAppId').value,
-        p115AppSecret: $('accAppSecret').value,
         adminUser: cur.adminUser || 'admin',
         newPassword: '',
         apiWaitSec: wait
       })
     });
-    $('accAppSecret').value = '';
     toast('连接设置已保存');
     loadSettings();
   } catch (e) {
