@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { api } from '../api'
 import { submitTask } from '../composables/tasks'
 import { useToast } from '../stores/ui'
+import TagInput from '../components/TagInput.vue'
 
 const toast = useToast()
 const libs = ref<any[]>([])
@@ -11,6 +12,9 @@ const showForm = ref(false)
 const editing = ref<any>(null)
 const orphans = ref<any[]>([])
 const orphanLib = ref<number | null>(null)
+
+const VIDEO_PRESETS = ['.mp4', '.mkv', '.iso', '.ts', '.avi', '.wmv', '.m2ts']
+const META_PRESETS = ['.jpg', '.png', '.srt', '.ass', '.nfo']
 
 const form = ref<any>(emptyForm())
 function emptyForm() {
@@ -105,7 +109,7 @@ async function cleanOrphans() {
 </script>
 
 <template>
-  <h2>媒体库</h2>
+  <h2 class="page-title">媒体库</h2>
   <div class="status-strip">
     <span><b>{{ libs.length }}</b> 个库</span>
     <span class="muted">扫描会写入 STRM 到本地目录；目录改名会自动迁移本地文件</span>
@@ -150,43 +154,62 @@ async function cleanOrphans() {
   </div>
 
   <!-- 表单弹层 -->
-  <div v-if="showForm" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:10"
-       @click.self="showForm = false">
-    <div class="card" style="width:560px;max-height:86vh;overflow:auto;margin:0">
+  <div v-if="showForm" class="modal-mask" @click.self="showForm = false">
+    <div class="card modal">
       <h3>{{ editing ? '编辑媒体库' : '添加媒体库' }}</h3>
-      <div class="field"><label>名称</label><input v-model="form.name" placeholder="电影" /></div>
-      <div class="field">
-        <label>远端 CID（0 = 网盘根）</label>
-        <div class="row">
-          <input v-model="form.remoteCid" style="flex:1" />
-          <button class="btn ghost small" @click="openPicker">选择目录</button>
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>名称</span>
+        <div class="form-control"><input v-model="form.name" placeholder="电影" /></div>
+      </div>
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>115 媒体库 cid</span>
+        <div class="form-control">
+          <input v-model="form.remoteCid" placeholder="0 为网盘根" />
+          <button class="btn" @click="openPicker">点击填入</button>
         </div>
       </div>
-      <div class="field"><label>本地目录（容器内路径，如 /media/movies）</label><input v-model="form.localDir" /></div>
-      <div class="field">
-        <label>扫描模式</label>
-        <select v-model="form.scanMode">
-          <option value="fast">快速（每页 1000）</option>
-          <option value="normal">标准（每页 200，对风控更稳）</option>
-        </select>
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>本地媒体库目录</span>
+        <div class="form-control"><input v-model="form.localDir" placeholder="/media/movies（Emby 必须挂载同一目录）" /></div>
       </div>
-      <div class="field"><label>视频扩展名</label><input v-model="form.videoExts" /></div>
-      <div class="field"><label>附属扩展名</label><input v-model="form.metaExts" /></div>
-      <div class="row" style="margin-bottom:10px">
-        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" v-model="form.keepExt" /> STRM 保留视频扩展名</label>
-        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" v-model="form.scrape" /> 同步后自动刮削</label>
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>同步模式</span>
+        <div class="form-control">
+          <div class="segmented">
+            <button :class="{ on: form.scanMode !== 'normal' }" @click="form.scanMode = 'fast'">快速模式</button>
+            <button :class="{ on: form.scanMode === 'normal' }" @click="form.scanMode = 'normal'">普通模式</button>
+          </div>
+        </div>
+      </div>
+      <div class="form-row">
+        <span class="form-label">视频文件后缀</span>
+        <div class="form-control" style="flex-direction:column;align-items:stretch">
+          <TagInput v-model="form.videoExts" :presets="VIDEO_PRESETS" />
+        </div>
+      </div>
+      <div class="form-row">
+        <span class="form-label">媒体图片后缀</span>
+        <div class="form-control" style="flex-direction:column;align-items:stretch">
+          <TagInput v-model="form.metaExts" :presets="META_PRESETS" />
+        </div>
+      </div>
+      <div class="form-row">
+        <span class="form-label">其它</span>
+        <div class="form-control" style="flex-wrap:wrap">
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" v-model="form.keepExt" /> STRM 保留扩展名</label>
+          <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" v-model="form.scrape" /> 自动刮削</label>
+        </div>
       </div>
       <div class="row">
-        <button class="btn" @click="save">保存</button>
+        <button class="btn" @click="save">保存配置</button>
         <button class="btn ghost" @click="showForm = false">取消</button>
       </div>
     </div>
   </div>
 
   <!-- 目录选择器弹层 -->
-  <div v-if="dirPicker.open" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:11"
-       @click.self="dirPicker.open = false">
-    <div class="card" style="width:460px;max-height:70vh;overflow:auto;margin:0">
+  <div v-if="dirPicker.open" class="modal-mask" @click.self="dirPicker.open = false">
+    <div class="card modal" style="width:460px">
       <h3>选择远端目录（当前 {{ dirPicker.cid }}）</h3>
       <div class="row" style="margin-bottom:8px">
         <button class="btn ghost small" @click="enterDir({ cid: '0' })">回根目录</button>

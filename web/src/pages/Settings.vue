@@ -73,7 +73,7 @@ async function restoreBackup(ev: Event) {
 </script>
 
 <template>
-  <h2>设置</h2>
+  <h2 class="page-title">设置</h2>
   <div class="grid2">
     <div class="card">
       <h3>播放</h3>

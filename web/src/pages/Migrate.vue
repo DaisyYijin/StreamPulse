@@ -36,7 +36,7 @@ async function rebase() {
 </script>
 
 <template>
-  <h2>迁移</h2>
+  <h2 class="page-title">迁移</h2>
 
   <div class="card">
     <h3>接管其它工具的 STRM</h3>

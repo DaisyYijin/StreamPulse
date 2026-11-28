@@ -92,7 +92,7 @@ async function logout115() {
 </script>
 
 <template>
-  <h2>账号</h2>
+  <h2 class="page-title">账号</h2>
   <div class="status-strip">
     <span>登录方式 <b>{{ account ? (account.authType === 'openapi' ? '开放平台' : '扫码 Cookie') : '未登录' }}</b></span>
     <span v-if="account">设备 <b>{{ account.device }}</b></span>

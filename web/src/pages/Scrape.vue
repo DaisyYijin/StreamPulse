@@ -34,7 +34,7 @@ function libName(id: number) {
 </script>
 
 <template>
-  <h2>刮削</h2>
+  <h2 class="page-title">刮削</h2>
   <div class="status-strip">
     <span class="muted">TMDB API Key 在「设置」填写；产物（nfo/海报）写进本地媒体目录，Emby 扫描即用</span>
   </div>

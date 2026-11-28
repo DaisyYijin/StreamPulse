@@ -25,7 +25,7 @@ const steps = [
 </script>
 
 <template>
-  <h2>仪表盘</h2>
+  <h2 class="page-title">仪表盘</h2>
   <div class="status-strip" v-if="status">
     <span><span class="dot" :class="{ off: !status.emby }"></span>账号 <b>{{ status.accounts }}</b> 个</span>
     <span>媒体库 <b>{{ status.libraries }}</b> 个</span>

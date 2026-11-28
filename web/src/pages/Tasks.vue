@@ -17,7 +17,7 @@ const kindLabel: Record<string, string> = {
 </script>
 
 <template>
-  <h2>任务</h2>
+  <h2 class="page-title">任务</h2>
   <div class="status-strip">
     <span class="muted">手动操作一律入队串行执行；重复点击自动合并；增量会与任务互相礼让</span>
   </div>

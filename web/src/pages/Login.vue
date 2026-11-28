@@ -43,8 +43,11 @@ async function submit() {
 <template>
   <div class="login-wrap">
     <div class="card login-card">
-      <h2>StreamPulse</h2>
-      <p class="muted">{{ initialized ? '登录管理后台' : '创建管理员账号' }}</p>
+      <div class="brand">
+        <div class="mark">SP</div>
+        <div class="sub">Stream Media Sync</div>
+      </div>
+      <p class="muted" style="text-align:center">{{ initialized ? '登录管理后台' : '创建管理员账号' }}</p>
       <div class="field">
         <label>用户名</label>
         <input v-model="username" placeholder="admin" @keyup.enter="submit" />
@@ -54,12 +57,12 @@ async function submit() {
         <input v-model="password" type="password" @keyup.enter="submit" />
       </div>
       <div v-if="msg" class="bad">{{ msg }}</div>
-      <button class="btn" :disabled="busy" @click="submit">{{ busy ? '提交中…' : initialized ? '登录' : '创建管理员' }}</button>
+      <button class="btn" style="width:100%" :disabled="busy" @click="submit">{{ busy ? '提交中…' : initialized ? '登录' : '创建管理员' }}</button>
     </div>
   </div>
 </template>
 
 <style scoped>
 .login-wrap { display: flex; align-items: center; justify-content: center; height: 100%; }
-.login-card { width: 360px; }
+.login-card { width: 380px; }
 </style>

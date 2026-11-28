@@ -36,7 +36,7 @@ function webhookHint(): string {
 </script>
 
 <template>
-  <h2>深删记录</h2>
+  <h2 class="page-title">深删记录</h2>
   <div class="status-strip">
     <span>近 30 天：本地删除 <b>{{ videos30 }}</b> · 网盘删除 <b>{{ remote30 }}</b></span>
     <span v-for="(n, k) in counts" :key="k">

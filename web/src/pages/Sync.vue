@@ -1,18 +1,31 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api'
 import { fmtTime, submitTask } from '../composables/tasks'
 import { useToast } from '../stores/ui'
+import TagInput from '../components/TagInput.vue'
 
 const toast = useToast()
 const libs = ref<any[]>([])
+const libId = ref<number>(0)
 const status = ref<any>(null)
 const rounds = ref<any[]>([])
 const events = ref<any[]>([])
 const incrEnabled = ref(true)
 const incrInterval = ref(30)
 
+// 当前库的同步配置表单(对应参考稿的全量同步页)
+const form = ref<any>(null)
+const saved = ref<any>(null) // 上次保存的配置,重置用
+
+const VIDEO_PRESETS = ['.mp4', '.mkv', '.iso', '.ts', '.avi', '.wmv', '.m2ts']
+const META_PRESETS = ['.jpg', '.png', '.srt', '.ass', '.nfo']
+
 let timer: ReturnType<typeof setInterval> | undefined
+
+async function loadLibs() {
+  try { libs.value = (await api('/api/libraries')) || [] } catch { /* 忽略 */ }
+}
 async function load() {
   try {
     status.value = await api('/api/sync/status')
@@ -22,17 +35,68 @@ async function load() {
   } catch { /* 忽略 */ }
 }
 onMounted(async () => {
-  try { libs.value = (await api('/api/libraries')) || [] } catch { /* 忽略 */ }
+  await loadLibs()
   load()
   timer = setInterval(load, 5000)
 })
 onUnmounted(() => clearInterval(timer))
 
-async function fullSync() {
-  const ids = libs.value.map((l) => l.id)
-  if (!ids.length) { toast.bad('还没有媒体库'); return }
-  submitTask(() => api('/api/sync/full', { method: 'POST', body: JSON.stringify({ libraryIds: ids }) }), '全量同步')
+watch(libId, () => loadForm())
+
+function loadForm() {
+  const lib = libs.value.find((l) => l.id === libId.value)
+  if (lib) {
+    form.value = { ...lib }
+    saved.value = { ...lib }
+  }
 }
+
+async function saveConfig() {
+  if (!form.value) return
+  const f = form.value
+  if (!f.name || !f.remoteCid || !f.localDir) { toast.bad('名称 / 远端 CID / 本地目录 必填'); return }
+  try {
+    await api('/api/libraries', { method: 'POST', body: JSON.stringify(f) })
+    toast.ok('配置已保存')
+    await loadLibs()
+    loadForm()
+  } catch (e: any) { toast.bad(e.message) }
+}
+function resetConfig() {
+  if (saved.value) {
+    form.value = { ...saved.value }
+    toast.ok('已恢复为上次保存的配置')
+  }
+}
+function startFull() {
+  if (!libId.value) { toast.bad('先选择媒体库'); return }
+  saveConfig().then(() => {
+    submitTask(() => api(`/api/libraries/${libId.value}/scan`, { method: 'POST' }), '全量同步')
+  })
+}
+
+// 目录选择器(点击填入)
+const picker = ref<{ open: boolean; cid: string; items: any[] }>({ open: false, cid: '0', items: [] })
+async function openPicker() {
+  picker.value.open = true
+  await loadDirs('0')
+}
+async function loadDirs(cid: string) {
+  try { picker.value.items = (await api('/api/dirs?cid=' + encodeURIComponent(cid))) || [] }
+  catch (e: any) { toast.bad(e.message) }
+}
+async function enterDir(d: any) {
+  picker.value.cid = d.cid
+  await loadDirs(d.cid)
+}
+function pickDir() {
+  form.value.remoteCid = picker.value.cid
+  picker.value.open = false
+}
+
+const libName = computed(() => libs.value.find((l) => l.id === libId.value)?.name || '')
+
+// ---------- 增量 ----------
 function incrNow() {
   api('/api/sync/incremental', { method: 'POST' })
     .then((r) => {
@@ -58,48 +122,125 @@ async function saveSettings() {
 </script>
 
 <template>
-  <h2>同步</h2>
+  <h2 class="page-title">全量同步</h2>
+
+  <div class="notice">
+    <span>ⓘ</span>
+    <span>开始全量同步前，请先选择媒体库并核对配置，再点击「开始全量同步」</span>
+  </div>
+
+  <div class="card">
+    <div class="form-row">
+      <span class="form-label"><span class="req">*</span>媒体库</span>
+      <div class="form-control">
+        <select v-model="libId" style="max-width:320px">
+          <option :value="0" disabled>选择要配置的媒体库</option>
+          <option v-for="l in libs" :key="l.id" :value="l.id">{{ l.name }}</option>
+        </select>
+        <span class="form-hint" v-if="libName">上次扫描：{{ fmtTime(libs.find(l => l.id === libId)?.lastScanAt) }}</span>
+      </div>
+    </div>
+
+    <template v-if="form">
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>同步模式</span>
+        <div class="form-control">
+          <div class="segmented">
+            <button :class="{ on: form.scanMode !== 'normal' }" @click="form.scanMode = 'fast'">快速模式</button>
+            <button :class="{ on: form.scanMode === 'normal' }" @click="form.scanMode = 'normal'">普通模式</button>
+          </div>
+          <span class="form-hint">快速每页 1000 条，普通每页 200 条对风控更稳</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>115 媒体库 cid</span>
+        <div class="form-control">
+          <input v-model="form.remoteCid" placeholder="115 目录 id，0 为网盘根" />
+          <button class="btn" @click="openPicker">点击填入</button>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>本地媒体库目录</span>
+        <div class="form-control">
+          <input v-model="form.localDir" placeholder="/media（Emby 必须挂载同一目录）" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label"><span class="req">*</span>视频文件后缀</span>
+        <div class="form-control" style="flex-direction:column;align-items:stretch">
+          <TagInput v-model="form.videoExts" :presets="VIDEO_PRESETS" placeholder="输入后缀后回车" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label">媒体图片后缀</span>
+        <div class="form-control" style="flex-direction:column;align-items:stretch">
+          <TagInput v-model="form.metaExts" :presets="META_PRESETS" placeholder="随扫描一并下载的附属文件" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label">最小体积 (MB)</span>
+        <div class="form-control">
+          <input v-model.number="form.minSize" type="number" min="0" style="max-width:160px" />
+          <span class="form-hint">过滤样本/广告小文件，0 = 不过滤</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label">自动刮削</span>
+        <div class="form-control">
+          <label style="display:flex;gap:6px;align-items:center">
+            <input type="checkbox" v-model="form.scrape" /> 同步后用 TMDB 写 nfo/海报（需在设置页填 Key）
+          </label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <span class="form-label"></span>
+        <div class="form-control">
+          <button class="btn" @click="saveConfig">保存配置</button>
+          <button class="btn orange" @click="resetConfig">重置配置</button>
+          <button class="btn" @click="startFull">开始全量同步</button>
+        </div>
+      </div>
+    </template>
+    <div v-else class="muted" style="padding-left:144px">先在上方选择一个媒体库；没有的话到「媒体库」页添加。</div>
+  </div>
+
+  <h2 class="page-title">增量同步</h2>
   <div class="status-strip" v-if="status">
-    <span><span class="dot" :class="{ off: !status.enabled }"></span>{{ status.enabled ? '自动增量已启用' : '自动增量已关闭' }}</span>
+    <span><span class="dot" :class="{ off: !status.enabled }"></span>{{ status.enabled ? '自动增量已启用' : '已关闭' }}</span>
     <span>间隔 <b>{{ status.intervalSec }}</b> 秒</span>
     <span>游标 <b>{{ status.cursor || '未建立' }}</b></span>
     <span>积压 <b>{{ status.pending ?? 0 }}</b></span>
     <span>上次执行 <b>{{ fmtTime(status.lastRun) }}</b></span>
     <span>空转 <b>{{ status.idleRounds ?? 0 }}</b> 轮</span>
-    <span v-if="status.lock?.holder">115 通道：<b>{{ status.lock.holder }}</b>（{{ status.lock.heldFor }}，等待 {{ status.lock.waiters }}）</span>
-    <span v-if="status.throttle?.breaker?.tripped" class="bad">风控熔断中</span>
+    <span v-if="status.lock?.holder">115 通道：<b>{{ status.lock.holder }}</b>（{{ status.lock.heldFor }}）</span>
+    <span v-if="status.throttle?.breaker?.tripped" class="bad">风控熔断中：{{ status.throttle.breaker.reason }}</span>
   </div>
 
-  <div class="grid2">
-    <div class="card">
-      <h3>全量同步</h3>
-      <p class="muted" style="font-size:13px">全部媒体库逐个扫描；失效检测只对扫描成功的库生效。全量成功后自动推进增量游标。</p>
-      <div class="row">
-        <button class="btn" @click="fullSync">开始全量</button>
-        <span class="muted" style="font-size:12px">共 {{ libs.length }} 个启用的库</span>
-      </div>
-    </div>
-    <div class="card">
-      <h3>增量</h3>
-      <div class="row" style="margin-bottom:8px">
+  <div class="card">
+    <div class="form-row">
+      <span class="form-label"></span>
+      <div class="form-control">
         <button class="btn ghost" @click="incrNow">立即执行一轮</button>
         <button class="btn ghost" @click="testEvents">测试事件流</button>
-      </div>
-      <div class="row" style="margin-bottom:8px">
-        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" v-model="incrEnabled" /> 启用自动增量</label>
+        <label style="display:flex;gap:6px;align-items:center"><input type="checkbox" v-model="incrEnabled" /> 自动增量</label>
         <input v-model.number="incrInterval" type="number" min="15" max="3600" style="width:90px" />
-        <span class="muted" style="font-size:12px">秒（15–3600）</span>
+        <span class="form-hint">秒（15–3600）</span>
         <button class="btn ghost small" @click="saveSettings">保存</button>
       </div>
-      <div class="muted" style="font-size:12px">首轮只建基线；先跑全量再开增量。</div>
     </div>
-  </div>
-
-  <div class="card" v-if="events.length">
-    <h3>测试事件流（只读，不推进游标）</h3>
-    <div v-for="e in events" :key="e.id" class="row" style="padding:4px 0;font-size:13px">
-      <span>{{ e.fileName || e.fileId }}</span>
-      <span class="muted">类型 {{ e.type }} · cid {{ e.cid || '—' }}</span>
+    <div v-if="events.length" style="border-top:1px solid var(--border);padding-top:10px">
+      <div class="form-hint" style="margin-bottom:6px">测试事件流（只读，不推进游标）</div>
+      <div v-for="e in events" :key="e.id" class="row" style="padding:3px 0;font-size:13px">
+        <span>{{ e.fileName || e.fileId }}</span>
+        <span class="muted">类型 {{ e.type }} · cid {{ e.cid || '—' }}</span>
+      </div>
     </div>
   </div>
 
@@ -126,6 +267,24 @@ async function saveSettings() {
         </tr>
       </tbody>
     </table>
-    <div v-else class="muted">还没有轮次记录（一切正常或还没跑过）。</div>
+    <div v-else class="muted">还没有轮次记录。</div>
+  </div>
+
+  <!-- 目录选择器 -->
+  <div v-if="picker.open" class="modal-mask" @click.self="picker.open = false">
+    <div class="card modal" style="width:460px">
+      <h3>选择远端目录（当前 {{ picker.cid }}）</h3>
+      <div class="row" style="margin-bottom:8px">
+        <button class="btn ghost small" @click="enterDir({ cid: '0' })">回根目录</button>
+      </div>
+      <div v-for="d in picker.items" :key="d.cid" class="row"
+           style="padding:7px 10px;border-radius:6px;cursor:pointer"
+           @click="enterDir(d)">
+        <span>📁 {{ d.name }}</span>
+        <span class="muted" style="font-size:12px;margin-left:auto">{{ d.cid }}</span>
+      </div>
+      <div v-if="!picker.items.length" class="muted">没有子目录</div>
+      <button class="btn" style="margin-top:10px" @click="pickDir">使用当前目录</button>
+    </div>
   </div>
 </template>
