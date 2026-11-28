@@ -191,6 +191,10 @@ tr:last-child td{border-bottom:0}
 .quota i{display:block;height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-2));border-radius:99px}
 .quota-text{font-size:12.5px;color:var(--muted);margin-top:6px}
 .account-list{display:grid;gap:10px;margin-top:0}
+.sync-libs{display:grid;gap:8px}
+.sync-lib{display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fbf9;border:1px solid var(--line);border-radius:10px;font-size:13.5px;cursor:pointer}
+.sync-lib input{width:auto;margin:0}
+.sync-lib .muted{margin-left:auto;font-size:12px}
 .list-item{display:flex;justify-content:space-between;gap:12px;padding:10px 12px;background:#f8fbf9;border:1px solid var(--line);border-radius:10px;font-size:13.5px}
 .qr-box{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:16px;padding:18px;background:#f8fbf9;border:1px dashed #d8e5df;border-radius:14px}
 .qr-box img{width:200px;height:200px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 8px 20px rgba(20,60,45,.10)}
@@ -289,6 +293,7 @@ html[data-auth="in"] #app { display:flex }
       <button data-view="dashboard" class="active">概览</button>
       <button data-view="accounts">115 账号</button>
       <button data-view="libraries">媒体库</button>
+      <button data-view="sync">媒体同步</button>
       <button data-view="tasks">任务</button>
       <button data-view="settings">设置</button>
     </nav>
@@ -369,6 +374,47 @@ html[data-auth="in"] #app { display:flex }
       </div>
     </section>
 
+    <section id="view-sync" class="view">
+      <div class="page-head"><h1>媒体同步</h1><p>全量同步、增量同步与单目录修复</p></div>
+
+      <div class="card">
+        <div class="card-head"><h2>全量同步</h2><span class="hint">按媒体库依次扫描，生成 STRM</span></div>
+        <div id="fullSyncLibs" class="sync-libs"></div>
+        <div class="row-actions">
+          <button class="btn primary" id="startFullSync">开始全量同步</button>
+          <span id="fullSyncMsg" class="msg inline"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>增量同步</h2><span class="hint">基于 115 生活事件，只处理新增/变更目录</span></div>
+        <div id="incrStatus" class="status-line">加载中…</div>
+        <div class="grid" style="margin-top:14px">
+          <div><label>增量间隔（秒，15–3600）</label><input id="incrInterval" type="number" min="15" max="3600" placeholder="30"></div>
+          <div class="check" style="margin-top:24px"><input type="checkbox" id="incrEnabled"><label for="incrEnabled" style="margin:0">启用自动增量</label></div>
+        </div>
+        <div class="row-actions">
+          <button class="btn primary" id="runIncremental">立即执行增量</button>
+          <button class="btn ghost" id="testIncremental">测试事件流</button>
+          <button class="btn ghost" id="saveSyncSettings">保存增量设置</button>
+          <span id="syncMsg" class="msg inline"></span>
+        </div>
+        <div id="eventList" class="list"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>单目录同步</h2><span class="hint">只同步一个 cid，不遍历全盘</span></div>
+        <div class="grid">
+          <div><label>媒体库</label><select id="dirLib"></select></div>
+          <div><label>远端 CID</label><input id="dirCid" placeholder="0 或目录 cid"></div>
+        </div>
+        <div class="row-actions">
+          <button class="btn primary" id="syncDir">同步该目录</button>
+          <span id="dirMsg" class="msg inline"></span>
+        </div>
+      </div>
+    </section>
+
     <section id="view-tasks" class="view">
       <div class="page-head"><h1>任务</h1><p>扫描、目录同步与定时任务记录</p></div>
       <div class="card">
@@ -411,7 +457,7 @@ html[data-auth="in"] #app { display:flex }
 
 <script>
 (function () {
-  var views = ['dashboard', 'accounts', 'libraries', 'tasks', 'settings'];
+  var views = ['dashboard', 'accounts', 'libraries', 'sync', 'tasks', 'settings'];
   var h = (location.hash || '').replace(/^#\/?/, '');
   if (views.indexOf(h) < 0) h = 'dashboard';
   var el = document.getElementById('view-' + h);
@@ -456,7 +502,7 @@ html[data-auth="in"] #app { display:flex }
 
 <script>
 const $ = (id) => document.getElementById(id);
-const VIEWS = ['dashboard', 'accounts', 'libraries', 'tasks', 'settings'];
+const VIEWS = ['dashboard', 'accounts', 'libraries', 'sync', 'tasks', 'settings'];
 let token = localStorage.getItem('sp_token') || '';
 
 function showLogin() {
@@ -491,6 +537,10 @@ function showView(name) {
   });
   history.replaceState(null, '', '#/' + name);
   if (name === 'settings') loadSettings();
+  if (name === 'sync') {
+    loadSyncStatus();
+    renderSyncLibraries();
+  }
   refreshAll();
 }
 
@@ -938,6 +988,112 @@ $('qrDevice').addEventListener('change', () => {
 });
 $('qrClose').onclick = closeQrModal;
 $('qrModal').addEventListener('click', (e) => { if (e.target === $('qrModal')) closeQrModal(); });
+
+async function renderSyncLibraries() {
+  try {
+    const libs = (await api('/api/libraries')) || [];
+    $('fullSyncLibs').innerHTML = libs.length
+      ? libs.map((l) => '<label class="sync-lib"><input type="checkbox" value="' + l.id + '" checked><span>' + esc(l.name) + '</span><span class="muted">' + esc(l.localDir) + ' · ' + esc(l.scanMode) + '</span></label>').join('')
+      : '<span class="muted" style="font-size:13px">还没有媒体库，请先到「媒体库」添加。</span>';
+    $('dirLib').innerHTML = libs.length
+      ? libs.map((l) => '<option value="' + l.id + '">' + esc(l.name) + '</option>').join('')
+      : '<option value="">没有媒体库</option>';
+  } catch (e) {}
+}
+
+async function loadSyncStatus() {
+  try {
+    const s = await api('/api/sync/status');
+    const last = s.lastRun ? new Date(s.lastRun * 1000).toLocaleString() : '—';
+    const r = s.lastResult || {};
+    $('incrStatus').innerHTML =
+      '<span><span class="dot ' + (s.enabled ? '' : 'off') + '"></span>' + (s.enabled ? '自动增量已启用' : '自动增量已关闭') + '</span>' +
+      '<span>间隔 <b>' + (s.intervalSec || 30) + '</b> 秒</span>' +
+      '<span>游标 <b>' + esc(s.cursor || '未建立') + '</b></span>' +
+      '<span>上次执行 <b>' + esc(last) + '</b></span>' +
+      '<span>上次结果 <b>' + (r.newEvents || 0) + '</b> 新事件 / <b>' + (r.scannedDirs || 0) + '</b> 目录</span>' +
+      (s.lastError ? '<span class="bad">错误：' + esc(s.lastError) + '</span>' : '');
+    $('incrInterval').value = s.intervalSec || 30;
+    $('incrEnabled').checked = !!s.enabled;
+  } catch (e) {}
+}
+
+$('startFullSync').onclick = async () => {
+  const btn = $('startFullSync');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '提交中…';
+  try {
+    const ids = Array.prototype.map.call(document.querySelectorAll('#fullSyncLibs input:checked'), (x) => Number(x.value));
+    if (!ids.length) throw new Error('请至少勾选一个媒体库');
+    await api('/api/sync/full', { method: 'POST', body: JSON.stringify({ libraryIds: ids }) });
+    toast('全量同步已开始');
+    refreshAll();
+  } catch (e) {
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+};
+
+$('runIncremental').onclick = async () => {
+  const btn = $('runIncremental');
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '执行中…';
+  try {
+    const r = await api('/api/sync/incremental', { method: 'POST' });
+    toast(r.baseline ? '已建立增量基线' : ('增量完成：新事件 ' + r.newEvents + '，目录 ' + r.scannedDirs));
+    loadSyncStatus();
+    refreshAll();
+  } catch (e) {
+    toast(e.message, false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+};
+
+$('testIncremental').onclick = async () => {
+  try {
+    const evs = await api('/api/sync/incremental/test', { method: 'POST' });
+    $('eventList').innerHTML = (evs && evs.length)
+      ? evs.map((e) => '<div class="list-item"><span>' + esc(e.fileName || e.fileId || '事件') + '</span><span class="muted">' + esc(e.type) + ' · cid ' + esc(e.cid || '—') + '</span></div>').join('')
+      : '<div class="muted" style="font-size:13px">没有拉到事件（确认 115 生活「最近」已开启）。</div>';
+    toast('已读取 ' + ((evs && evs.length) || 0) + ' 条事件');
+  } catch (e) {
+    toast(e.message, false);
+  }
+};
+
+$('saveSyncSettings').onclick = async () => {
+  try {
+    const intervalSec = Number($('incrInterval').value || 30);
+    if (!Number.isFinite(intervalSec) || intervalSec < 15 || intervalSec > 3600) {
+      throw new Error('增量间隔需在 15–3600 秒之间');
+    }
+    await api('/api/sync/settings', { method: 'PUT', body: JSON.stringify({ enabled: $('incrEnabled').checked, intervalSec }) });
+    toast('增量设置已保存');
+    loadSyncStatus();
+  } catch (e) {
+    toast(e.message, false);
+  }
+};
+
+$('syncDir').onclick = async () => {
+  try {
+    const id = Number($('dirLib').value);
+    const cid = $('dirCid').value.trim();
+    if (!id) throw new Error('请先选择媒体库');
+    if (!cid) throw new Error('请填写远端 CID');
+    await api('/api/libraries/' + id + '/sync-dir', { method: 'POST', body: JSON.stringify({ cid }) });
+    toast('目录同步已提交');
+    refreshAll();
+  } catch (e) {
+    toast(e.message, false);
+  }
+};
 
 boot();
 setInterval(() => { if (!$('app').classList.contains('hide')) refreshAll(); }, 5000);

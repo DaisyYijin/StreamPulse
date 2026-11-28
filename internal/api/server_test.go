@@ -28,7 +28,7 @@ func newTestApp(t *testing.T) (*App, *store.Store) {
 	}
 	t.Cleanup(func() { st.Close() })
 	svc := p115svc.New(st, cfg)
-	app, err := New(cfg, st, svc, nil, slog.Default())
+	app, err := New(cfg, st, svc, nil, nil, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

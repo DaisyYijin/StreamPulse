@@ -15,6 +15,7 @@ import (
 	"streampulse/internal/config"
 	"streampulse/internal/deepdel"
 	"streampulse/internal/emby"
+	"streampulse/internal/incr"
 	"streampulse/internal/p115svc"
 	"streampulse/internal/pan115"
 	"streampulse/internal/store"
@@ -25,6 +26,7 @@ type App struct {
 	Store *store.Store
 	Svc   *p115svc.Service
 	Deep  *deepdel.Service
+	Incr  *incr.Service
 	Log   *slog.Logger
 
 	secret []byte
@@ -36,13 +38,13 @@ type App struct {
 	setupMu sync.Mutex
 }
 
-func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, log *slog.Logger) (*App, error) {
+func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, incrSvc *incr.Service, log *slog.Logger) (*App, error) {
 	secret, err := loadSecret(cfg.ConfigDir)
 	if err != nil {
 		return nil, err
 	}
 	a := &App{
-		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Log: log, secret: secret,
+		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Incr: incrSvc, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
 	}
 	// 首次启动不生成密码：由 /api/setup 让用户自己创建管理员。
@@ -86,6 +88,11 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("DELETE /api/libraries/{id}", auth(http.HandlerFunc(a.handleDeleteLibrary)))
 	mux.Handle("POST /api/libraries/{id}/scan", auth(http.HandlerFunc(a.handleScan)))
 	mux.Handle("POST /api/libraries/{id}/sync-dir", auth(http.HandlerFunc(a.handleSyncDir)))
+	mux.Handle("GET /api/sync/status", auth(http.HandlerFunc(a.handleSyncStatus)))
+	mux.Handle("POST /api/sync/full", auth(http.HandlerFunc(a.handleFullSync)))
+	mux.Handle("POST /api/sync/incremental", auth(http.HandlerFunc(a.handleIncremental)))
+	mux.Handle("POST /api/sync/incremental/test", auth(http.HandlerFunc(a.handleIncrementalTest)))
+	mux.Handle("PUT /api/sync/settings", auth(http.HandlerFunc(a.handleSyncSettings)))
 
 	mux.Handle("GET /api/tasks", auth(http.HandlerFunc(a.handleTasks)))
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
@@ -697,6 +704,127 @@ func (a *App) handleSyncDir(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		_ = a.Store.UpdateTask(taskID, "done", fmt.Sprintf("目录同步完成：%d 个视频，写入 %d", res.Scanned, res.Written))
+	}()
+	writeJSON(w, http.StatusAccepted, map[string]int64{"taskId": taskID})
+}
+
+// ---------- sync ----------
+
+func (a *App) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
+	if a.Incr == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"enabled": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, a.Incr.Status())
+}
+
+func (a *App) handleIncremental(w http.ResponseWriter, r *http.Request) {
+	if a.Incr == nil {
+		writeErr(w, http.StatusServiceUnavailable, "增量同步未启用")
+		return
+	}
+	res, err := a.Incr.PollOnce(r.Context())
+	if err != nil {
+		a.Log.Warn("手动增量同步失败", "err", err)
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (a *App) handleIncrementalTest(w http.ResponseWriter, r *http.Request) {
+	if a.Incr == nil {
+		writeErr(w, http.StatusServiceUnavailable, "增量同步未启用")
+		return
+	}
+	events, err := a.Incr.TestEvents(r.Context(), 20)
+	if err != nil {
+		writeErr(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
+}
+
+func (a *App) handleSyncSettings(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		Enabled     *bool `json:"enabled"`
+		IntervalSec int   `json:"intervalSec"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	settings := map[string]string{}
+	if in.IntervalSec != 0 {
+		if in.IntervalSec < 15 || in.IntervalSec > 3600 {
+			writeErr(w, http.StatusBadRequest, "增量间隔需在 15–3600 秒之间")
+			return
+		}
+		settings["incr_interval_sec"] = fmt.Sprintf("%d", in.IntervalSec)
+	}
+	if in.Enabled != nil {
+		settings["incr_enabled"] = boolText(*in.Enabled)
+	}
+	if err := a.Store.SetMany(settings); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (a *App) handleFullSync(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		LibraryIDs []int64 `json:"libraryIds"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in)
+	libs, err := a.Store.ListLibraries()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	want := map[int64]bool{}
+	for _, id := range in.LibraryIDs {
+		want[id] = true
+	}
+	var selected []*store.Library
+	for i := range libs {
+		if !libs[i].Enabled {
+			continue
+		}
+		if len(want) == 0 || want[libs[i].ID] {
+			selected = append(selected, &libs[i])
+		}
+	}
+	if len(selected) == 0 {
+		writeErr(w, http.StatusBadRequest, "没有可同步的媒体库")
+		return
+	}
+	taskID, _ := a.Store.CreateTask("full-sync", 0)
+	go func() {
+		_ = a.Store.UpdateTask(taskID, "running", fmt.Sprintf("全量同步中（%d 个媒体库）", len(selected)))
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Hour)
+		defer cancel()
+		var scanned, written, skipped, orphans, failed int
+		for _, lib := range selected {
+			res, err := a.Svc.ScanLibrary(ctx, lib)
+			if err != nil {
+				failed++
+				a.Log.Warn("全量同步失败", "library", lib.Name, "err", err)
+				continue
+			}
+			scanned += res.Scanned
+			written += res.Written
+			skipped += res.Skipped
+			orphans += res.Orphans
+		}
+		_ = a.emby().RefreshLibrary(ctx, "")
+		msg := fmt.Sprintf("全量同步完成：扫描 %d，写入 %d，跳过 %d，失效 %d，失败 %d", scanned, written, skipped, orphans, failed)
+		status := "done"
+		if failed > 0 && written == 0 && scanned == 0 {
+			status = "failed"
+		}
+		_ = a.Store.UpdateTask(taskID, status, msg)
+		a.Log.Info("全量同步结束", "message", msg)
 	}()
 	writeJSON(w, http.StatusAccepted, map[string]int64{"taskId": taskID})
 }

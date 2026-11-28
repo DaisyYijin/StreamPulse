@@ -76,7 +76,11 @@ func main() {
 
 	svc := p115svc.New(st, cfg)
 	deep := &deepdel.Service{Store: st, Svc: svc, Log: log}
-	app, err := api.New(cfg, st, svc, deep, log)
+	incremental := &incr.Service{Store: st, Src: svc, Log: log, Interval: cfg.IncrInterval}
+	if !cfg.IncrEnabled && st.GetSetting("incr_enabled", "") == "" {
+		_ = st.SetSetting("incr_enabled", "0")
+	}
+	app, err := api.New(cfg, st, svc, deep, incremental, log)
 	if err != nil {
 		log.Error("初始化 API 失败", "err", err)
 		os.Exit(1)
@@ -112,11 +116,8 @@ func main() {
 	}()
 
 	scheduler.New(st, svc, log).Start(ctx)
-	if cfg.IncrEnabled {
-		incremental := &incr.Service{Store: st, Src: svc, Log: log, Interval: cfg.IncrInterval}
-		incremental.Start(ctx)
-		log.Info("生活事件增量已启用", "interval", cfg.IncrInterval)
-	}
+	incremental.Start(ctx)
+	log.Info("生活事件增量已启动", "interval", cfg.IncrInterval)
 
 	<-ctx.Done()
 	log.Info("正在关闭…")

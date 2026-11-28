@@ -2,6 +2,7 @@ package incr
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -27,7 +28,18 @@ type Service struct {
 	Log      *slog.Logger
 	Interval time.Duration
 
-	mu sync.Mutex
+	mu     sync.Mutex
+	status Status
+}
+
+// Status 是增量同步的对外状态。
+type Status struct {
+	Enabled     bool   `json:"enabled"`
+	IntervalSec int    `json:"intervalSec"`
+	Cursor      string `json:"cursor"`
+	LastRun     int64  `json:"lastRun"`
+	LastResult  Result `json:"lastResult"`
+	LastError   string `json:"lastError"`
 }
 
 type Result struct {
@@ -39,9 +51,6 @@ type Result struct {
 }
 
 func (s *Service) Start(ctx context.Context) {
-	if s.Interval <= 0 {
-		s.Interval = 30 * time.Second
-	}
 	go func() {
 		// 首轮延迟几秒，等进程完成初始化
 		select {
@@ -50,26 +59,81 @@ func (s *Service) Start(ctx context.Context) {
 		case <-time.After(5 * time.Second):
 		}
 		for {
-			r, err := s.PollOnce(ctx)
-			if err != nil {
-				s.Log.Warn("生活事件轮询失败", "err", err)
-			} else if !r.Baseline && (r.NewEvents > 0 || r.ScannedDirs > 0) {
-				s.Log.Info("增量同步", "events", r.Events, "new", r.NewEvents, "dirs", r.ScannedDirs)
+			if s.enabled() {
+				r, err := s.PollOnce(ctx)
+				if err != nil {
+					s.Log.Warn("生活事件轮询失败", "err", err)
+				} else if !r.Baseline && (r.NewEvents > 0 || r.ScannedDirs > 0) {
+					s.Log.Info("增量同步", "events", r.Events, "new", r.NewEvents, "dirs", r.ScannedDirs)
+				}
+			}
+			wait := time.Duration(s.intervalSec()) * time.Second
+			if wait < 5*time.Second {
+				wait = 5 * time.Second
 			}
 			select {
 			case <-ctx.Done():
 				return
-			case <-time.After(s.Interval):
+			case <-time.After(wait):
 			}
 		}
 	}()
 }
 
-func (s *Service) PollOnce(ctx context.Context) (Result, error) {
+func (s *Service) enabled() bool {
+	return s.Store.GetSetting("incr_enabled", "1") == "1"
+}
+
+func (s *Service) intervalSec() int {
+	if v := s.Store.GetSetting("incr_interval_sec", ""); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 15 && n <= 3600 {
+			return n
+		}
+	}
+	if s.Interval > 0 {
+		return int(s.Interval.Seconds())
+	}
+	return 30
+}
+
+// Status 返回增量同步状态。
+func (s *Service) Status() Status {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	st := s.status
+	st.Enabled = s.enabled()
+	st.IntervalSec = s.intervalSec()
+	if acc, err := s.Store.MainAccount(); err == nil {
+		st.Cursor = s.Store.GetSetting(cursorKey(acc.ID), "")
+	}
+	return st
+}
 
-	var res Result
+// TestEvents 只读拉取最近事件，不推进游标、不落库。
+func (s *Service) TestEvents(ctx context.Context, limit int) ([]pan115.LifeEvent, error) {
+	acc, err := s.Store.MainAccount()
+	if err != nil {
+		return nil, errors.New("还没有 115 账号")
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	return s.Src.ListBehavior(ctx, acc.ID, limit)
+}
+
+func (s *Service) PollOnce(ctx context.Context) (res Result, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	defer func() {
+		s.status.LastRun = time.Now().Unix()
+		s.status.LastResult = res
+		if err != nil {
+			s.status.LastError = err.Error()
+		} else {
+			s.status.LastError = ""
+		}
+	}()
+
 	acc, err := s.Store.MainAccount()
 	if err != nil {
 		return res, nil // 还没有账号，静默等待
