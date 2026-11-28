@@ -1150,3 +1150,9 @@ func (s *Store) ListScrapeRecords(limit int) ([]ScrapeRecord, error) {
 	}
 	return out, rows.Err()
 }
+
+// SnapshotTo 导出一致的数据库快照(VACUUM INTO;运行中安全)。
+func (s *Store) SnapshotTo(dst string) error {
+	_, err := s.db.Exec(`VACUUM INTO ?`, dst)
+	return err
+}

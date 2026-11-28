@@ -8,16 +8,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
 
 	"streampulse/internal/api"
+	"streampulse/internal/backup"
 	"streampulse/internal/config"
 	"streampulse/internal/embyproxy"
 	"streampulse/internal/deepdel"
 	"streampulse/internal/incr"
 	"streampulse/internal/logx"
+	"streampulse/internal/safego"
 	"streampulse/internal/p115svc"
 	"streampulse/internal/scheduler"
 	"streampulse/internal/store"
@@ -61,6 +64,9 @@ func main() {
 		slog.Error("配置错误", "error", msg)
 		os.Exit(1)
 	}
+	// 待恢复备份在开库之前应用(先给现库留 prerestore 备份)
+	backup.ApplyPendingRestore(cfg.DataDir, cfg.ConfigDir,
+		filepath.Join(cfg.ConfigDir, "restore-pending"), slog.Default())
 	closeLog, err := logx.Init(cfg.LogDir, cfg.LogMaxMB, cfg.LogKeepDays)
 	if err != nil {
 		slog.Warn("日志文件不可写，只输出到 stdout", "err", err)
@@ -147,8 +153,33 @@ func main() {
 
 	scheduler.New(st, log).Start(ctx)
 	app.StartWorkers(ctx)
+	app.SetVersion(version)
 	incremental.Start(ctx)
 	log.Info("生活事件增量已启动", "interval", cfg.IncrInterval, "version", version)
+
+	// 每日维护:过期抑制清理、已消费事件清理、深删记录清理
+	safego.Go("daily-maintenance", log, func() {
+		t := time.NewTicker(24 * time.Hour)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				if n, err := st.CleanupSuppressed(); err != nil {
+					log.Warn("清理事件抑制失败", "err", err)
+				} else if n > 0 {
+					log.Info("清理过期事件抑制", "count", n)
+				}
+				if n, err := st.PruneAppliedEvents(30); err == nil && n > 0 {
+					log.Info("清理已消费事件", "count", n)
+				}
+				if n, err := st.PruneDeepDeleteRecords(90); err == nil && n > 0 {
+					log.Info("清理过期深删记录", "count", n)
+				}
+			}
+		}
+	})
 
 	<-ctx.Done()
 	log.Info("正在关闭…")

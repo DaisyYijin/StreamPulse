@@ -9,8 +9,9 @@ WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
+ARG VERSION=dev
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
-    go build -trimpath -ldflags "-s -w" -o /out/streampulse ./cmd/server
+    go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/streampulse ./cmd/server
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata

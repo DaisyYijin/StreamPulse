@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"streampulse/internal/adopt"
+	"streampulse/internal/backup"
 	"streampulse/internal/config"
 	"streampulse/internal/deepdel"
 	"streampulse/internal/emby"
@@ -53,6 +54,8 @@ type App struct {
 	// Emby 定向刷新节流
 	embyMu      sync.Mutex
 	lastRefresh map[string]int64
+
+	versionStr string
 }
 
 func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, incrSvc *incr.Service, log *slog.Logger) (*App, error) {
@@ -99,6 +102,16 @@ func (a *App) throttledEmbyRefresh(localDirs []string) {
 
 // Bus 暴露事件总线(同步完成 → 刮削 → 刷库 联动用)。
 func (a *App) Bus() *eventbus.Bus { return a.bus }
+
+// SetVersion 注入构建版本号(main 的 ldflags)。
+func (a *App) SetVersion(v string) { a.versionStr = v }
+
+func (a *App) version() string {
+	if a.versionStr != "" {
+		return a.versionStr
+	}
+	return "dev"
+}
 
 // StartWorkers 启动后台任务 worker 与事件消费。ctx 结束即停。
 func (a *App) StartWorkers(ctx context.Context) {
@@ -253,6 +266,8 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("POST /api/strm/rebase", auth(http.HandlerFunc(a.handleStrmRebase)))
 	mux.Handle("POST /api/adopt/preview", auth(http.HandlerFunc(a.handleAdoptPreview)))
 	mux.Handle("POST /api/adopt/apply", auth(http.HandlerFunc(a.handleAdoptApply)))
+	mux.Handle("GET /api/backup/export", auth(http.HandlerFunc(a.handleBackupExport)))
+	mux.Handle("POST /api/backup/restore", auth(http.HandlerFunc(a.handleBackupRestore)))
 
 	mux.Handle("GET /api/tasks", auth(http.HandlerFunc(a.handleTasks)))
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
@@ -397,7 +412,7 @@ func (a *App) handleStatus(w http.ResponseWriter, r *http.Request) {
 	libs, _ := a.Store.ListLibraries()
 	files, orphans, lastScan, _ := a.Store.Stats()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"version":   "0.1.0-p0",
+		"version":   a.version(),
 		"accounts":  len(accs),
 		"libraries": len(libs),
 		"files":     files,
@@ -1083,6 +1098,74 @@ func (a *App) execAdopt(ctx context.Context, t *store.Task) {
 	_ = a.Store.UpdateTask(t.ID, "done",
 		fmt.Sprintf("接管完成：成功 %d，跳过 %d（本站格式），对不上号 %d", n, plan.Skipped, len(plan.Missing)))
 	a.Log.Info("adopt 完成", "adopted", n, "skipped", plan.Skipped, "missing", len(plan.Missing))
+}
+
+// ---------- 备份 ----------
+
+// handleBackupExport 导出备份包(zip:数据库快照 + config 密钥)。
+func (a *App) handleBackupExport(w http.ResponseWriter, r *http.Request) {
+	tmpDir, err := os.MkdirTemp("", "sp-backup")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer os.RemoveAll(tmpDir)
+	snap := filepath.Join(tmpDir, "snapshot.db")
+	if err := a.Store.SnapshotTo(snap); err != nil {
+		writeErr(w, http.StatusInternalServerError, "数据库快照失败: "+err.Error())
+		return
+	}
+	dst := filepath.Join(tmpDir, fmt.Sprintf("streampulse-backup-%s.zip", time.Now().Format("20060102-150405")))
+	if err := backup.Export(dst, snap, a.Cfg.ConfigDir); err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	f, err := os.Open(dst)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filepath.Base(dst)+`"`)
+	_, _ = io.Copy(w, f)
+}
+
+// handleBackupRestore 上传备份包,校验后暂存,下次启动应用。
+func (a *App) handleBackupRestore(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(64 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "请用 multipart 上传 zip 备份包")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "缺少 file 字段")
+		return
+	}
+	defer file.Close()
+	tmp, err := os.CreateTemp("", "sp-restore-*.zip")
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tmpName := tmp.Name()
+	if _, err := io.Copy(tmp, file); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	tmp.Close()
+	pending := filepath.Join(a.Cfg.ConfigDir, "restore-pending")
+	if err := backup.StageRestore(tmpName, pending); err != nil {
+		os.Remove(tmpName)
+		os.RemoveAll(pending)
+		writeErr(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	os.Remove(tmpName)
+	a.Log.Info("备份包已暂存，重启后应用", "pending", pending)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "message": "备份包已校验，重启应用后生效（重启前不会改动任何现有数据）"})
 }
 
 func (a *App) handleIncremental(w http.ResponseWriter, r *http.Request) {
