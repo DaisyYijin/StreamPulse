@@ -9,10 +9,12 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
+	"streampulse/internal/adopt"
 	"streampulse/internal/config"
 	"streampulse/internal/deepdel"
 	"streampulse/internal/emby"
@@ -249,6 +251,8 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("GET /api/libraries/{id}/orphans", auth(http.HandlerFunc(a.handleOrphans)))
 	mux.Handle("POST /api/libraries/{id}/orphans/clean", auth(http.HandlerFunc(a.handleOrphanClean)))
 	mux.Handle("POST /api/strm/rebase", auth(http.HandlerFunc(a.handleStrmRebase)))
+	mux.Handle("POST /api/adopt/preview", auth(http.HandlerFunc(a.handleAdoptPreview)))
+	mux.Handle("POST /api/adopt/apply", auth(http.HandlerFunc(a.handleAdoptApply)))
 
 	mux.Handle("GET /api/tasks", auth(http.HandlerFunc(a.handleTasks)))
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
@@ -966,6 +970,121 @@ func (a *App) handleStrmRebase(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"scanned": scanned, "changed": changed, "perLibrary": perLib})
 }
 
+// ---------- adopt 接管 ----------
+
+// walkForeign 收集媒体库下的全部 .strm(不按台账,别家写的也算)。
+func (a *App) walkForeign(lib store.Library) []adopt.Foreign {
+	var out []adopt.Foreign
+	_ = filepath.Walk(lib.LocalDir, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info == nil || info.IsDir() {
+			return nil
+		}
+		if !strings.EqualFold(filepath.Ext(p), ".strm") {
+			return nil
+		}
+		rel, rerr := filepath.Rel(lib.LocalDir, p)
+		if rerr != nil {
+			return nil
+		}
+		out = append(out, adopt.Foreign{
+			LibraryID: lib.ID,
+			Rel:       filepath.ToSlash(rel),
+			Path:      p,
+		})
+		return nil
+	})
+	return out
+}
+
+// planAdopt 对选中的库做接管预演(重新扫描,不信任任何缓存的预演结论)。
+func (a *App) planAdopt(libraryIDs []int64) (adopt.Plan, error) {
+	var plan adopt.Plan
+	libs, err := a.Store.ListLibraries()
+	if err != nil {
+		return plan, err
+	}
+	want := map[int64]bool{}
+	for _, id := range libraryIDs {
+		want[id] = true
+	}
+	var foreign []adopt.Foreign
+	var ledger []store.SyncedFile
+	libRoots := map[int64]string{}
+	for _, lib := range libs {
+		if len(want) > 0 && !want[lib.ID] {
+			continue
+		}
+		foreign = append(foreign, a.walkForeign(lib)...)
+		files, err := a.Store.ListFiles(lib.ID)
+		if err == nil {
+			ledger = append(ledger, files...)
+		}
+		libRoots[lib.ID] = lib.LocalDir
+	}
+	return adopt.MatchForeign(foreign, ledger, libRoots), nil
+}
+
+func (a *App) handleAdoptPreview(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		LibraryIDs []int64 `json:"libraryIds"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in)
+	plan, err := a.planAdopt(in.LibraryIDs)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if plan.Adoptable == nil {
+		plan.Adoptable = []adopt.AdoptItem{}
+	}
+	if plan.Missing == nil {
+		plan.Missing = []adopt.Foreign{}
+	}
+	writeJSON(w, http.StatusOK, plan)
+}
+
+func (a *App) handleAdoptApply(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		LibraryIDs []int64 `json:"libraryIds"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in)
+	if a.Store.GetSetting("public_base", "") == "" {
+		writeErr(w, http.StatusBadRequest, "未配置播放地址：接管后 STRM 会指向本站，请先在设置页填写播放地址")
+		return
+	}
+	payload, _ := json.Marshal(adoptPayload{LibraryIDs: in.LibraryIDs})
+	taskID, reused, err := a.Store.EnqueueTask("adopt", 0, "adopt", string(payload))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusAccepted, map[string]any{"taskId": taskID, "reused": reused})
+}
+
+func (a *App) execAdopt(ctx context.Context, t *store.Task) {
+	var p adoptPayload
+	_ = json.Unmarshal([]byte(t.Payload), &p)
+	// 执行时重新对号,不用预演结论
+	plan, err := a.planAdopt(p.LibraryIDs)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", err.Error())
+		return
+	}
+	base := a.Store.GetSetting("public_base", "")
+	_ = a.Store.SetTaskProgress(t.ID, "接管中")
+	n, err := adopt.Apply(base, plan.Adoptable, a.Store)
+	if err != nil {
+		_ = a.Store.UpdateTask(t.ID, "failed", "接管执行失败: "+err.Error())
+		return
+	}
+	if err := a.emby().RefreshLibrary(ctx, ""); err != nil {
+		a.Log.Warn("接管后 Emby 刷新失败", "err", err)
+	}
+	_ = a.Store.UpdateTask(t.ID, "done",
+		fmt.Sprintf("接管完成：成功 %d，跳过 %d（本站格式），对不上号 %d", n, plan.Skipped, len(plan.Missing)))
+	a.Log.Info("adopt 完成", "adopted", n, "skipped", plan.Skipped, "missing", len(plan.Missing))
+}
+
 func (a *App) handleIncremental(w http.ResponseWriter, r *http.Request) {
 	if a.Incr == nil {
 		writeErr(w, http.StatusServiceUnavailable, "增量同步未启用")
@@ -1078,12 +1197,17 @@ type scrapePayload struct {
 	LibraryID int64 `json:"libraryId"`
 }
 
+type adoptPayload struct {
+	LibraryIDs []int64 `json:"libraryIds"`
+}
+
 func (a *App) registerExecutors() {
 	a.executors = map[string]func(ctx context.Context, t *store.Task){
 		"scan":      a.execScan,
 		"sync-dir":  a.execSyncDir,
 		"full-sync": a.execFullSync,
 		"scrape":    a.execScrape,
+		"adopt":     a.execAdopt,
 	}
 	// 同步完成(该库开了刮削且配了 Key)→ 自动入队刮削
 	a.bus.Subscribe(eventbus.EventSyncDone, func(payload any) {
