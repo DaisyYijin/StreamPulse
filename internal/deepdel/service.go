@@ -3,9 +3,11 @@ package deepdel
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -38,14 +40,52 @@ type Result struct {
 	RemovedDirs   int      `json:"removedDirs"`
 	Rejected      string   `json:"rejected,omitempty"`
 	Warnings      []string `json:"warnings,omitempty"`
+
+	// 记录区用(不进常规响应)
+	FIDs     []string `json:"-"`
+	RelPaths []string `json:"-"`
 }
 
 var allowedTypes = map[string]bool{
 	"Movie": true, "Episode": true, "Season": true, "Series": true,
 }
 
-// Handle 执行一次深度删除。所有拒绝条件都会返回 Result.Rejected，不做任何删除。
+// Handle 执行一次深度删除并记录。所有拒绝条件都会返回 Result.Rejected，
+// 不做任何删除;每次执行(含拒绝)都落一条记录,fids 是回收站还原凭据。
 func (s *Service) Handle(ctx context.Context, item Item) (Result, error) {
+	res, err := s.handle(ctx, item)
+	rec := &store.DeepDeleteRecord{
+		ItemID:       item.Name,
+		ItemType:     item.Type,
+		ItemName:     item.Name,
+		MediaType:    item.Type,
+		EpisodeLabel: EpisodeLabel(res.RelPaths),
+		RelPaths:     res.RelPaths,
+		FIDs:         res.FIDs,
+		Message:      res.Rejected,
+		VideoCount:   res.DeletedLocal,
+		RemoteCount:  res.DeletedRemote,
+	}
+	if len(res.Warnings) > 0 {
+		rec.Message = strings.Join(res.Warnings, "; ")
+	}
+	if err != nil {
+		rec.Status = "failed"
+		rec.Message = err.Error()
+	} else if res.Rejected != "" {
+		rec.Status = "rejected"
+		rec.Message = res.Rejected
+	} else {
+		rec.Status = "done"
+		rec.Message = ""
+	}
+	if serr := s.Store.SaveDeepDeleteRecord(rec); serr != nil {
+		s.Log.Warn("深删记录落库失败", "err", serr)
+	}
+	return res, err
+}
+
+func (s *Service) handle(ctx context.Context, item Item) (Result, error) {
 	var res Result
 	if !allowedTypes[item.Type] {
 		res.Rejected = "不支持的媒体类型: " + item.Type
@@ -99,6 +139,10 @@ func (s *Service) Handle(ctx context.Context, item Item) (Result, error) {
 			continue
 		}
 		res.DeletedLocal++
+		res.FIDs = append(res.FIDs, f.FID)
+		if rel, rerr := filepath.Rel(lib.LocalDir, f.STRMPath); rerr == nil {
+			res.RelPaths = append(res.RelPaths, rel)
+		}
 		if err := s.Store.DeleteFile(f.LibraryID, f.FID); err != nil {
 			res.Warnings = append(res.Warnings, "台账删除失败 "+f.FID+": "+err.Error())
 		}
@@ -138,6 +182,61 @@ func within(root, p string) bool {
 		return false
 	}
 	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+var epRe = regexp.MustCompile(`(?i)s(\d{1,2})[\s/\\._-]{0,3}e(\d{1,3})`)
+
+// EpisodeLabel 从相对路径里提取集数标签:
+// 单集 S02E05 / 同季连续 S02E01–E03 / 跨季 S01–S02;电影返回空。
+func EpisodeLabel(relPaths []string) string {
+	type ep struct{ s, e int }
+	seen := map[ep]bool{}
+	for _, p := range relPaths {
+		for _, m := range epRe.FindAllStringSubmatch(p, 1) {
+			var s, e int
+			_, _ = fmt.Sscanf(m[1], "%d", &s)
+			_, _ = fmt.Sscanf(m[2], "%d", &e)
+			seen[ep{s, e}] = true
+		}
+	}
+	if len(seen) == 0 {
+		return ""
+	}
+	seasons := map[int][]int{}
+	for k := range seen {
+		seasons[k.s] = append(seasons[k.s], k.e)
+	}
+	if len(seasons) == 1 {
+		var s int
+		var eps []int
+		for k, v := range seasons {
+			s = k
+			eps = v
+		}
+		if len(eps) == 1 {
+			return fmt.Sprintf("S%02dE%02d", s, eps[0])
+		}
+		min, max := eps[0], eps[0]
+		for _, e := range eps {
+			if e < min {
+				min = e
+			}
+			if e > max {
+				max = e
+			}
+		}
+		return fmt.Sprintf("S%02dE%02d–E%02d", s, min, max)
+	}
+	minS, maxS := 1000, 0
+	for s := range seasons {
+		if s < minS {
+			minS = s
+		}
+		if s > maxS {
+			maxS = s
+		}
+	}
+	return fmt.Sprintf("S%02d–S%02d", minS, maxS)
 }
 
 func isRoot(root, p string) bool {

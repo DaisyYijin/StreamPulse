@@ -45,6 +45,10 @@ type App struct {
 	// 任务队列:手动操作只入队(202),worker 串行执行
 	executors map[string]func(ctx context.Context, t *store.Task)
 	bus       *eventbus.Bus
+
+	// Emby 定向刷新节流
+	embyMu      sync.Mutex
+	lastRefresh map[string]int64
 }
 
 func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepdel.Service, incrSvc *incr.Service, log *slog.Logger) (*App, error) {
@@ -55,11 +59,37 @@ func New(cfg *config.Config, st *store.Store, svc *p115svc.Service, deep *deepde
 	a := &App{
 		Cfg: cfg, Store: st, Svc: svc, Deep: deep, Incr: incrSvc, Log: log, secret: secret,
 		qr: map[string]*pan115.QR{}, opena: map[string]*pan115.OpenAuth{},
-		bus: eventbus.New(),
+		bus: eventbus.New(), lastRefresh: map[string]int64{},
 	}
 	a.registerExecutors()
+	// 增量落盘 → 按库定向刷新 Emby(节流,防 30 秒一轮把 Emby 刷爆)
+	if incrSvc != nil {
+		incrSvc.OnSync = a.throttledEmbyRefresh
+	}
 	// 首次启动不生成密码：由 /api/setup 让用户自己创建管理员。
 	return a, nil
+}
+
+// throttledEmbyRefresh 定向刷新节流:同一目录 10 分钟内只刷一次;
+// 全库刷新由扫描任务自己负责,不走这里。
+func (a *App) throttledEmbyRefresh(localDirs []string) {
+	a.embyMu.Lock()
+	now := time.Now().Unix()
+	var pending []string
+	for _, d := range localDirs {
+		if now-a.lastRefresh[d] >= 600 {
+			pending = append(pending, d)
+			a.lastRefresh[d] = now
+		}
+	}
+	a.embyMu.Unlock()
+	for _, d := range pending {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := a.emby().RefreshByPath(ctx, d); err != nil {
+			a.Log.Warn("Emby 定向刷新失败", "dir", d, "err", err)
+		}
+		cancel()
+	}
 }
 
 // Bus 暴露事件总线(同步完成 → 刮削 → 刷库 联动用)。
@@ -167,6 +197,8 @@ func (a *App) Handler() http.Handler {
 
 	mux.Handle("GET /api/tasks", auth(http.HandlerFunc(a.handleTasks)))
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
+	mux.Handle("GET /api/emby/webhook/status", auth(http.HandlerFunc(a.handleWebhookStatus)))
+	mux.Handle("GET /api/deepdel/records", auth(http.HandlerFunc(a.handleDeepDelRecords)))
 	mux.Handle("GET /api/settings", auth(http.HandlerFunc(a.handleGetSettings)))
 	mux.Handle("PUT /api/settings", auth(http.HandlerFunc(a.handleSaveSettings)))
 
@@ -1249,6 +1281,7 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 	token := a.Store.GetEmbyConfig().WebhookToken
 	if token != "" {
 		if r.URL.Query().Get("token") != token && r.Header.Get("X-Emby-Token") != token {
+			a.noteWebhookSeen("reject", "token 校验失败")
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -1256,12 +1289,25 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	wh, err := emby.ParseWebhook(body)
 	if err != nil {
+		a.noteWebhookSeen("reject", "payload 解析失败")
 		http.Error(w, "bad payload", http.StatusBadRequest)
 		return
 	}
+	a.noteWebhookSeen(wh.Event, "")
 	a.Log.Info("Emby webhook", "event", wh.Event, "type", wh.Item.Type, "name", wh.Item.Name)
 	switch {
 	case strings.Contains(wh.Event, "library.new"):
+		// Emby 触发 library.new 说明它自己刚扫过库,这里只做兜底刷新;
+		// 10 分钟节流,防 Emby 实时监控与我们自己的刷库互相打环。
+		a.embyMu.Lock()
+		dupe := time.Now().Unix()-a.lastRefresh["__webhook__"] < 600
+		if !dupe {
+			a.lastRefresh["__webhook__"] = time.Now().Unix()
+		}
+		a.embyMu.Unlock()
+		if dupe {
+			break
+		}
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 			defer cancel()
@@ -1273,6 +1319,7 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 			break
 		}
 		item := deepdel.Item{Type: wh.Item.Type, Name: wh.Item.Name, Path: wh.Item.Path}
+		a.noteWebhookSeen("delete", "")
 		go func() {
 			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 			defer cancel()
@@ -1287,6 +1334,70 @@ func (a *App) handleEmbyWebhook(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// noteWebhookSeen 反向记录"最近收到过什么 webhook"(Emby 的 REST 查不到它
+// 的 webhook 配置,用户配错时这里就是唯一线索)。any 类 10 分钟限频,
+// 播放事件一分钟可能来好几条;删除/被拒每次都记。
+func (a *App) noteWebhookSeen(kind, rejectWhy string) {
+	seen := map[string]any{}
+	if raw := a.Store.GetSetting("emby_webhook_seen", ""); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &seen)
+	}
+	now := time.Now().Unix()
+	isAny := kind != "reject" && kind != "delete"
+	if isAny {
+		if last, _ := seen["anyAt"].(float64); now-int64(last) < 600 {
+			return
+		}
+		seen["anyAt"] = now
+	} else {
+		seen[kind+"At"] = now
+		if rejectWhy != "" {
+			seen["rejectWhy"] = rejectWhy
+		}
+	}
+	seen["kind"] = kind
+	if b, err := json.Marshal(seen); err == nil {
+		_ = a.Store.SetSetting("emby_webhook_seen", string(b))
+	}
+}
+
+// handleWebhookStatus 深删页展示"Emby webhook 到底通没通"。
+func (a *App) handleWebhookStatus(w http.ResponseWriter, r *http.Request) {
+	seen := map[string]any{}
+	if raw := a.Store.GetSetting("emby_webhook_seen", ""); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &seen)
+	}
+	e := a.Store.GetEmbyConfig()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"tokenConfigured": e.WebhookToken != "",
+		"seen":            seen,
+	})
+}
+
+// handleDeepDelRecords 深删记录区:列表 + 状态筛选 + 近 30 天统计。
+func (a *App) handleDeepDelRecords(w http.ResponseWriter, r *http.Request) {
+	status := r.URL.Query().Get("status")
+	records, err := a.Store.ListDeepDeleteRecords(status, 100)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	counts, videos30, remote30, err := a.Store.DeepDeleteStats()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if records == nil {
+		records = []store.DeepDeleteRecord{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"records":  records,
+		"counts":   counts,
+		"videos30": videos30,
+		"remote30": remote30,
+	})
 }
 
 // ---------- helpers ----------

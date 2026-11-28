@@ -20,6 +20,7 @@ var migrations = []migration{
 	{1, "init schema", migrateV1},
 	{2, "task queue columns", migrateV2},
 	{3, "event suppress / path cache / event lifecycle", migrateV3},
+	{4, "deep delete records", migrateV4},
 }
 
 func (s *Store) migrate() error {
@@ -100,5 +101,25 @@ func migrateV3(tx *sql.Tx) error {
 	_, _ = tx.Exec(`ALTER TABLE sync_events ADD COLUMN pickcode TEXT NOT NULL DEFAULT ''`)
 	_, _ = tx.Exec(`ALTER TABLE sync_events ADD COLUMN applied_at INTEGER NOT NULL DEFAULT 0`)
 	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_status ON sync_events(account_id, status)`)
+	return err
+}
+
+// v4 深删记录区:每次执行的完整凭据(fids 是 115 回收站还原的唯一凭据)。
+func migrateV4(tx *sql.Tx) error {
+	_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS deep_delete_records (
+	  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+	  item_id      TEXT NOT NULL DEFAULT '',
+	  item_type    TEXT NOT NULL DEFAULT '',
+	  item_name    TEXT NOT NULL DEFAULT '',
+	  media_type   TEXT NOT NULL DEFAULT '',
+	  episode_label TEXT NOT NULL DEFAULT '',
+	  rel_paths    TEXT NOT NULL DEFAULT '[]',
+	  fids         TEXT NOT NULL DEFAULT '[]',
+	  status       TEXT NOT NULL DEFAULT 'done',
+	  message      TEXT NOT NULL DEFAULT '',
+	  video_count  INTEGER NOT NULL DEFAULT 0,
+	  remote_count INTEGER NOT NULL DEFAULT 0,
+	  created_at   INTEGER NOT NULL
+	)`)
 	return err
 }

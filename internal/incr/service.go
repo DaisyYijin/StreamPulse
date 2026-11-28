@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -46,6 +47,9 @@ type Service struct {
 	Src      Source
 	Log      *slog.Logger
 	Interval time.Duration
+	// OnSync 本轮有落盘后回调(参数=受影响的本地目录);由 api 注入,
+	// 做按库定向刷新 Emby。增量轮询里调用,必须是非阻塞快返回。
+	OnSync func(localDirs []string)
 
 	mu     sync.Mutex
 	status Status
@@ -66,14 +70,15 @@ type Status struct {
 }
 
 type Result struct {
-	Events      int    `json:"events"`
-	NewEvents   int    `json:"newEvents"`
-	Direct      int    `json:"direct"`
-	ScannedDirs int    `json:"scannedDirs"`
-	Baseline    bool   `json:"baseline"`
-	Errors      int    `json:"errors"`
-	Busy        bool   `json:"busy,omitempty"`
-	Yielded     bool   `json:"yielded,omitempty"`
+	Events      int      `json:"events"`
+	NewEvents   int      `json:"newEvents"`
+	Direct      int      `json:"direct"`
+	ScannedDirs int      `json:"scannedDirs"`
+	Baseline    bool     `json:"baseline"`
+	Errors      int      `json:"errors"`
+	Busy        bool     `json:"busy,omitempty"`
+	Yielded     bool     `json:"yielded,omitempty"`
+	Affected    []string `json:"-"` // 本轮落盘的本地目录(Emby 定向刷新用)
 }
 
 // Round 是一轮消费的账单(轮次历史,回答"为什么没同步")。
@@ -109,6 +114,9 @@ func (s *Service) Start(ctx context.Context) {
 				} else if !r.Baseline && (r.NewEvents > 0 || r.ScannedDirs > 0 || r.Direct > 0) {
 					s.Log.Info("增量同步", "events", r.Events, "new", r.NewEvents,
 						"direct", r.Direct, "dirs", r.ScannedDirs)
+				}
+				if len(r.Affected) > 0 && s.OnSync != nil {
+					s.OnSync(r.Affected)
 				}
 			}
 			wait := time.Duration(s.intervalSec()) * time.Second
@@ -334,6 +342,7 @@ func (s *Service) PollOnce(ctx context.Context) (res Result, err error) {
 				res.Direct++
 				cidPushed[ev.CID]++
 				applyIDs = append(applyIDs, r.id)
+				markAffected(&res, t.lib.LocalDir, rel)
 				continue
 			}
 		}
@@ -378,6 +387,8 @@ func (s *Service) PollOnce(ctx context.Context) (res Result, err error) {
 		res.ScannedDirs++
 		n++
 		applyIDs = append(applyIDs, eventsByCID[t.cid]...)
+		rel := s.dirsOf(t.lib, dirsCache)[t.cid] // 未知 cid 记为空 → 库根
+		markAffected(&res, t.lib.LocalDir, rel)
 		// 新发现的子目录按预算补扫(浅扫扩展),避免"丢个文件夹进去要等全量"
 		for i, nd := range sr.DirNew {
 			if i >= 5 || ctx.Err() != nil {
@@ -415,6 +426,20 @@ func (s *Service) PollOnce(ctx context.Context) (res Result, err error) {
 		_ = s.Store.SetSetting(cursorKey(acc.ID), latest)
 	}
 	return res, nil
+}
+
+// markAffected 记录本轮落盘的本地目录(去重,供 Emby 定向刷新)。
+func markAffected(res *Result, localDir, rel string) {
+	d := localDir
+	if rel != "" {
+		d = localDir + string(filepath.Separator) + filepath.FromSlash(rel)
+	}
+	for _, a := range res.Affected {
+		if a == d {
+			return
+		}
+	}
+	res.Affected = append(res.Affected, d)
 }
 
 // writeDirect 直推:事件自带 pickcode,不列目录直接写 STRM。

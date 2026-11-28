@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -978,4 +979,126 @@ func (s *Store) SetMany(m map[string]string) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// ---------- deep delete records ----------
+//
+// 一次删除 = 一条记录;Fids 是 115 回收站还原的唯一凭据(台账行已随之删除,
+// 事后要还原只能靠这里),Status done/rejected/failed。
+
+type DeepDeleteRecord struct {
+	ID           int64    `json:"id"`
+	ItemID       string   `json:"itemId"`
+	ItemType     string   `json:"itemType"`
+	ItemName     string   `json:"itemName"`
+	MediaType    string   `json:"mediaType"`
+	EpisodeLabel string   `json:"episodeLabel"`
+	RelPaths     []string `json:"relPaths"`
+	FIDs         []string `json:"fids"`
+	Status       string   `json:"status"`
+	Message      string   `json:"message"`
+	VideoCount   int      `json:"videoCount"`
+	RemoteCount  int      `json:"remoteCount"`
+	CreatedAt    int64    `json:"createdAt"`
+}
+
+func (s *Store) SaveDeepDeleteRecord(r *DeepDeleteRecord) error {
+	if r.CreatedAt == 0 {
+		r.CreatedAt = time.Now().Unix()
+	}
+	paths, _ := jsonMarshal(r.RelPaths)
+	fids, _ := jsonMarshal(r.FIDs)
+	res, err := s.db.Exec(`INSERT INTO deep_delete_records(item_id,item_type,item_name,media_type,episode_label,rel_paths,fids,status,message,video_count,remote_count,created_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+		r.ItemID, r.ItemType, r.ItemName, r.MediaType, r.EpisodeLabel, paths, fids, r.Status, r.Message, r.VideoCount, r.RemoteCount, r.CreatedAt)
+	if err != nil {
+		return err
+	}
+	r.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *Store) ListDeepDeleteRecords(status string, limit int) ([]DeepDeleteRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	q := `SELECT id,item_id,item_type,item_name,media_type,episode_label,rel_paths,fids,status,message,video_count,remote_count,created_at
+		FROM deep_delete_records`
+	var args []any
+	if status != "" {
+		q += ` WHERE status=?`
+		args = append(args, status)
+	}
+	q += ` ORDER BY id DESC LIMIT ?`
+	args = append(args, limit)
+	rows, err := s.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]DeepDeleteRecord, 0)
+	for rows.Next() {
+		var r DeepDeleteRecord
+		var paths, fids string
+		if err := rows.Scan(&r.ID, &r.ItemID, &r.ItemType, &r.ItemName, &r.MediaType, &r.EpisodeLabel,
+			&paths, &fids, &r.Status, &r.Message, &r.VideoCount, &r.RemoteCount, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		r.RelPaths = jsonUnmarshalStrings(paths)
+		r.FIDs = jsonUnmarshalStrings(fids)
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// DeepDeleteStats 状态计数与近 30 天删除量。
+func (s *Store) DeepDeleteStats() (counts map[string]int, videos30 int, remote30 int, err error) {
+	counts = map[string]int{}
+	rows, err := s.db.Query(`SELECT status, COUNT(*) FROM deep_delete_records GROUP BY status`)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var st string
+		var n int
+		if err := rows.Scan(&st, &n); err != nil {
+			return counts, 0, 0, err
+		}
+		counts[st] = n
+	}
+	cutoff := time.Now().Unix() - 30*86400
+	err = s.db.QueryRow(`SELECT COALESCE(SUM(video_count),0), COALESCE(SUM(remote_count),0)
+		FROM deep_delete_records WHERE status='done' AND created_at >= ?`, cutoff).Scan(&videos30, &remote30)
+	return
+}
+
+// PruneDeepDeleteRecords 清理过期记录(默认 90 天)。
+func (s *Store) PruneDeepDeleteRecords(days int) (int64, error) {
+	if days <= 0 {
+		days = 90
+	}
+	res, err := s.db.Exec(`DELETE FROM deep_delete_records WHERE created_at < ?`,
+		time.Now().Unix()-int64(days)*86400)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+func jsonMarshal(v any) (string, error) {
+	b, err := json.Marshal(v)
+	return string(b), err
+}
+
+func jsonUnmarshalStrings(s string) []string {
+	if s == "" {
+		return nil
+	}
+	var out []string
+	if err := json.Unmarshal([]byte(s), &out); err != nil {
+		return nil
+	}
+	return out
 }

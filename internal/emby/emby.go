@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -63,6 +64,46 @@ func (c *Client) RefreshLibrary(ctx context.Context, id string) error {
 		path += "?" + q.Encode()
 	}
 	return c.do(ctx, http.MethodPost, path, nil)
+}
+
+// RefreshByPath 定向刷新:本地路径 → VirtualFolders 最长前缀匹配 → 刷该库。
+// 全库刷在大库上代价高;增量只动了几个目录时按库刷新即可。
+// 匹配失败回退全库刷新。
+func (c *Client) RefreshByPath(ctx context.Context, localPath string) error {
+	if !c.Enabled() {
+		return nil
+	}
+	var folders []struct {
+		ItemID    string   `json:"ItemId"`
+		Name      string   `json:"Name"`
+		Locations []string `json:"Locations"`
+	}
+	if err := c.do(ctx, http.MethodGet, "/emby/Library/VirtualFolders", &folders); err != nil {
+		return c.RefreshLibrary(ctx, "")
+	}
+	best := ""
+	bestLen := -1
+	p := filepath.Clean(localPath)
+	for _, f := range folders {
+		for _, loc := range f.Locations {
+			if withinDir(loc, p) && len(filepath.Clean(loc)) > bestLen {
+				best = f.ItemID
+				bestLen = len(filepath.Clean(loc))
+			}
+		}
+	}
+	if best == "" {
+		return c.RefreshLibrary(ctx, "")
+	}
+	return c.do(ctx, http.MethodPost, "/emby/Items/"+url.PathEscape(best)+"/Refresh?Recursive=true", nil)
+}
+
+func withinDir(root, p string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(p))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // Ping 验证地址与 Key。
