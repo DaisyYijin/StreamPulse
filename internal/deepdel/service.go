@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"streampulse/internal/store"
 )
@@ -117,6 +118,11 @@ func (s *Service) Handle(ctx context.Context, item Item) (Result, error) {
 				res.Warnings = append(res.Warnings, "网盘删除失败: "+err.Error())
 			} else {
 				res.DeletedRemote = len(fids)
+				// 登记抑制:网盘删除会产生生活事件,TTL 内增量直接跳过(self),
+				// 否则增量会把刚删的目录再"同步"一遍
+				if err := s.Store.MarkSuppressed(fids, "delete", 2*time.Hour); err != nil {
+					s.Log.Warn("事件抑制登记失败（不影响删除）", "err", err)
+				}
 			}
 		}
 	}

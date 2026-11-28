@@ -19,6 +19,7 @@ type migration struct {
 var migrations = []migration{
 	{1, "init schema", migrateV1},
 	{2, "task queue columns", migrateV2},
+	{3, "event suppress / path cache / event lifecycle", migrateV3},
 }
 
 func (s *Store) migrate() error {
@@ -71,5 +72,33 @@ func migrateV2(tx *sql.Tx) error {
 	_ = err
 	// 同一 dedupe_key 只允许一条排队中的任务
 	_, err = tx.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_dedupe ON tasks(dedupe_key) WHERE status='queued' AND dedupe_key <> ''`)
+	return err
+}
+
+// v3 同步可靠性三张地基:
+//   event_suppress  整理/删除自产的 115 事件登记,增量遇到直接跳过(self)
+//   path_cache      cid → 路径缓存(生活事件只有 parent_id,要还原路径)
+//   sync_events 补列 note/pickcode,事件两阶段消费(pending→done)
+func migrateV3(tx *sql.Tx) error {
+	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS event_suppress (
+	  file_id   TEXT PRIMARY KEY,
+	  op        TEXT NOT NULL DEFAULT '',
+	  expire_at INTEGER NOT NULL
+	)`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS path_cache (
+	  cid        TEXT PRIMARY KEY,
+	  parent_cid TEXT NOT NULL DEFAULT '',
+	  name       TEXT NOT NULL DEFAULT '',
+	  path       TEXT NOT NULL DEFAULT '',
+	  updated_at INTEGER NOT NULL
+	)`); err != nil {
+		return err
+	}
+	_, _ = tx.Exec(`ALTER TABLE sync_events ADD COLUMN note TEXT NOT NULL DEFAULT ''`)
+	_, _ = tx.Exec(`ALTER TABLE sync_events ADD COLUMN pickcode TEXT NOT NULL DEFAULT ''`)
+	_, _ = tx.Exec(`ALTER TABLE sync_events ADD COLUMN applied_at INTEGER NOT NULL DEFAULT 0`)
+	_, err := tx.Exec(`CREATE INDEX IF NOT EXISTS idx_events_status ON sync_events(account_id, status)`)
 	return err
 }

@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,7 +21,9 @@ import (
 	"streampulse/internal/p115svc"
 	"streampulse/internal/pan115"
 	"streampulse/internal/safego"
+	"streampulse/internal/scan"
 	"streampulse/internal/store"
+	"streampulse/internal/strm"
 )
 
 type App struct {
@@ -153,10 +156,14 @@ func (a *App) Handler() http.Handler {
 	mux.Handle("POST /api/libraries/{id}/scan", auth(http.HandlerFunc(a.handleScan)))
 	mux.Handle("POST /api/libraries/{id}/sync-dir", auth(http.HandlerFunc(a.handleSyncDir)))
 	mux.Handle("GET /api/sync/status", auth(http.HandlerFunc(a.handleSyncStatus)))
+	mux.Handle("GET /api/sync/rounds", auth(http.HandlerFunc(a.handleSyncRounds)))
 	mux.Handle("POST /api/sync/full", auth(http.HandlerFunc(a.handleFullSync)))
 	mux.Handle("POST /api/sync/incremental", auth(http.HandlerFunc(a.handleIncremental)))
 	mux.Handle("POST /api/sync/incremental/test", auth(http.HandlerFunc(a.handleIncrementalTest)))
 	mux.Handle("PUT /api/sync/settings", auth(http.HandlerFunc(a.handleSyncSettings)))
+	mux.Handle("GET /api/libraries/{id}/orphans", auth(http.HandlerFunc(a.handleOrphans)))
+	mux.Handle("POST /api/libraries/{id}/orphans/clean", auth(http.HandlerFunc(a.handleOrphanClean)))
+	mux.Handle("POST /api/strm/rebase", auth(http.HandlerFunc(a.handleStrmRebase)))
 
 	mux.Handle("GET /api/tasks", auth(http.HandlerFunc(a.handleTasks)))
 	mux.Handle("GET /api/emby/status", auth(http.HandlerFunc(a.handleEmbyStatus)))
@@ -768,6 +775,110 @@ func (a *App) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, m)
 }
 
+func (a *App) handleSyncRounds(w http.ResponseWriter, r *http.Request) {
+	if a.Incr == nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	writeJSON(w, http.StatusOK, a.Incr.Rounds())
+}
+
+// handleOrphans 失效 STRM 预览(只列不删)。
+func (a *App) handleOrphans(w http.ResponseWriter, r *http.Request) {
+	id, _ := parseInt64(r.PathValue("id"))
+	lib, err := a.Store.GetLibrary(id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "媒体库不存在")
+		return
+	}
+	files, err := a.Store.ListFiles(lib.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	out := make([]store.SyncedFile, 0)
+	for _, f := range files {
+		if f.Status == "orphan" {
+			out = append(out, f)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// handleOrphanClean 确认清理:删本地 STRM + 台账行,回收空目录(库根不动)。
+func (a *App) handleOrphanClean(w http.ResponseWriter, r *http.Request) {
+	id, _ := parseInt64(r.PathValue("id"))
+	lib, err := a.Store.GetLibrary(id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "媒体库不存在")
+		return
+	}
+	files, err := a.Store.ListFiles(lib.ID)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	var orphans []store.SyncedFile
+	for _, f := range files {
+		if f.Status == "orphan" {
+			orphans = append(orphans, f)
+		}
+	}
+	if len(orphans) == 0 {
+		writeJSON(w, http.StatusOK, map[string]int{"removed": 0, "dirs": 0})
+		return
+	}
+	removed, dirs := scan.CleanOrphans(lib.LocalDir, orphans)
+	for _, f := range orphans {
+		_ = a.Store.DeleteFile(lib.ID, f.FID)
+	}
+	a.Log.Info("孤儿清理完成", "library", lib.Name, "removed", removed, "dirs", dirs)
+	writeJSON(w, http.StatusOK, map[string]int{"removed": removed, "dirs": dirs})
+}
+
+// handleStrmRebase 批量替换 STRM 播放地址(换域名/IP 自救,零 115 请求)。
+func (a *App) handleStrmRebase(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		From      string `json:"from"`
+		To        string `json:"to"`
+		LibraryID int64  `json:"libraryId"` // 0 = 全部媒体库
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&in); err != nil {
+		writeErr(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	in.From = strings.TrimSpace(in.From)
+	in.To = strings.TrimSpace(in.To)
+	if !strings.HasPrefix(in.From, "http://") && !strings.HasPrefix(in.From, "https://") ||
+		!strings.HasPrefix(in.To, "http://") && !strings.HasPrefix(in.To, "https://") ||
+		strings.TrimRight(in.From, "/") == strings.TrimRight(in.To, "/") {
+		writeErr(w, http.StatusBadRequest, "from/to 都必须是 http(s) 地址且不相同")
+		return
+	}
+	libs, err := a.Store.ListLibraries()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	changed, scanned := 0, 0
+	perLib := map[string]int{}
+	for _, lib := range libs {
+		if in.LibraryID != 0 && lib.ID != in.LibraryID {
+			continue
+		}
+		c, s, err := strm.Rebase(lib.LocalDir, in.From, in.To)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			a.Log.Warn("rebase 扫描失败", "library", lib.Name, "err", err)
+			continue
+		}
+		changed += c
+		scanned += s
+		perLib[lib.Name] = c
+	}
+	a.Log.Info("STRM 地址替换完成", "from", in.From, "to", in.To, "scanned", scanned, "changed", changed)
+	writeJSON(w, http.StatusOK, map[string]any{"scanned": scanned, "changed": changed, "perLibrary": perLib})
+}
+
 func (a *App) handleIncremental(w http.ResponseWriter, r *http.Request) {
 	if a.Incr == nil {
 		writeErr(w, http.StatusServiceUnavailable, "增量同步未启用")
@@ -906,10 +1017,26 @@ func (a *App) execScan(ctx context.Context, t *store.Task) {
 	msg := fmt.Sprintf("扫描 %d，写入 %d，跳过 %d，改名 %d，附属 %d，失效 %d，耗时 %.0fs",
 		res.Scanned, res.Written, res.Skipped, res.Renamed, res.Meta, res.Orphans, time.Since(start).Seconds())
 	_ = a.Store.UpdateTask(t.ID, "done", msg)
+	a.saveLibStat(lib, res)
 	a.Log.Info("扫描完成", "library", lib.Name, "message", msg)
 	a.bus.Publish(eventbus.EventSyncDone, eventbus.SyncDoneEvent{
 		LibraryID: lib.ID, LibraryName: lib.Name, Written: res.Written,
 	})
+}
+
+// saveLibStat 把库级同步结果写进 lib_sync_stats setting(库卡片展示用)。
+func (a *App) saveLibStat(lib *store.Library, res scan.Result) {
+	stats := map[string]map[string]any{}
+	if raw := a.Store.GetSetting("lib_sync_stats", ""); raw != "" {
+		_ = json.Unmarshal([]byte(raw), &stats)
+	}
+	stats[fmt.Sprintf("%d", lib.ID)] = map[string]any{
+		"name": lib.Name, "lastSync": time.Now().Unix(),
+		"scanned": res.Scanned, "written": res.Written, "orphans": res.Orphans,
+	}
+	if b, err := json.Marshal(stats); err == nil {
+		_ = a.Store.SetSetting("lib_sync_stats", string(b))
+	}
 }
 
 func (a *App) execSyncDir(ctx context.Context, t *store.Task) {
@@ -957,9 +1084,17 @@ func (a *App) execFullSync(ctx context.Context, t *store.Task) {
 		written += res.Written
 		skipped += res.Skipped
 		orphans += res.Orphans
+		a.saveLibStat(lib, res)
 		a.bus.Publish(eventbus.EventSyncDone, eventbus.SyncDoneEvent{
 			LibraryID: lib.ID, LibraryName: lib.Name, Written: res.Written,
 		})
+	}
+	// 全量闭环:至少一个库成功 → 推进事件游标并清空 pending,
+	// 全量补齐的文件不再被增量重扫。
+	if failed < len(p.LibraryIDs) {
+		if a.Incr != nil {
+			a.Incr.AdvanceCursorPastPending()
+		}
 	}
 	if err := a.emby().RefreshLibrary(ctx, ""); err != nil {
 		a.Log.Warn("Emby 刷新失败", "err", err)

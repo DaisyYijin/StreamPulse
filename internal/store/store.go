@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -608,21 +609,299 @@ func (s *Store) DeleteLibrary(id int64) error {
 
 // ---------- sync events ----------
 
-// AddEvent 记录一条生活事件；重复 event_id 返回 false。
-func (s *Store) AddEvent(accountID int64, eventID, kind, payload string) (bool, error) {
-	res, err := s.db.Exec(`INSERT OR IGNORE INTO sync_events(account_id,event_id,kind,payload,status,created_at)
-		VALUES(?,?,?,?,'done',?)`, accountID, eventID, kind, payload, time.Now().Unix())
+// ---------- sync events ----------
+//
+// 两阶段消费:事件先落库 pending(中断/重启后原样重放),本轮处理完成后
+// 批量标 done 并写 note(self=整理自产 / outside=不涉及媒体库)。
+
+// AddEventPending 记录一条生活事件(pending);已存在时返回既有行 id 与 isNew=false
+// (游标未推进的重放轮里,旧事件仍要能标 done)。
+func (s *Store) AddEventPending(accountID int64, eventID, kind, payload, pickcode string) (int64, bool, error) {
+	res, err := s.db.Exec(`INSERT OR IGNORE INTO sync_events(account_id,event_id,kind,payload,pickcode,status,created_at)
+		VALUES(?,?,?,?,?,'pending',?)`, accountID, eventID, kind, payload, pickcode, time.Now().Unix())
 	if err != nil {
-		return false, err
+		return 0, false, err
+	}
+	if n, _ := res.RowsAffected(); n > 0 {
+		id, _ := res.LastInsertId()
+		return id, true, nil
+	}
+	var exist int64
+	qerr := s.db.QueryRow(`SELECT id FROM sync_events WHERE account_id=? AND event_id=?`, accountID, eventID).Scan(&exist)
+	if qerr != nil {
+		return 0, false, qerr
+	}
+	return exist, false, nil
+}
+
+// ApplyEvents 把本轮已处理的事件标 done 并写 note。
+func (s *Store) ApplyEvents(ids []int64, note string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`UPDATE sync_events SET status='done', note=?, applied_at=? WHERE id=?`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	now := time.Now().Unix()
+	for _, id := range ids {
+		if _, err := stmt.Exec(note, now, id); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// ListPendingEvents 返回遗留的 pending 事件(重启/中断恢复用),按 id 正序。
+func (s *Store) ListPendingEvents(accountID int64) ([]SyncEvent, error) {
+	rows, err := s.db.Query(`SELECT id,event_id,kind,payload,pickcode FROM sync_events WHERE account_id=? AND status='pending' ORDER BY id`, accountID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []SyncEvent
+	for rows.Next() {
+		var e SyncEvent
+		if err := rows.Scan(&e.ID, &e.EventID, &e.Kind, &e.Payload, &e.Pickcode); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+type SyncEvent struct {
+	ID       int64
+	EventID  string
+	Kind     string
+	Payload  string
+	Pickcode string
+}
+
+// CountPendingEvents 返回待处理事件数(状态页"积压")。
+func (s *Store) CountPendingEvents(accountID int64) (int, error) {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM sync_events WHERE account_id=? AND status='pending'`, accountID).Scan(&n)
+	return n, err
+}
+
+// MaxEventID 返回台账里最大的数字事件 id(全量推游标用);非纯数字事件存在时返回空。
+func (s *Store) MaxEventID(accountID int64) string {
+	var max any
+	err := s.db.QueryRow(`SELECT MAX(CAST(event_id AS INTEGER)) FROM sync_events
+		WHERE account_id=? AND event_id GLOB '[0-9]*' AND event_id NOT GLOB '*[^0-9]*'`, accountID).Scan(&max)
+	if err != nil || max == nil {
+		return ""
+	}
+	sid, _ := max.(int64)
+	if sid == 0 {
+		return ""
+	}
+	return strconv.FormatInt(sid, 10)
+}
+
+// MarkAllEventsApplied 把 pending 事件全部标 done(全量同步已覆盖窗口)。
+func (s *Store) MarkAllEventsApplied(accountID int64, note string) error {
+	_, err := s.db.Exec(`UPDATE sync_events SET status='done', note=?, applied_at=? WHERE account_id=? AND status='pending'`,
+		note, time.Now().Unix(), accountID)
+	return err
+}
+
+// PruneAppliedEvents 清理已消费的旧事件(每日维护调用)。
+func (s *Store) PruneAppliedEvents(days int) (int64, error) {
+	if days <= 0 {
+		days = 30
+	}
+	res, err := s.db.Exec(`DELETE FROM sync_events WHERE status='done' AND applied_at > 0 AND applied_at < ?`,
+		time.Now().Unix()-int64(days)*86400)
+	if err != nil {
+		return 0, err
 	}
 	n, _ := res.RowsAffected()
-	return n > 0, nil
+	return n, nil
 }
 
 func (s *Store) CountEvents(accountID int64) (int, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT COUNT(*) FROM sync_events WHERE account_id=?`, accountID).Scan(&n)
 	return n, err
+}
+
+// ---------- event suppress ----------
+//
+// 整理/删除等自产 115 写操作的事件登记:TTL 内增量遇到直接跳过(self)。
+// peek 只查不删——增量遇目录暂时读不到会整轮重来,查时消费的话下一轮
+// 没标记可命中;事件标 done 后由维护统一清过期行。
+
+func (s *Store) MarkSuppressed(fileIDs []string, op string, ttl time.Duration) error {
+	if len(fileIDs) == 0 {
+		return nil
+	}
+	expire := time.Now().Add(ttl).Unix()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO event_suppress(file_id,op,expire_at) VALUES(?,?,?)
+		ON CONFLICT(file_id) DO UPDATE SET op=excluded.op, expire_at=excluded.expire_at`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	for _, id := range fileIDs {
+		if id == "" {
+			continue
+		}
+		if _, err := stmt.Exec(id, op, expire); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// PeekSuppressed 批量查:哪些 fid 在抑制期内。只查不删。
+func (s *Store) PeekSuppressed(fileIDs []string) (map[string]bool, error) {
+	out := map[string]bool{}
+	if len(fileIDs) == 0 {
+		return out, nil
+	}
+	now := time.Now().Unix()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	stmt, err := tx.Prepare(`SELECT 1 FROM event_suppress WHERE file_id=? AND expire_at > ?`)
+	if err != nil {
+		_ = tx.Rollback()
+		return nil, err
+	}
+	defer stmt.Close()
+	for _, id := range fileIDs {
+		if id == "" {
+			continue
+		}
+		var one int
+		if err := stmt.QueryRow(id, now).Scan(&one); err == nil {
+			out[id] = true
+		}
+	}
+	_ = tx.Rollback() // 只读事务
+	return out, nil
+}
+
+func (s *Store) CleanupSuppressed() (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM event_suppress WHERE expire_at <= ?`, time.Now().Unix())
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return n, nil
+}
+
+// ---------- path cache ----------
+//
+// cid → 路径缓存。生活事件只带 parent_id,move/rename 的旧路径也只能从
+// 这里拿。它是有失效要求的缓存:网盘目录删除/移动后必须 ForgetDirSubtree,
+// 否则"已删目录"永久算在媒体库里。
+
+type PathRow struct {
+	CID       string
+	ParentCID string
+	Name      string
+	Path      string
+}
+
+func (s *Store) UpsertPathRows(rows []PathRow) error {
+	if len(rows) == 0 {
+		return nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	stmt, err := tx.Prepare(`INSERT INTO path_cache(cid,parent_cid,name,path,updated_at) VALUES(?,?,?,?,?)
+		ON CONFLICT(cid) DO UPDATE SET parent_cid=excluded.parent_cid,name=excluded.name,path=excluded.path,updated_at=excluded.updated_at`)
+	if err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	defer stmt.Close()
+	now := time.Now().Unix()
+	for _, r := range rows {
+		if r.CID == "" {
+			continue
+		}
+		if _, err := stmt.Exec(r.CID, r.ParentCID, r.Name, r.Path, now); err != nil {
+			_ = tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+// GetPath 查缓存;found=false 表示未命中(调用方回源接口)。
+func (s *Store) GetPath(cid string) (row PathRow, found bool) {
+	err := s.db.QueryRow(`SELECT cid,parent_cid,name,path FROM path_cache WHERE cid=?`, cid).
+		Scan(&row.CID, &row.ParentCID, &row.Name, &row.Path)
+	return row, err == nil
+}
+
+// ForgetDirSubtree 删除 cid 子树的所有缓存行(目录删除/移动后失效用)。
+// 行数不大,全量载入内存走 BFS。
+func (s *Store) ForgetDirSubtree(rootCID string) (int64, error) {
+	if rootCID == "" {
+		return 0, nil
+	}
+	rows, err := s.db.Query(`SELECT cid, parent_cid FROM path_cache`)
+	if err != nil {
+		return 0, err
+	}
+	parents := map[string][]string{}
+	defer rows.Close()
+	for rows.Next() {
+		var cid, parent string
+		if err := rows.Scan(&cid, &parent); err != nil {
+			return 0, err
+		}
+		parents[parent] = append(parents[parent], cid)
+	}
+	kill := map[string]bool{rootCID: true}
+	queue := []string{rootCID}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, child := range parents[cur] {
+			if !kill[child] {
+				kill[child] = true
+				queue = append(queue, child)
+			}
+		}
+	}
+	if len(kill) == 0 {
+		return 0, nil
+	}
+	ids := make([]string, 0, len(kill))
+	for cid := range kill {
+		ids = append(ids, cid)
+	}
+	var n int64
+	for _, cid := range ids {
+		res, err := s.db.Exec(`DELETE FROM path_cache WHERE cid=?`, cid)
+		if err == nil {
+			nn, _ := res.RowsAffected()
+			n += nn
+		}
+	}
+	return n, nil
 }
 
 // ---------- emby settings ----------

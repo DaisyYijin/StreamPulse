@@ -42,15 +42,16 @@ type metaJob struct {
 }
 
 type Result struct {
-	Scanned  int      `json:"scanned"`
-	Written  int      `json:"written"`
-	Skipped  int      `json:"skipped"`
-	Orphans  int      `json:"orphans"`
-	Renamed  int      `json:"renamed"`
-	Meta     int      `json:"meta"`
-	Errors   int      `json:"errors"`
-	Moves    []Move   `json:"moves"`
-	Warnings []string `json:"warnings"`
+	Scanned  int        `json:"scanned"`
+	Written  int        `json:"written"`
+	Skipped  int        `json:"skipped"`
+	Orphans  int        `json:"orphans"`
+	Renamed  int        `json:"renamed"`
+	Meta     int        `json:"meta"`
+	Errors   int        `json:"errors"`
+	Moves    []Move     `json:"moves"`
+	Warnings []string   `json:"warnings"`
+	DirNew   []store.Dir `json:"-"` // 目录级扫描新发现的子目录(增量补扫用)
 }
 
 type Move struct {
@@ -395,6 +396,7 @@ func isRecycle(name string) bool {
 }
 
 // ScanOneDir 是「目录行同步 STRM」：只处理一个 cid，不改其他目录。
+// 顺带把看到的子目录登记进台账并上报新目录(增量按预算补扫用)。
 func ScanOneDir(ctx context.Context, opt Options, cid string) (Result, error) {
 	var res Result
 	if cid == "" {
@@ -406,19 +408,32 @@ func ScanOneDir(ctx context.Context, opt Options, cid string) (Result, error) {
 		return res, err
 	}
 	rel := ""
+	known := map[string]bool{}
 	// 从台账里找这个 cid 的相对路径；找不到就当作根
 	if dirs, _ := opt.Store.ListDirs(lib.ID); dirs != nil {
 		for _, d := range dirs {
+			known[d.CID] = true
 			if d.CID == cid {
 				rel = d.RelPath
-				break
 			}
 		}
 	}
 	videoExts := splitExts(lib.VideoExts)
 	metaExts := splitExts(lib.MetaExts)
 	for _, e := range entries {
-		if e.IsDir || e.Pickcode == "" {
+		if e.IsDir {
+			// 子目录登记进台账;台账里没有的是新目录 → 上报给调用方补扫
+			if e.CID == "" || isRecycle(e.Name) || strings.HasPrefix(e.Name, ".") {
+				continue
+			}
+			subRel := path.Join(rel, strm.SafeName(e.Name))
+			_ = opt.Store.UpsertDir(lib.ID, e.CID, cid, e.Name, subRel)
+			if !known[e.CID] {
+				res.DirNew = append(res.DirNew, store.Dir{CID: e.CID, ParentCID: cid, Name: e.Name, RelPath: subRel})
+			}
+			continue
+		}
+		if e.Pickcode == "" {
 			continue
 		}
 		if isVideo(e.Name, videoExts) {
